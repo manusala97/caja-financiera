@@ -410,7 +410,12 @@ export default function CajaFinanciera() {
 
   const saldoCC = useCallback((c)=>{
     const s=Object.fromEntries(MONEDAS.map(m=>[m.id,0]));
-    (c?.movimientos||[]).forEach(mv=>{ const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep"; s[mv.moneda]=(s[mv.moneda]||0)+(ing?mv.monto:-mv.monto); });
+    // ingreso = el cliente me dio plata = me debe (positivo)
+    // retiro = yo le di plata al cliente = le debo (negativo)
+    (c?.movimientos||[]).forEach(mv=>{
+      const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+      s[mv.moneda]=(s[mv.moneda]||0)+(ing?mv.monto:-mv.monto);
+    });
     return s;
   },[]);
 
@@ -875,7 +880,7 @@ export default function CajaFinanciera() {
                     <div style={{cursor:"pointer",paddingRight:26}} onClick={()=>{setClienteActivo(c.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:""});}}>
                       <div style={{fontWeight:700,marginBottom:7}}>{c.nombre} {c.apellido}</div>
                       {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
-                        return <div key={m.id} style={{fontSize:11,color:v>0?"#f87171":"#4ade80",marginBottom:2}}>{v>0?"Le debes":"Te debe"} {m.simbolo}{fmt(Math.abs(v))} {m.id}</div>;})}
+                        return <div key={m.id} style={{fontSize:11,color:v>0?"#4ade80":"#f87171",marginBottom:2}}>{v>0?"Te debe":"Le debes"} {m.simbolo}{fmt(Math.abs(v))} {m.id}</div>;})}
                       {MONEDAS.every(m=>!sal[m.id])&&<div style={{fontSize:11,color:"#374151"}}>Sin movimientos</div>}
                     </div>
                   </Card>
@@ -896,7 +901,7 @@ export default function CajaFinanciera() {
                 {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
                   return <div key={m.id} style={{background:"#111",border:"1px solid "+(v>0?"#f4433633":"#22c55e33"),borderRadius:6,padding:"7px 11px"}}>
                     <div style={{fontSize:9,color:"#6b7280",marginBottom:2}}>{m.id}</div>
-                    <div style={{fontWeight:700,color:v>0?"#f87171":"#4ade80"}}>{v>0?"Le debes":"Te debe"} {m.simbolo}{fmt(Math.abs(v))}</div>
+                    <div style={{fontWeight:700,color:v>0?"#4ade80":"#f87171"}}>{v>0?"Te debe":"Le debes"} {m.simbolo}{fmt(Math.abs(v))}</div>
                   </div>;})}
               </div>
               <div style={S.grid("1fr 1fr",18)}>
