@@ -482,7 +482,8 @@ export default function CajaFinanciera() {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
       ns.ARS-=calcDif.mFinal;
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
-      await SB.from("diferidos").insert({id:dif.id,hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,tm:dif.tm,dias:dif.dias,cobrado:false});
+      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,tm:dif.tm,dias:dif.dias,cobrado:false}).select().single();
+      if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
       setF("dn",""); setF("dfa","");
@@ -544,7 +545,7 @@ export default function CajaFinanciera() {
     const ns={...saldos,[formCC.moneda]:saldos[formCC.moneda]+(ing?monto:-monto)};
     setSaldos(ns);
     const mv={id:Date.now(),hora,fecha:hoy,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota};
-    await SB.from("movimientos_cc").insert({id:mv.id,cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||""});
+    await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||""});
     setClientes(p=>p.map(c=>c.id!==cId?c:{...c,movimientos:[...c.movimientos,mv]}));
     await guardarDia(ns,null,null);
     setFormCC(f=>({...f,monto:"",nota:""})); notify("Movimiento registrado");
@@ -1235,15 +1236,26 @@ export default function CajaFinanciera() {
                   CERRAR CAJA Y REGISTRAR COTIZACIONES
                 </button>
               ):(
-                <div style={{background:"#0a1a0a",border:"1px solid #4ade8044",borderRadius:9,padding:16,display:"flex",alignItems:"center",gap:14}}>
-                  <span style={{fontSize:24}}>🔒</span>
-                  <div>
-                    <div style={{fontSize:12,color:"#4ade80",fontWeight:700}}>Caja cerrada correctamente</div>
-                    {ultimoCierre?.total_usd&&<div style={{fontSize:11,color:"#4b5563",marginTop:2}}>Total en USD: <strong style={{color:"#4ade80"}}>{fmtUSD(ultimoCierre.total_usd)}</strong></div>}
-                    {ultimoCierre?.cotizaciones&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>
-                      {Object.entries(ultimoCierre.cotizaciones).filter(([,v])=>parse(v)).map(([k,v])=>k+": $"+fmt(v)).join(" | ")}
-                    </div>}
+                <div>
+                  <div style={{background:"#0a1a0a",border:"1px solid #4ade8044",borderRadius:9,padding:16,display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+                    <span style={{fontSize:24}}>🔒</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,color:"#4ade80",fontWeight:700}}>Caja cerrada correctamente</div>
+                      {ultimoCierre?.total_usd&&<div style={{fontSize:11,color:"#4b5563",marginTop:2}}>Total en USD: <strong style={{color:"#4ade80"}}>{fmtUSD(ultimoCierre.total_usd)}</strong></div>}
+                      {ultimoCierre?.cotizaciones&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>
+                        {Object.entries(ultimoCierre.cotizaciones).filter(([,v])=>parse(v)).map(([k,v])=>k+": $"+fmt(v)).join(" | ")}
+                      </div>}
+                    </div>
                   </div>
+                  <button onClick={async()=>{
+                    if(!window.confirm("Reabrir la caja? Vas a poder seguir cargando operaciones.")) return;
+                    await SB.from("cierres").delete().eq("fecha",hoy);
+                    setCajaCerrada(false);
+                    setCierres(p=>p.filter(c=>c.fecha!==hoy));
+                    notify("Caja reabierta");
+                  }} style={{padding:"10px 24px",borderRadius:9,background:"transparent",border:"1px solid #f59e0b",color:"#f59e0b",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    REABRIR CAJA
+                  </button>
                 </div>
               )}
             </div>
