@@ -334,7 +334,7 @@ export default function CajaFinanciera() {
   const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
   const [editandoMov, setEditandoMov] = useState(null);
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
-  const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza"];
+  const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
   const notify = useCallback((msg,ok=true)=>{ setToast({msg,ok}); setTimeout(()=>setToast(null),2800); },[]);
   const setF = useCallback((k,v)=>setForm(f=>({...f,[k]:v})),[]);
@@ -1363,7 +1363,7 @@ export default function CajaFinanciera() {
 
 
         {pant==="resumen_socios"&&(()=>{
-          const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b"};
+          const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b","STS":"#e879f9"};
           const resumen={};
           SOCIOS_FIJOS.forEach(s=>{resumen[s]={clientes:[],totalPorMoneda:Object.fromEntries(MONEDAS.map(m=>[m.id,0])),totalDeuda:0};});
           clientes.forEach(c=>{
