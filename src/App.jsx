@@ -316,6 +316,11 @@ export default function CajaFinanciera() {
   const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfa:"", tn:"", tpct:"" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"" });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
+  const [gastos, setGastos] = useState([]);
+  const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
+  const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Otros"];
+  const [socios, setSocios] = useState([]);
+  const [nuevoSocio, setNuevoSocio] = useState({nombre:"",monto:""});
   const [editSaldo, setEditSaldo] = useState(null);
   const [editSaldoV, setEditSaldoV] = useState("");
   const [editCell, setEditCell] = useState(null);
@@ -369,6 +374,12 @@ export default function CajaFinanciera() {
         // Pos overrides
         const {data:poData} = await SB.from("pos_overrides").select("*");
         if (poData) setPosOvr(Object.fromEntries(poData.map(p=>[p.id, p.valor])));
+        // Gastos
+        const {data:gastosData} = await SB.from("gastos").select("*").order("fecha",{ascending:false});
+        if (gastosData) setGastos(gastosData);
+        // Socios
+        const {data:sociosData} = await SB.from("socios").select("*").order("nombre");
+        if (sociosData) setSocios(sociosData);
         // Cierres
         const {data:ciData} = await SB.from("cierres").select("*").order("fecha",{ascending:true});
         if (ciData) setCierres(ciData);
@@ -660,6 +671,8 @@ export default function CajaFinanciera() {
     {id:"trade",label:"Trade",c:"#f43f5e"},{id:"posicion",label:"Posicion",c:"#e879f9"},
     {id:"historial",label:"Historial",c:"#fb923c"},
     {id:"evolucion",label:"Evolucion USD",c:"#4ade80"},
+    {id:"gastos",label:"Gastos",c:"#f43f5e"},
+    {id:"socios",label:"Socios",c:"#a78bfa"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
 
@@ -1266,6 +1279,185 @@ export default function CajaFinanciera() {
             </div>
           </div>
         )}
+
+
+        {pant==="gastos"&&(
+          <div>
+            <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:4}}>GASTOS</div>
+            <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Registra tus gastos fijos y variables</div>
+            <div style={S.grid("1fr 1fr",18)}>
+              <Card sx={{border:"1px solid #f43f5e33"}}>
+                <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:12}}>NUEVO GASTO</div>
+                <div style={{marginBottom:8}}><Lbl>Categoria</Lbl>
+                  <Sel value={formGasto.categoria} onChange={e=>setFormGasto(f=>({...f,categoria:e.target.value}))}>
+                    {CATS_GASTO.map(c=><option key={c} value={c}>{c}</option>)}
+                  </Sel>
+                </div>
+                <div style={S.grid("1fr 1fr",8)}>
+                  <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={formGasto.monto} onChange={e=>setFormGasto(f=>({...f,monto:e.target.value}))}/></div>
+                  <div><Lbl>Moneda</Lbl><MonedasSel value={formGasto.moneda} onChange={v=>setFormGasto(f=>({...f,moneda:v}))}/></div>
+                </div>
+                <div style={{marginTop:8}}><Lbl>Fecha</Lbl><Inp type="date" value={formGasto.fecha} onChange={e=>setFormGasto(f=>({...f,fecha:e.target.value}))}/></div>
+                <div style={{marginTop:8}}><Lbl>Nota</Lbl><Inp placeholder="Descripcion..." value={formGasto.nota} onChange={e=>setFormGasto(f=>({...f,nota:e.target.value}))}/></div>
+                <button onClick={async()=>{
+                  const monto=parse(formGasto.monto); if(!monto){notify("Ingresa un monto",false);return;}
+                  const g={categoria:formGasto.categoria,monto,moneda:formGasto.moneda,nota:formGasto.nota,fecha:formGasto.fecha};
+                  const {data:ins}=await SB.from("gastos").insert(g).select().single();
+                  if(ins) setGastos(p=>[ins,...p]);
+                  setFormGasto(f=>({...f,monto:"",nota:""}));
+                  notify("Gasto registrado");
+                }} style={{marginTop:12,width:"100%",padding:10,borderRadius:7,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f87171",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  REGISTRAR GASTO
+                </button>
+              </Card>
+              <Card sx={{maxHeight:500,overflowY:"auto"}}>
+                <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>HISTORIAL ({gastos.length})</div>
+                {gastos.length===0&&<div style={{color:"#374151",fontSize:12}}>Sin gastos registrados</div>}
+                {gastos.map(g=>{
+                  const mon=MONEDAS.find(m=>m.id===g.moneda);
+                  return (
+                    <div key={g.id} style={{borderBottom:"1px solid #1a1a1a",padding:"8px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                      <div>
+                        <div style={{fontSize:11,color:"#f87171",fontWeight:700}}>{g.categoria}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#fff",marginTop:1}}>{mon?.simbolo}{fmt(g.monto)} {g.moneda}</div>
+                        {g.nota&&<div style={{fontSize:11,color:"#4b5563",marginTop:1}}>{g.nota}</div>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:10,color:"#4b5563"}}>{fmtFecha(g.fecha)}</div>
+                        <button onClick={async()=>{
+                          if(!window.confirm("Eliminar este gasto?")) return;
+                          await SB.from("gastos").delete().eq("id",g.id);
+                          setGastos(p=>p.filter(x=>x.id!==g.id));
+                          notify("Eliminado");
+                        }} style={{marginTop:4,fontSize:10,padding:"2px 7px",borderRadius:4,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f43f5e",cursor:"pointer",fontFamily:"inherit"}}>borrar</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+            </div>
+            {gastos.length>0&&(()=>{
+              const porCat={};
+              gastos.forEach(g=>{
+                if(!porCat[g.categoria]) porCat[g.categoria]={};
+                porCat[g.categoria][g.moneda]=(porCat[g.categoria][g.moneda]||0)+g.monto;
+              });
+              return (
+                <Card sx={{marginTop:16}}>
+                  <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>RESUMEN POR CATEGORIA</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                    {Object.entries(porCat).map(([cat,mons])=>(
+                      <div key={cat} style={{background:"#0d0d0d",border:"1px solid #1f2937",borderRadius:8,padding:"10px 14px",minWidth:140}}>
+                        <div style={{fontSize:10,color:"#f87171",fontWeight:700,marginBottom:6}}>{cat}</div>
+                        {Object.entries(mons).map(([mon,v])=>{
+                          const m=MONEDAS.find(x=>x.id===mon);
+                          return <div key={mon} style={{fontSize:12,color:"#fff"}}>{m?.simbolo}{fmt(v)} <span style={{color:m?.color,fontSize:10}}>{mon}</span></div>;
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
+          </div>
+        )}
+
+        {pant==="socios"&&(()=>{
+          const total=socios.reduce((s,x)=>s+parse(x.monto),0);
+          const COLORES=["#4ade80","#38bdf8","#f59e0b","#c084fc","#f87171","#34d399"];
+          // Grafico de torta SVG
+          function PieChart({data}) {
+            if(!data.length) return null;
+            const tot=data.reduce((s,d)=>s+d.v,0); if(!tot) return null;
+            let ang=0; const cx=100,cy=100,r=80;
+            const slices=data.map((d,i)=>{
+              const pct=d.v/tot, startAng=ang, endAng=ang+pct*2*Math.PI;
+              ang=endAng;
+              const x1=cx+r*Math.sin(startAng),y1=cy-r*Math.cos(startAng);
+              const x2=cx+r*Math.sin(endAng),y2=cy-r*Math.cos(endAng);
+              const large=pct>0.5?1:0;
+              return {path:"M"+cx+","+cy+" L"+x1+","+y1+" A"+r+","+r+" 0 "+large+",1 "+x2+","+y2+" Z",color:d.color,label:d.label,pct:(pct*100).toFixed(1)};
+            });
+            return (
+              <svg viewBox="0 0 200 200" style={{width:200,height:200}}>
+                {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="#111" strokeWidth="1"/>)}
+              </svg>
+            );
+          }
+          return (
+            <div>
+              <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:4}}>SOCIOS</div>
+              <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Inversion y distribucion de capital</div>
+              <div style={S.grid("1fr 1fr",18)}>
+                <Card sx={{border:"1px solid #a78bfa33"}}>
+                  <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:12}}>AGREGAR SOCIO</div>
+                  <div style={S.grid("1fr 1fr",8)}>
+                    <div><Lbl>Nombre</Lbl><Inp placeholder="Sala" value={nuevoSocio.nombre} onChange={e=>setNuevoSocio(s=>({...s,nombre:e.target.value}))}/></div>
+                    <div><Lbl>Inversion USD</Lbl><Inp type="number" placeholder="0" value={nuevoSocio.monto} onChange={e=>setNuevoSocio(s=>({...s,monto:e.target.value}))}/></div>
+                  </div>
+                  <button onClick={async()=>{
+                    if(!nuevoSocio.nombre.trim()||!parse(nuevoSocio.monto)){notify("Completa nombre y monto",false);return;}
+                    const {data:ins}=await SB.from("socios").insert({nombre:nuevoSocio.nombre.trim(),monto:parse(nuevoSocio.monto)}).select().single();
+                    if(ins) setSocios(p=>[...p,ins]);
+                    setNuevoSocio({nombre:"",monto:""});
+                    notify("Socio agregado");
+                  }} style={{marginTop:10,width:"100%",padding:10,borderRadius:7,background:"#0a0a1a",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    + AGREGAR
+                  </button>
+                  <div style={{marginTop:20}}>
+                    {socios.map((s,i)=>(
+                      <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #1a1a1a"}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:COLORES[i%COLORES.length],flexShrink:0}}/>
+                        <div style={{flex:1,fontWeight:700}}>{s.nombre}</div>
+                        <input type="number" defaultValue={s.monto}
+                          onBlur={async e=>{
+                            const v=parse(e.target.value);
+                            await SB.from("socios").update({monto:v}).eq("id",s.id);
+                            setSocios(p=>p.map(x=>x.id!==s.id?x:{...x,monto:v}));
+                            notify("Actualizado");
+                          }}
+                          style={{width:90,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:4,padding:"4px 6px",color:"#fff",fontFamily:"inherit",fontSize:12,textAlign:"right",outline:"none"}}/>
+                        <span style={{fontSize:10,color:"#a78bfa",width:42,textAlign:"right"}}>{total?((parse(s.monto)/total)*100).toFixed(1)+"%":"0%"}</span>
+                        <button onClick={async()=>{
+                          if(!window.confirm("Eliminar este socio?")) return;
+                          await SB.from("socios").delete().eq("id",s.id);
+                          setSocios(p=>p.filter(x=>x.id!==s.id));
+                          notify("Eliminado");
+                        }} style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>x</button>
+                      </div>
+                    ))}
+                    {socios.length>0&&(
+                      <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",marginTop:4}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>TOTAL</span>
+                        <span style={{fontSize:14,fontWeight:700,color:"#a78bfa"}}>${fmt(total)}</span>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+                <Card sx={{border:"1px solid #a78bfa33",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                  {socios.length===0?(
+                    <div style={{color:"#374151",fontSize:12,textAlign:"center"}}>Agrega socios para ver el grafico</div>
+                  ):(
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:16}}>DISTRIBUCION DE CAPITAL</div>
+                      <PieChart data={socios.map((s,i)=>({label:s.nombre,v:parse(s.monto),color:COLORES[i%COLORES.length]}))}/>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center",marginTop:16}}>
+                        {socios.map((s,i)=>(
+                          <div key={s.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:11}}>
+                            <div style={{width:8,height:8,borderRadius:"50%",background:COLORES[i%COLORES.length]}}/>
+                            <span style={{color:"#9ca3af"}}>{s.nombre}</span>
+                            <span style={{color:COLORES[i%COLORES.length],fontWeight:700}}>{total?((parse(s.monto)/total)*100).toFixed(1):0}%</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{marginTop:16,fontSize:11,color:"#4b5563"}}>Total invertido: <strong style={{color:"#a78bfa"}}>${fmt(total)} USD</strong></div>
+                    </div>
+                  )}
+                </Card>
+              </div>
+            </div>
+          );
+        })()}
 
       </main>
     </div>
