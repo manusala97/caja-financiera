@@ -328,7 +328,13 @@ export default function CajaFinanciera() {
   const [editFact, setEditFact] = useState(null);
   const [editFactV, setEditFactV] = useState("");
   const [nuevoMes, setNuevoMes] = useState("");
-  const [nuevoC, setNuevoC] = useState({ nombre:"", apellido:"" });
+  const [nuevoC, setNuevoC] = useState({ nombre:"", apellido:"", socio:"Manuel Sala" });
+  const [busqCliente, setBusqCliente] = useState("");
+  const [editandoCliente, setEditandoCliente] = useState(null);
+  const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
+  const [editandoMov, setEditandoMov] = useState(null);
+  const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
+  const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza"];
 
   const notify = useCallback((msg,ok=true)=>{ setToast({msg,ok}); setTimeout(()=>setToast(null),2800); },[]);
   const setF = useCallback((k,v)=>setForm(f=>({...f,[k]:v})),[]);
@@ -569,9 +575,9 @@ export default function CajaFinanciera() {
 
   async function agregarCliente() {
     if (!nuevoC.nombre.trim()) { notify("Ingresa un nombre",false); return; }
-    const {data}=await SB.from("clientes").insert({nombre:nuevoC.nombre.trim(),apellido:nuevoC.apellido.trim()}).select().single();
-    if (data) setClientes(p=>[...p,{id:data.id,nombre:data.nombre,apellido:data.apellido,movimientos:[]}]);
-    setNuevoC({nombre:"",apellido:""}); notify("Cliente agregado");
+    const {data}=await SB.from("clientes").insert({nombre:nuevoC.nombre.trim(),apellido:nuevoC.apellido.trim(),socio:nuevoC.socio}).select().single();
+    if (data) setClientes(p=>[...p,{id:data.id,nombre:data.nombre,apellido:data.apellido,socio:data.socio,movimientos:[]}]);
+    setNuevoC({nombre:"",apellido:"",socio:"Manuel Sala"}); notify("Cliente agregado");
   }
 
   async function eliminarCliente(id) {
@@ -671,6 +677,7 @@ export default function CajaFinanciera() {
     {id:"trade",label:"Trade",c:"#f43f5e"},{id:"posicion",label:"Posicion",c:"#e879f9"},
     {id:"historial",label:"Historial",c:"#fb923c"},
     {id:"evolucion",label:"Evolucion USD",c:"#4ade80"},
+    {id:"resumen_socios",label:"Por socio",c:"#34d399"},
     {id:"gastos",label:"Gastos",c:"#f43f5e"},
     {id:"socios",label:"Socios",c:"#a78bfa"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
@@ -877,21 +884,62 @@ export default function CajaFinanciera() {
 
         {pant==="clientes"&&!clienteActivo&&(
           <div>
-            <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:18}}>CUENTAS CORRIENTES</div>
-            <Card sx={{maxWidth:380,marginBottom:18}}>
-              <div style={S.grid("1fr 1fr",8)}>
+            <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:14}}>CUENTAS CORRIENTES</div>
+            <Card sx={{marginBottom:14}}>
+              <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:10}}>NUEVO CLIENTE</div>
+              <div style={S.grid("1fr 1fr 1fr",8)}>
                 <div><Lbl>Nombre</Lbl><Inp placeholder="Juan" value={nuevoC.nombre} onChange={e=>setNuevoC(n=>({...n,nombre:e.target.value}))}/></div>
                 <div><Lbl>Apellido</Lbl><Inp placeholder="Garcia" value={nuevoC.apellido} onChange={e=>setNuevoC(n=>({...n,apellido:e.target.value}))}/></div>
+                <div><Lbl>Socio</Lbl>
+                  <Sel value={nuevoC.socio} onChange={e=>setNuevoC(n=>({...n,socio:e.target.value}))}>
+                    {SOCIOS_FIJOS.map(s=><option key={s} value={s}>{s}</option>)}
+                  </Sel>
+                </div>
               </div>
-              <button onClick={agregarCliente} style={{marginTop:9,width:"100%",padding:9,borderRadius:6,background:"#052e16",border:"1px solid #34d399",color:"#34d399",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Agregar cliente</button>
+              <button onClick={agregarCliente} style={{marginTop:9,padding:"8px 18px",borderRadius:6,background:"#052e16",border:"1px solid #34d399",color:"#34d399",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Agregar</button>
             </Card>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:9}}>
-              {clientes.map(c=>{ const sal=saldoCC(c);
+            <div style={{marginBottom:12}}>
+              <Inp placeholder="Buscar cliente..." value={busqCliente} onChange={e=>setBusqCliente(e.target.value)} sx={{maxWidth:320,background:"#0d0d0d"}}/>
+            </div>
+            {editandoCliente&&(
+              <Card sx={{marginBottom:14,border:"1px solid #38bdf833"}}>
+                <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:10}}>EDITAR CLIENTE</div>
+                <div style={S.grid("1fr 1fr 1fr",8)}>
+                  <div><Lbl>Nombre</Lbl><Inp value={editClienteV.nombre} onChange={e=>setEditClienteV(v=>({...v,nombre:e.target.value}))}/></div>
+                  <div><Lbl>Apellido</Lbl><Inp value={editClienteV.apellido} onChange={e=>setEditClienteV(v=>({...v,apellido:e.target.value}))}/></div>
+                  <div><Lbl>Socio</Lbl>
+                    <Sel value={editClienteV.socio} onChange={e=>setEditClienteV(v=>({...v,socio:e.target.value}))}>
+                      {SOCIOS_FIJOS.map(s=><option key={s} value={s}>{s}</option>)}
+                    </Sel>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  <button onClick={async()=>{
+                    await SB.from("clientes").update({nombre:editClienteV.nombre,apellido:editClienteV.apellido,socio:editClienteV.socio}).eq("id",editandoCliente);
+                    setClientes(p=>p.map(x=>x.id!==editandoCliente?x:{...x,...editClienteV}));
+                    setEditandoCliente(null); notify("Cliente actualizado");
+                  }} style={{padding:"7px 16px",borderRadius:6,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>Guardar</button>
+                  <button onClick={()=>setEditandoCliente(null)} style={{padding:"7px 14px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#4b5563",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                </div>
+              </Card>
+            )}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:9}}>
+              {clientes.filter(c=>{
+                const q=busqCliente.toLowerCase();
+                return !q||(c.nombre+" "+c.apellido).toLowerCase().includes(q)||(c.socio||"").toLowerCase().includes(q);
+              }).map(c=>{ const sal=saldoCC(c);
+                const colorSocio=c.socio==="Manuel Sala"?"#4ade80":c.socio==="Gonzalo Spadafora"?"#38bdf8":"#f59e0b";
                 return (
                   <Card key={c.id} sx={{position:"relative"}}>
-                    <button onClick={e=>{e.stopPropagation();eliminarCliente(c.id);}} style={{position:"absolute",top:9,right:9,width:20,height:20,borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
-                    <div style={{cursor:"pointer",paddingRight:26}} onClick={()=>{setClienteActivo(c.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:""});}}>
-                      <div style={{fontWeight:700,marginBottom:7}}>{c.nombre} {c.apellido}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div style={{fontSize:9,color:colorSocio,fontWeight:700}}>{c.socio||"Sin socio"}</div>
+                      <div style={{display:"flex",gap:4}}>
+                        <button onClick={e=>{e.stopPropagation();setEditandoCliente(c.id);setEditClienteV({nombre:c.nombre,apellido:c.apellido,socio:c.socio||"Manuel Sala"});}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #38bdf8",color:"#38bdf8",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✎</button>
+                        <button onClick={e=>{e.stopPropagation();eliminarCliente(c.id);}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
+                      </div>
+                    </div>
+                    <div style={{cursor:"pointer"}} onClick={()=>{setClienteActivo(c.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:""});}}>
+                      <div style={{fontWeight:700,marginBottom:5}}>{c.nombre} {c.apellido}</div>
                       {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
                         return <div key={m.id} style={{fontSize:11,color:v>0?"#4ade80":"#f87171",marginBottom:2}}>{v>0?"Me debe":"Le debo"} {m.simbolo}{fmt(Math.abs(v))} {m.id}</div>;})}
                       {MONEDAS.every(m=>!sal[m.id])&&<div style={{fontSize:11,color:"#374151"}}>Sin movimientos</div>}
@@ -944,14 +992,47 @@ export default function CajaFinanciera() {
                     {labelBtn[formCC.tipo]}
                   </button>
                 </Card>
-                <Card sx={{maxHeight:460,overflowY:"auto"}}>
+                <Card sx={{maxHeight:500,overflowY:"auto"}}>
                   <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>HISTORIAL ({c.movimientos.length})</div>
+                  {editandoMov&&(
+                    <div style={{background:"#0a1a2e",border:"1px solid #38bdf833",borderRadius:8,padding:10,marginBottom:12}}>
+                      <div style={{fontSize:9,color:"#38bdf8",letterSpacing:2,marginBottom:8}}>EDITAR MOVIMIENTO</div>
+                      <div style={{marginBottom:6}}>
+                        <Sel value={editMovV.tipo} onChange={e=>setEditMovV(v=>({...v,tipo:e.target.value}))}>
+                          {Object.entries({ingreso_transf:"Me transfirio",ingreso_dep:"Me deposito",retiro_transf:"Le transferi",retiro_efectivo:"Retire efectivo"}).map(([k,l])=><option key={k} value={k}>{l}</option>)}
+                        </Sel>
+                      </div>
+                      <div style={S.grid("1fr 1fr",8)}>
+                        <div><Lbl>Monto</Lbl><Inp type="number" value={editMovV.monto} onChange={e=>setEditMovV(v=>({...v,monto:e.target.value}))}/></div>
+                        <div><Lbl>Moneda</Lbl><MonedasSel value={editMovV.moneda} onChange={val=>setEditMovV(v=>({...v,moneda:val}))}/></div>
+                      </div>
+                      <div style={{marginTop:6}}><Lbl>Nota</Lbl><Inp value={editMovV.nota} onChange={e=>setEditMovV(v=>({...v,nota:e.target.value}))}/></div>
+                      <div style={{display:"flex",gap:6,marginTop:8}}>
+                        <button onClick={async()=>{
+                          const monto=parse(editMovV.monto); if(!monto) return;
+                          await SB.from("movimientos_cc").update({tipo:editMovV.tipo,moneda:editMovV.moneda,monto,nota:editMovV.nota}).eq("id",editandoMov);
+                          setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.map(m=>m.id!==editandoMov?m:{...m,tipo:editMovV.tipo,moneda:editMovV.moneda,monto,nota:editMovV.nota})}));
+                          setEditandoMov(null); notify("Movimiento editado");
+                        }} style={{flex:1,padding:"7px",borderRadius:6,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>Guardar</button>
+                        <button onClick={()=>setEditandoMov(null)} style={{padding:"7px 12px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#4b5563",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
                   {[...c.movimientos].reverse().map(mv=>{ const mon=MONEDAS.find(m=>m.id===mv.moneda);
                     return (
                       <div key={mv.id} style={{borderBottom:"1px solid #1a1a1a",paddingBottom:9,marginBottom:9}}>
-                        <div style={{display:"flex",justifyContent:"space-between"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                           <span style={{fontSize:12,fontWeight:700,color:colorCC[mv.tipo]||"#6b7280"}}>{labelCC[mv.tipo]||mv.tipo}</span>
-                          <span style={{fontSize:10,color:"#4b5563"}}>{mv.fecha} {mv.hora}</span>
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <span style={{fontSize:10,color:"#4b5563"}}>{mv.fecha}</span>
+                            <button onClick={()=>{setEditandoMov(mv.id);setEditMovV({tipo:mv.tipo,monto:String(mv.monto),nota:mv.nota||"",moneda:mv.moneda});}} style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",cursor:"pointer",fontFamily:"inherit"}}>editar</button>
+                            <button onClick={async()=>{
+                              if(!window.confirm("Eliminar este movimiento?")) return;
+                              await SB.from("movimientos_cc").delete().eq("id",mv.id);
+                              setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
+                              notify("Eliminado");
+                            }} style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f43f5e",cursor:"pointer",fontFamily:"inherit"}}>borrar</button>
+                          </div>
                         </div>
                         <div style={{fontSize:13,fontWeight:700,color:"#fff",marginTop:2}}>{mon?.simbolo}{fmt(mv.monto)} {mv.moneda}</div>
                         {mv.nota&&<div style={{fontSize:11,color:"#4b5563",marginTop:1}}>{mv.nota}</div>}
@@ -1280,6 +1361,57 @@ export default function CajaFinanciera() {
           </div>
         )}
 
+
+        {pant==="resumen_socios"&&(()=>{
+          const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b"};
+          const resumen={};
+          SOCIOS_FIJOS.forEach(s=>{resumen[s]={clientes:[],totalPorMoneda:Object.fromEntries(MONEDAS.map(m=>[m.id,0])),totalDeuda:0};});
+          clientes.forEach(c=>{
+            const socio=c.socio||"Manuel Sala";
+            if(!resumen[socio]) return;
+            const sal=saldoCC(c);
+            const tieneMovs=MONEDAS.some(m=>sal[m.id]!==0);
+            if(tieneMovs) resumen[socio].clientes.push({...c,sal});
+            MONEDAS.forEach(m=>{ resumen[socio].totalPorMoneda[m.id]+=sal[m.id]||0; });
+          });
+          return (
+            <div>
+              <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:4}}>RESUMEN POR SOCIO</div>
+              <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Posicion de cada socio con sus clientes</div>
+              {SOCIOS_FIJOS.map(socio=>{
+                const r=resumen[socio]; const col=COLORES_SOCIO[socio]||"#6b7280";
+                const clientesConSaldo=r.clientes.filter(c=>MONEDAS.some(m=>c.sal[m.id]!==0));
+                return (
+                  <Card key={socio} sx={{marginBottom:14,border:"1px solid "+col+"33"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:col}}>{socio}</div>
+                        <div style={{fontSize:11,color:"#4b5563",marginTop:2}}>{clientesConSaldo.length} clientes con saldo</div>
+                      </div>
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                        {MONEDAS.map(m=>{ const v=r.totalPorMoneda[m.id]; if(!v) return null;
+                          return <div key={m.id} style={{background:"#0d0d0d",border:"1px solid "+(v>0?m.color+"44":"#f4433633"),borderRadius:6,padding:"5px 10px"}}>
+                            <div style={{fontSize:8,color:m.color,marginBottom:1}}>{m.id}</div>
+                            <div style={{fontSize:12,fontWeight:700,color:v>0?"#4ade80":"#f87171"}}>{v>0?"Me deben":"Debo"} {m.simbolo}{fmt(Math.abs(v))}</div>
+                          </div>;})}
+                      </div>
+                    </div>
+                    {clientesConSaldo.length===0&&<div style={{fontSize:12,color:"#374151"}}>Sin clientes con saldo</div>}
+                    {clientesConSaldo.map(cl=>(
+                      <div key={cl.id} style={{borderTop:"1px solid #1a1a1a",paddingTop:8,marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
+                        <div style={{fontWeight:600,fontSize:12,cursor:"pointer",color:"#e5e7eb"}} onClick={()=>{setPant("clientes");setClienteActivo(cl.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:""});}}>{cl.nombre} {cl.apellido}</div>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                          {MONEDAS.map(m=>{ const v=cl.sal[m.id]; if(!v) return null;
+                            return <span key={m.id} style={{fontSize:11,color:v>0?"#4ade80":"#f87171",fontWeight:700}}>{v>0?"+":""}{m.simbolo}{fmt(v)} {m.id}</span>;})}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {pant==="gastos"&&(
           <div>
