@@ -50,13 +50,15 @@ const fechaLarga = new Date().toLocaleDateString("es-AR",{weekday:"long",year:"n
 const fmtFecha = (f) => f ? new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",year:"numeric",month:"short",day:"numeric"}) : "";
 
 function calcTotalUSD(saldos, cotiz) {
-  const arsXusd = parse(cotiz.ARS)||1;
+  // ARS: cotiz es cuantos pesos vale 1 USD → dividimos
+  // BRL, EUR, GBP: cotiz es cuantos USD vale 1 unidad → multiplicamos
+  // USDT: 1:1 con USD
   let total = parse(saldos.USD||0);
-  total += parse(saldos.ARS||0) / arsXusd;
-  total += parse(saldos.BRL||0) * (parse(cotiz.BRL||0) / arsXusd);
-  total += parse(saldos.GBP||0) * (parse(cotiz.GBP||0) / arsXusd);
-  total += parse(saldos.EUR||0) * (parse(cotiz.EUR||0) / arsXusd);
-  total += parse(saldos.USDT||0) * (parse(cotiz.USDT||0) / arsXusd);
+  total += parse(saldos.ARS||0) / (parse(cotiz.ARS)||1);
+  total += parse(saldos.BRL||0) * (parse(cotiz.BRL)||0);
+  total += parse(saldos.GBP||0) * (parse(cotiz.GBP)||0);
+  total += parse(saldos.EUR||0) * (parse(cotiz.EUR)||0);
+  total += parse(saldos.USDT||0); // 1:1
   return total;
 }
 
@@ -224,7 +226,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
 }
 
 function ModalCierre({ saldos, onCerrar, onCancelar }) {
-  const [cotiz, setCotiz] = useState({ ARS:"", BRL:"", GBP:"", EUR:"", USDT:"" });
+  const [cotiz, setCotiz] = useState({ ARS:"", BRL:"", GBP:"", EUR:"", USDT:"1" });
   const sc = (k,v) => setCotiz(c=>({...c,[k]:v}));
   const totalUSD = useMemo(()=>{
     if (!parse(cotiz.ARS)) return null;
@@ -247,16 +249,21 @@ function ModalCierre({ saldos, onCerrar, onCancelar }) {
           </div>
         </div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:8}}>COTIZACIONES DE CIERRE (en ARS por unidad)</div>
+          <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:8}}>COTIZACIONES DE CIERRE</div>
           <div style={S.grid("1fr 1fr",8)}>
             {monCotiz.map(m=>(
               <div key={m.id}>
-                <Lbl><span style={{color:m.color}}>{m.id}</span> en ARS{m.id==="ARS"?" (1 USD = ?)":""}</Lbl>
-                <Inp type="number" placeholder={m.id==="ARS"?"1430":m.id==="USDT"?"1430":m.id==="EUR"?"1560":m.id==="GBP"?"1820":m.id==="BRL"?"250":""} value={cotiz[m.id]||""} onChange={e=>sc(m.id,e.target.value)} sx={{borderColor:m.color+"44"}}/>
+                <Lbl><span style={{color:m.color}}>{m.id}</span> {m.id==="ARS"?"— cuantos $ por 1 USD":m.id==="USDT"?"— siempre 1:1 USD":"— cuantos USD vale 1 "+m.id}</Lbl>
+                <Inp type="number" 
+                  placeholder={m.id==="ARS"?"1400":m.id==="USDT"?"1":m.id==="EUR"?"1.2":m.id==="GBP"?"1.27":m.id==="BRL"?"0.19":""} 
+                  value={cotiz[m.id]||""} 
+                  disabled={m.id==="USDT"}
+                  onChange={e=>sc(m.id,e.target.value)} 
+                  sx={{borderColor:m.color+"44",opacity:m.id==="USDT"?0.5:1}}/>
               </div>
             ))}
           </div>
-          <div style={{marginTop:8,fontSize:10,color:"#374151"}}>* ARS = cuantos pesos vale 1 dolar (ej: 1430)</div>
+          <div style={{marginTop:8,fontSize:10,color:"#374151"}}>* ARS: pesos por USD (ej: 1400) | EUR/GBP/BRL: valor en USD (ej: EUR=1.2, BRL=0.19)</div>
         </div>
         {totalUSD!==null&&(
           <div style={{background:"#0a1a0a",border:"1px solid #22c55e44",borderRadius:8,padding:12,marginBottom:16,textAlign:"center"}}>
@@ -265,10 +272,10 @@ function ModalCierre({ saldos, onCerrar, onCancelar }) {
             <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>al cierre de hoy</div>
             <div style={{marginTop:8,fontSize:11,color:"#6b7280"}}>
               {MONEDAS.filter(m=>m.id!=="USD"&&(saldos[m.id]||0)!==0).map(m=>{
-                const arsXusd=parse(cotiz.ARS)||1;
                 let usd=0;
-                if(m.id==="ARS") usd=parse(saldos.ARS||0)/arsXusd;
-                else usd=parse(saldos[m.id]||0)*(parse(cotiz[m.id]||0)/arsXusd);
+                if(m.id==="ARS") usd=parse(saldos.ARS||0)/(parse(cotiz.ARS)||1);
+                else if(m.id==="USDT") usd=parse(saldos.USDT||0);
+                else usd=parse(saldos[m.id]||0)*(parse(cotiz[m.id])||0);
                 return <span key={m.id} style={{marginRight:10,color:m.color}}>{m.id}: {fmtUSD(usd)}</span>;
               })}
               <span style={{color:"#4ade80"}}>USD: {fmtUSD(saldos.USD||0)}</span>
