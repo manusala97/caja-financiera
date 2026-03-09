@@ -335,6 +335,8 @@ export default function CajaFinanciera() {
   const [editFact, setEditFact] = useState(null);
   const [editFactV, setEditFactV] = useState("");
   const [nuevoMes, setNuevoMes] = useState("");
+  const [formDifManual, setFormDifManual] = useState({cliente:"",nominal:"",fechaAcr:"",nota:""});
+  const [mostrarFormDif, setMostrarFormDif] = useState(false);
   const [nuevoC, setNuevoC] = useState({ nombre:"", apellido:"", socio:"Manuel Sala" });
   const [busqCliente, setBusqCliente] = useState("");
   const [editandoCliente, setEditandoCliente] = useState(null);
@@ -369,7 +371,8 @@ export default function CajaFinanciera() {
         if (difs) setDiferidos(difs.map(d=>({
           id:d.id, hora:d.hora, fecha:d.fecha, cliente:d.cliente,
           nominal:d.nominal, mFinal:d.m_final, ganancia:d.ganancia,
-          fechaAcr:d.fecha_acr, tm:d.tm, dias:d.dias, cobrado:d.cobrado
+          fechaAcr:d.fecha_acr, tm:d.tm, dias:d.dias, cobrado:d.cobrado,
+          nota:d.nota||"", manual:d.manual||false
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
@@ -551,7 +554,7 @@ export default function CajaFinanciera() {
     setSaldos(ns);
     await SB.from("diferidos").update({cobrado:true}).eq("id",id);
     setDiferidos(p=>p.map(x=>x.id===id?{...x,cobrado:true}:x));
-    const opData={tipo:"cobro_dif",hora,moneda:"ARS",monto:d.nominal,cliente:d.cliente,nota:"Cobro diferido $"+fmt(d.nominal)};
+    const opData={tipo:"cobro_dif",hora,moneda:"ARS",monto:d.nominal,cliente:d.cliente,nota:"Cobro diferido $"+fmt(d.nominal)+(d.manual?" (manual)":"")};
     const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"cobro_dif",datos:opData}).select().single();
     if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
     await guardarDia(ns,null,null); notify("Cobrado");
@@ -865,23 +868,57 @@ export default function CajaFinanciera() {
 
         {pant==="cartera"&&(
           <div>
-            <div style={{fontSize:10,letterSpacing:3,color:"#c084fc",marginBottom:18}}>CARTERA DE DIFERIDOS</div>
-            {diferidos.filter(d=>!d.cobrado).length===0&&<div style={{color:"#374151"}}>Sin diferidos pendientes</div>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:10,letterSpacing:3,color:"#c084fc"}}>CARTERA DE DIFERIDOS</div>
+              <button onClick={()=>setMostrarFormDif(v=>!v)} style={{padding:"7px 14px",borderRadius:6,background:mostrarFormDif?"#1c0a0a":"#0a0a1a",border:"1px solid "+(mostrarFormDif?"#f43f5e":"#c084fc"),color:mostrarFormDif?"#f87171":"#c084fc",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                {mostrarFormDif?"Cancelar":"+ Cheque a cobrar"}
+              </button>
+            </div>
+            {mostrarFormDif&&(
+              <Card sx={{marginBottom:16,border:"1px solid #c084fc44"}}>
+                <div style={{fontSize:10,letterSpacing:3,color:"#c084fc",marginBottom:12}}>REGISTRAR CHEQUE A COBRAR</div>
+                <div style={{fontSize:11,color:"#4b5563",marginBottom:12}}>Solo para cheques ya entregados — no impacta saldo de caja, solo queda como activo a cobrar.</div>
+                <div style={S.grid("1fr 1fr",10)}>
+                  <div><Lbl>Cliente / Empresa</Lbl><Inp placeholder="Nombre..." value={formDifManual.cliente} onChange={e=>setFormDifManual(f=>({...f,cliente:e.target.value}))}/></div>
+                  <div><Lbl>Nominal a cobrar $</Lbl><Inp type="number" placeholder="0" value={formDifManual.nominal} onChange={e=>setFormDifManual(f=>({...f,nominal:e.target.value}))}/></div>
+                  <div><Lbl>Fecha de acreditacion</Lbl><Inp type="date" value={formDifManual.fechaAcr} onChange={e=>setFormDifManual(f=>({...f,fechaAcr:e.target.value}))}/></div>
+                  <div><Lbl>Nota (opcional)</Lbl><Inp placeholder="..." value={formDifManual.nota} onChange={e=>setFormDifManual(f=>({...f,nota:e.target.value}))}/></div>
+                </div>
+                <button onClick={async()=>{
+                  const nominal=parse(formDifManual.nominal);
+                  if(!nominal||!formDifManual.fechaAcr){notify("Ingresa nominal y fecha",false);return;}
+                  const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                  const dif={hora,fecha:hoy,cliente:formDifManual.cliente,nominal,m_final:0,ganancia:0,fecha_acr:formDifManual.fechaAcr,tm:0,dias:diasEntre(hoy,formDifManual.fechaAcr),cobrado:false,nota:formDifManual.nota||"",manual:true};
+                  const {data:ins}=await SB.from("diferidos").insert(dif).select().single();
+                  if(ins) setDiferidos(p=>[...p,{id:ins.id,hora:ins.hora,fecha:ins.fecha,cliente:ins.cliente,nominal:ins.nominal,mFinal:ins.m_final,ganancia:ins.ganancia,fechaAcr:ins.fecha_acr,tm:ins.tm,dias:ins.dias,cobrado:ins.cobrado,nota:ins.nota,manual:ins.manual}]);
+                  setFormDifManual({cliente:"",nominal:"",fechaAcr:"",nota:""});
+                  setMostrarFormDif(false);
+                  notify("Cheque registrado");
+                }} style={{marginTop:12,padding:"10px 20px",borderRadius:7,background:"#0a0a1a",border:"1px solid #c084fc",color:"#c084fc",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  REGISTRAR
+                </button>
+              </Card>
+            )}
+            {diferidos.filter(d=>!d.cobrado).length===0&&<div style={{color:"#374151",fontSize:12}}>Sin diferidos pendientes</div>}
             {[...diferidos.filter(d=>!d.cobrado)].sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).map(d=>{
               const dr=diasEntre(hoy,d.fechaAcr),venc=dr===0,urg=dr<=3&&!venc;
               return (
                 <Card key={d.id} sx={{marginBottom:9,border:"1px solid "+(venc?"#f43f5e":urg?"#f59e0b":"#c084fc33")}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                    <div>
-                      <div style={{display:"flex",gap:7,marginBottom:5,alignItems:"center"}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",gap:7,marginBottom:5,alignItems:"center",flexWrap:"wrap"}}>
+                        {d.manual&&<span style={{fontSize:9,color:"#c084fc",background:"#c084fc11",padding:"1px 6px",borderRadius:4,border:"1px solid #c084fc33"}}>MANUAL</span>}
                         {venc&&<span style={{fontSize:10,color:"#f43f5e",fontWeight:700}}>VENCIDO</span>}
                         {urg&&<span style={{fontSize:10,color:"#f59e0b",fontWeight:700}}>VENCE EN {dr}d</span>}
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#6b7280"}}>Acredita {d.fechaAcr} - {dr}d</span>}
                       </div>
                       <div style={{fontSize:14,fontWeight:700}}>${fmt(d.nominal)} <span style={{fontSize:11,color:"#6b7280"}}>nominal</span></div>
-                      <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Pagaste ${fmt(d.mFinal)} - Ganancia ${fmt(d.ganancia)} - {d.tm}%{d.cliente?" - 👤 "+d.cliente:""}</div>
+                      {d.manual
+                        ? <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>{d.cliente?" 👤 "+d.cliente:""}{d.nota?" - "+d.nota:""}</div>
+                        : <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Pagaste ${fmt(d.mFinal)} - Ganancia ${fmt(d.ganancia)} - {d.tm}%{d.cliente?" - 👤 "+d.cliente:""}</div>
+                      }
                     </div>
-                    <button onClick={()=>cobrarDif(d.id)} style={{padding:"7px 12px",borderRadius:6,background:"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>Cobrar</button>
+                    <button onClick={()=>cobrarDif(d.id)} style={{padding:"7px 12px",borderRadius:6,background:"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Cobrar</button>
                   </div>
                 </Card>
               );
@@ -1187,12 +1224,35 @@ export default function CajaFinanciera() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot><tr style={{borderTop:"2px solid #374151",background:"#0a0a0a"}}>
-                    <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL</td>
-                    {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
-                      <span style={{fontSize:13,fontWeight:700,color:tots[m.id]>0?"#4ade80":tots[m.id]<0?"#f87171":"#374151"}}>{tots[m.id]!==0?fmt(tots[m.id]):"—"}</span>
-                    </td>)}
-                  </tr></tfoot>
+                  <tfoot>
+                    <tr style={{borderTop:"2px solid #374151",background:"#0a0a0a"}}>
+                      <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL CC</td>
+                      {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
+                        <span style={{fontSize:13,fontWeight:700,color:tots[m.id]>0?"#4ade80":tots[m.id]<0?"#f87171":"#374151"}}>{tots[m.id]!==0?fmt(tots[m.id]):"—"}</span>
+                      </td>)}
+                    </tr>
+                    {(()=>{
+                      const difPend=diferidos.filter(d=>!d.cobrado);
+                      const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+                      if(!totalDif) return null;
+                      return (
+                        <tr style={{background:"#0a0a1a",borderTop:"1px solid #c084fc33"}}>
+                          <td style={{padding:"9px 10px",fontSize:9,color:"#c084fc",cursor:"pointer"}} onClick={()=>setPant("cartera")}>
+                            CHEQUES A COBRAR ({difPend.length})
+                          </td>
+                          <td colSpan={MONEDAS.length-1}/>
+                          <td style={{textAlign:"right",padding:"9px 10px",gridColumn:"2"}}>
+                          </td>
+                          {MONEDAS.map(m=>{
+                            if(m.id!=="ARS") return <td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}><span style={{color:"#374151"}}>—</span></td>;
+                            return <td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
+                              <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmt(totalDif)}</span>
+                            </td>;
+                          })}
+                        </tr>
+                      );
+                    })()}
+                  </tfoot>
                 </table>
               </div>
             </div>
