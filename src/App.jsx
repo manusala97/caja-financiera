@@ -384,6 +384,7 @@ export default function CajaFinanciera() {
         // Dia de hoy - schema: id=fecha, caja_ini jsonb, abierta bool
         const {data:dia} = await SB.from("dias").select("*").eq("id",hoy).single();
         if (dia) {
+          // Dia de hoy ya existe
           setDiaId(dia.id);
           const ci = dia.caja_ini || {};
           setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
@@ -392,11 +393,18 @@ export default function CajaFinanciera() {
           const ft = ci._fact; if (ft) setFact(ft);
           const po = ci._pos_ovr; if (po) setPosOvr(po);
         } else {
-          // Dia nuevo: pre-cargar saldos del ultimo cierre
-          const {data:ultimoCierreData} = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single();
+          // Dia nuevo: buscar ultimo cierre primero, si no hay buscar ultimo dia abierto
+          const {data:ultimoCierreData} = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single().catch(()=>({data:null}));
           if (ultimoCierreData?.saldos_finales) {
             const sf = ultimoCierreData.saldos_finales;
             setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, sf[m.id]||""])));
+          } else {
+            // Sin cierre previo: buscar ultimo dia y usar sus saldos finales
+            const {data:ultimoDia} = await SB.from("dias").select("*").order("id",{ascending:false}).limit(1).single().catch(()=>({data:null}));
+            if (ultimoDia?.caja_ini?._saldos_finales) {
+              const sf = ultimoDia.caja_ini._saldos_finales;
+              setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, sf[m.id]||""])));
+            }
           }
         }
         // Operaciones - schema: id bigint, dia_id, hora, fecha, tipo, datos jsonb
@@ -847,19 +855,27 @@ export default function CajaFinanciera() {
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>cuentas corrientes</div>
                 </div>
               </div>
-              {difPend.filter(d=>diasEntre(hoy,d.fechaAcr)<=3).length>0&&(
-                <Card sx={{border:"1px solid #f59e0b33",marginBottom:16}}>
-                  <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,letterSpacing:1,marginBottom:12}}>⚠ CHEQUES PRÓXIMOS A VENCER</div>
-                  {[...difPend].filter(d=>diasEntre(hoy,d.fechaAcr)<=3).sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).map(d=>{
+              {difPend.length>0&&(
+                <Card sx={{border:"1px solid #c084fc22",marginBottom:16}}>
+                  <div style={{fontSize:10,color:"#c084fc",fontWeight:700,letterSpacing:1,marginBottom:12}}>CHEQUES A COBRAR — cronograma</div>
+                  {[...difPend].sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).map(d=>{
                     const dr=diasEntre(hoy,d.fechaAcr);
-                    return <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2535",alignItems:"center"}}>
-                      <div>
-                        <span style={{fontSize:11,fontWeight:700,color:dr===0?"#f43f5e":"#f59e0b"}}>{dr===0?"VENCIDO":"Vence en "+dr+"d"}</span>
-                        {d.cliente&&<span style={{fontSize:11,color:"#64748b",marginLeft:8}}>👤 {d.cliente}</span>}
+                    const venc=dr===0,urg=dr<=3&&!venc;
+                    return <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #1e2535",alignItems:"center"}}>
+                      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#475569",fontFamily:"'Space Mono',monospace",minWidth:90}}>{d.fechaAcr}</span>
+                        {venc&&<span style={{fontSize:10,fontWeight:700,color:"#f43f5e",background:"#f43f5e15",padding:"2px 7px",borderRadius:4}}>VENCIDO</span>}
+                        {urg&&<span style={{fontSize:10,fontWeight:700,color:"#f59e0b",background:"#f59e0b15",padding:"2px 7px",borderRadius:4}}>en {dr}d</span>}
+                        {!venc&&!urg&&<span style={{fontSize:10,color:"#334155",background:"#1e2535",padding:"2px 7px",borderRadius:4}}>{dr}d</span>}
+                        {d.cliente&&<span style={{fontSize:11,color:"#64748b"}}>👤 {d.cliente}</span>}
                       </div>
-                      <span style={{fontSize:13,fontWeight:700,color:"#c084fc",fontFamily:"'Space Mono',monospace"}}>${fmt(d.nominal)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:venc?"#f43f5e":urg?"#f59e0b":"#c084fc",fontFamily:"'Space Mono',monospace"}}>${fmt(d.nominal)}</span>
                     </div>;
                   })}
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",marginTop:4,borderTop:"2px solid #1e2535"}}>
+                    <span style={{fontSize:11,fontWeight:700,color:"#64748b"}}>TOTAL</span>
+                    <span style={{fontSize:14,fontWeight:700,color:"#c084fc",fontFamily:"'Space Mono',monospace"}}>${fmt(totalCheques)}</span>
+                  </div>
                 </Card>
               )}
               <Card sx={{border:"1px solid #1e2535"}}>
