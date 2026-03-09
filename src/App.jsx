@@ -63,16 +63,45 @@ function calcTotalUSD(saldos, cotiz) {
 }
 
 const S = {
-  app:   { minHeight:"100vh", background:"#080808", color:"#e5e7eb", fontFamily:"'Courier New',monospace", fontSize:13 },
-  nav:   { background:"#0d0d0d", borderBottom:"1px solid #1a1a1a", padding:"0 12px", display:"flex", gap:3, overflowX:"auto", alignItems:"center", height:46 },
-  main:  { maxWidth:1200, margin:"0 auto", padding:"20px 14px" },
-  card:  { background:"#111", border:"1px solid #1f2937", borderRadius:10, padding:16 },
-  inp:   (x={}) => ({ width:"100%", background:"#0a0a0a", border:"1px solid #1f2937", borderRadius:6, padding:"8px 10px", color:"#e5e7eb", fontFamily:"inherit", fontSize:13, outline:"none", boxSizing:"border-box", ...x }),
-  lbl:   { display:"block", fontSize:10, letterSpacing:2, color:"#4b5563", textTransform:"uppercase", marginBottom:4 },
-  btn:   (on,c="#4ade80") => ({ padding:"5px 12px", borderRadius:6, border:"1px solid", borderColor:on?c:"#1f2937", background:on?c+"18":"transparent", color:on?c:"#4b5563", fontFamily:"inherit", fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }),
+  app:   { minHeight:"100vh", background:"#07090f", color:"#e2e8f0", fontFamily:"'Inter',system-ui,sans-serif", fontSize:13 },
+  nav:   { background:"#0b0f1a", borderBottom:"1px solid #1e2535", padding:"0 16px", display:"flex", gap:2, overflowX:"auto", alignItems:"center", height:52, position:"sticky", top:0, zIndex:100 },
+  main:  { maxWidth:1280, margin:"0 auto", padding:"24px 16px 100px" },
+  card:  { background:"linear-gradient(145deg,#0f1420,#0b0f1a)", border:"1px solid #1e2535", borderRadius:12, padding:18 },
+  inp:   (x={}) => ({ width:"100%", background:"#080b14", border:"1px solid #1e2535", borderRadius:8, padding:"9px 12px", color:"#e2e8f0", fontFamily:"inherit", fontSize:13, outline:"none", boxSizing:"border-box", transition:"border-color .15s", ...x }),
+  lbl:   { display:"block", fontSize:10, letterSpacing:1.5, color:"#64748b", textTransform:"uppercase", marginBottom:5, fontWeight:600 },
+  btn:   (on,c="#34d399") => ({ padding:"6px 14px", borderRadius:7, border:"1px solid", borderColor:on?c:"#1e2535", background:on?c+"22":"transparent", color:on?c:"#475569", fontFamily:"inherit", fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", transition:"all .15s" }),
   grid:  (cols,gap=12) => ({ display:"grid", gridTemplateColumns:cols, gap }),
-  toast: (ok) => ({ position:"fixed", bottom:20, right:20, zIndex:9999, background:ok?"#052e16":"#1c0a0a", border:"1px solid "+(ok?"#34d399":"#f43f5e"), color:ok?"#34d399":"#f87171", padding:"10px 18px", borderRadius:8, fontSize:13, fontWeight:700 }),
+  toast: (ok) => ({ position:"fixed", bottom:24, right:24, zIndex:9999, background:ok?"#052e16":"#1c0505", border:"1px solid "+(ok?"#34d399":"#f43f5e"), color:ok?"#34d399":"#f87171", padding:"12px 20px", borderRadius:10, fontSize:13, fontWeight:700, boxShadow:"0 8px 32px #00000066", backdropFilter:"blur(8px)" }),
 };
+
+// Inject global styles
+if (typeof document !== "undefined") {
+  const style = document.createElement("style");
+  style.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+    * { box-sizing: border-box; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #07090f; }
+    ::-webkit-scrollbar-thumb { background: #1e2535; border-radius: 2px; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    select option { background: #0f1420; }
+    .nav-btn { transition: all .15s !important; }
+    .nav-btn:hover { opacity: .85; }
+    .card-hover { transition: border-color .2s, transform .2s; }
+    .card-hover:hover { border-color: #2d3f5a !important; transform: translateY(-1px); }
+    @media (max-width: 768px) {
+      .desktop-nav { display: none !important; }
+      .mobile-nav { display: flex !important; }
+      .hide-mobile { display: none !important; }
+      .grid-mobile-1 { grid-template-columns: 1fr !important; }
+    }
+    @media (min-width: 769px) {
+      .mobile-nav { display: none !important; }
+      .mobile-menu { display: none !important; }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 const Lbl = ({children}) => <span style={S.lbl}>{children}</span>;
 const Inp = ({sx,...p}) => <input style={S.inp(sx)} {...p}/>;
@@ -323,6 +352,7 @@ export default function CajaFinanciera() {
   const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfa:"", tn:"", tpct:"" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"" });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
+  const [mobileMenu, setMobileMenu] = useState(false);
   const [gastos, setGastos] = useState([]);
   const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
   const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Otros"];
@@ -359,7 +389,7 @@ export default function CajaFinanciera() {
           setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
           // saldos actuales guardados en caja_ini.saldos_finales
           const sf = ci._saldos_finales;
-          if (sf) { setSaldos(sf); setPant("ops"); }
+          if (sf) { setSaldos(sf); setPant("home"); }
           const ft = ci._fact; if (ft) setFact(ft);
           const po = ci._pos_ovr; if (po) setPosOvr(po);
         }
@@ -490,7 +520,7 @@ export default function CajaFinanciera() {
     setSaldos(s);
     const cajaData = {...Object.fromEntries(MONEDAS.map(m=>[m.id,cajaIni[m.id]])), _saldos_finales:s};
     await SB.from("dias").upsert({id:hoy, caja_ini:cajaData, abierta:true},{onConflict:"id"});
-    setPant("ops"); notify("Caja abierta");
+    setPant("home"); notify("Caja abierta ✓");
   }
 
   async function registrarOp() {
@@ -681,6 +711,7 @@ export default function CajaFinanciera() {
   const grafData=useMemo(()=>cierres.filter(c=>c.total_usd).map(c=>({x:c.fecha,y:c.total_usd})),[cierres]);
 
   const navItems=[
+    {id:"home",label:"Dashboard",c:"#38bdf8"},
     {id:"ape",label:"Apertura",c:"#4ade80"},{id:"ops",label:"Operaciones",c:"#f59e0b"},
     {id:"libro",label:"Libro",c:"#38bdf8"},{id:"cartera",label:"Cartera",c:"#c084fc"},
     {id:"clientes",label:"Clientes"+(clientes.length?" ("+clientes.length+")":""),c:"#34d399"},
@@ -715,10 +746,134 @@ export default function CajaFinanciera() {
         </div>
       )}
       <nav style={S.nav}>
-        <span style={{fontSize:9,letterSpacing:3,color:"#4b5563",marginRight:6,whiteSpace:"nowrap"}}>CAJA</span>
-        {navItems.map(n=><button key={n.id} onClick={()=>setPant(n.id)} style={S.btn(pant===n.id,n.c)}>{n.label}</button>)}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginRight:12,flexShrink:0}}>
+          <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#34d399,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#000"}}>S</div>
+          <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",letterSpacing:.5,fontFamily:"'Space Mono',monospace"}} className="hide-mobile">STS</span>
+        </div>
+        <div className="desktop-nav" style={{display:"flex",gap:2,flex:1,overflowX:"auto"}}>
+          {navItems.map(n=>(
+            <button key={n.id} className="nav-btn" onClick={()=>setPant(n.id)} style={{
+              ...S.btn(pant===n.id,n.c),
+              padding:"6px 12px",
+              borderRadius:6,
+              fontSize:11,
+              position:"relative",
+            }}>
+              {n.label}
+              {pant===n.id&&<div style={{position:"absolute",bottom:-13,left:"50%",transform:"translateX(-50%)",width:20,height:2,background:n.c,borderRadius:2}}/>}
+            </button>
+          ))}
+        </div>
+        <div className="mobile-nav" style={{display:"none",flex:1,justifyContent:"flex-end",alignItems:"center",gap:8}}>
+          <span style={{fontSize:12,fontWeight:700,color:navItems.find(n=>n.id===pant)?.c||"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>
+            {navItems.find(n=>n.id===pant)?.label}
+          </span>
+          <button onClick={()=>setMobileMenu(v=>!v)} style={{background:"transparent",border:"1px solid #1e2535",borderRadius:7,padding:"6px 10px",color:"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>
+            {mobileMenu?"✕":"☰"}
+          </button>
+        </div>
       </nav>
+      {mobileMenu&&(
+        <div className="mobile-menu" style={{position:"fixed",inset:0,top:52,background:"#07090fee",zIndex:99,padding:16,overflowY:"auto"}}>
+          {navItems.map(n=>(
+            <button key={n.id} onClick={()=>{setPant(n.id);setMobileMenu(false);}} style={{
+              display:"block",width:"100%",textAlign:"left",
+              padding:"14px 18px",marginBottom:6,borderRadius:10,
+              border:"1px solid "+(pant===n.id?n.c:"#1e2535"),
+              background:pant===n.id?n.c+"15":"#0f1420",
+              color:pant===n.id?n.c:"#94a3b8",
+              fontFamily:"inherit",fontSize:14,fontWeight:pant===n.id?700:500,cursor:"pointer"
+            }}>
+              {n.label}
+            </button>
+          ))}
+        </div>
+      )}
       <main style={S.main}>
+
+        {pant==="home"&&(()=>{
+          const difPend=diferidos.filter(d=>!d.cobrado);
+          const totalCheques=difPend.reduce((s,d)=>s+d.nominal,0);
+          const vencHoy=difPend.filter(d=>diasEntre(hoy,d.fechaAcr)===0).length;
+          const vencProx=difPend.filter(d=>{const dr=diasEntre(hoy,d.fechaAcr);return dr>0&&dr<=3;}).length;
+          const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,cl)=>s+saldoCC(cl)[m.id],0)]));
+          return (
+            <div>
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:2,fontFamily:"'Space Mono',monospace"}}>Buenos días —</div>
+                <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",letterSpacing:-.3}}>{fechaLarga}</div>
+              </div>
+              {cajaCerrada&&<div style={{background:"#1c0505",border:"1px solid #f43f5e33",borderRadius:10,padding:"10px 16px",marginBottom:16,fontSize:12,color:"#f87171",display:"flex",alignItems:"center",gap:8}}>
+                <span>🔒</span> Caja cerrada — podés reabrir desde la solapa Cierre
+              </div>}
+              {!diaId&&<div style={{background:"#0a1a0a",border:"1px solid #34d39933",borderRadius:10,padding:"10px 16px",marginBottom:16,fontSize:12,color:"#34d399",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setPant("ape")}>
+                <span>☀️</span> La caja no fue abierta hoy — click para abrir
+              </div>}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12,marginBottom:24}}>
+                {MONEDAS.map(m=>{ const v=saldos[m.id]||0; return (
+                  <div key={m.id} style={{background:"#0f1420",border:"1px solid "+m.color+"22",borderRadius:12,padding:"14px 16px",cursor:"pointer"}} onClick={()=>setPant("ops")}>
+                    <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
+                    <div style={{fontSize:18,fontWeight:700,color:v<0?"#f87171":"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>{m.simbolo}{fmt(v)}</div>
+                    <div style={{fontSize:10,color:"#475569",marginTop:4}}>saldo actual</div>
+                  </div>
+                );})}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,marginBottom:24}}>
+                <div style={{background:"#0f1420",border:"1px solid #3b82f633",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("ops")}>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>OPERACIONES HOY</div>
+                  <div style={{fontSize:28,fontWeight:700,color:"#3b82f6",fontFamily:"'Space Mono',monospace"}}>{opsHoy.length}</div>
+                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>registradas hoy</div>
+                </div>
+                <div style={{background:"#0f1420",border:"1px solid #c084fc33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("cartera")}>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>CHEQUES A COBRAR</div>
+                  <div style={{fontSize:28,fontWeight:700,color:"#c084fc",fontFamily:"'Space Mono',monospace"}}>{difPend.length}</div>
+                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>${fmt(totalCheques)} ARS total</div>
+                  {(vencHoy>0||vencProx>0)&&<div style={{marginTop:8,fontSize:11,color:"#f59e0b",fontWeight:600}}>⚠ {vencHoy>0?vencHoy+" vencido/s":""}  {vencProx>0?vencProx+" por vencer":""}</div>}
+                </div>
+                <div style={{background:"#0f1420",border:"1px solid #34d39933",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("posicion")}>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>POSICION CC</div>
+                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>=0?"#34d399":"#f87171",fontFamily:"'Space Mono',monospace"}}>{tots.ARS>=0?"+":""}{fmt(tots.ARS)}</div>
+                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>ARS neto en CCs</div>
+                </div>
+                <div style={{background:"#0f1420",border:"1px solid #f59e0b33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("clientes")}>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>CLIENTES</div>
+                  <div style={{fontSize:28,fontWeight:700,color:"#f59e0b",fontFamily:"'Space Mono',monospace"}}>{clientes.length}</div>
+                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>cuentas corrientes</div>
+                </div>
+              </div>
+              {difPend.filter(d=>diasEntre(hoy,d.fechaAcr)<=3).length>0&&(
+                <Card sx={{border:"1px solid #f59e0b33",marginBottom:16}}>
+                  <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,letterSpacing:1,marginBottom:12}}>⚠ CHEQUES PRÓXIMOS A VENCER</div>
+                  {[...difPend].filter(d=>diasEntre(hoy,d.fechaAcr)<=3).sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).map(d=>{
+                    const dr=diasEntre(hoy,d.fechaAcr);
+                    return <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2535",alignItems:"center"}}>
+                      <div>
+                        <span style={{fontSize:11,fontWeight:700,color:dr===0?"#f43f5e":"#f59e0b"}}>{dr===0?"VENCIDO":"Vence en "+dr+"d"}</span>
+                        {d.cliente&&<span style={{fontSize:11,color:"#64748b",marginLeft:8}}>👤 {d.cliente}</span>}
+                      </div>
+                      <span style={{fontSize:13,fontWeight:700,color:"#c084fc",fontFamily:"'Space Mono',monospace"}}>${fmt(d.nominal)}</span>
+                    </div>;
+                  })}
+                </Card>
+              )}
+              <Card sx={{border:"1px solid #1e2535"}}>
+                <div style={{fontSize:10,color:"#64748b",fontWeight:700,letterSpacing:1,marginBottom:12}}>ÚLTIMAS OPERACIONES</div>
+                {opsHoy.length===0&&<div style={{color:"#334155",fontSize:12}}>Sin operaciones hoy</div>}
+                {[...opsHoy].reverse().slice(0,5).map(op=>{
+                  const t=TIPOS_OP[op.tipo]||{label:op.tipo,color:"#64748b"};
+                  return <div key={op.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e2535",alignItems:"center"}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <div style={{width:6,height:6,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+                      <span style={{fontSize:12,color:t.color,fontWeight:600}}>{t.label}</span>
+                      {op.cliente&&<span style={{fontSize:11,color:"#475569"}}>{op.cliente}</span>}
+                    </div>
+                    <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>{op.moneda} {fmt(op.monto)}</span>
+                  </div>;
+                })}
+              </Card>
+            </div>
+          );
+        })()}
 
         {pant==="ape"&&(
           <div>
@@ -740,7 +895,7 @@ export default function CajaFinanciera() {
         )}
 
         {pant==="ops"&&(
-          <div style={S.grid("1fr 1fr",18)}>
+          <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
             <div>
               {cajaCerrada&&<div style={{background:"#1c0a0a",border:"1px solid #f43f5e44",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#f87171"}}>CAJA CERRADA - solo lectura</div>}
               <div style={{fontSize:10,letterSpacing:3,color:"#4b5563",marginBottom:10}}>SALDOS</div>
@@ -1009,7 +1164,7 @@ export default function CajaFinanciera() {
                     <div style={{fontWeight:700,color:v>0?"#4ade80":"#f87171"}}>{v>0?"Me debe":"Le debo"} {m.simbolo}{fmt(Math.abs(v))}</div>
                   </div>;})}
               </div>
-              <div style={S.grid("1fr 1fr",18)}>
+              <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
                 <Card>
                   <div style={{marginBottom:9}}>
                     <div style={{fontSize:9,letterSpacing:2,color:"#34d399",marginBottom:5}}>RECIBIS PLATA</div>
@@ -1092,7 +1247,7 @@ export default function CajaFinanciera() {
         {pant==="trade"&&(
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:18}}>MESA DE NEGOCIACION - calculo informativo</div>
-            <div style={S.grid("1fr 1fr",18)}>
+            <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
               <Card sx={{border:"1px solid #f43f5e33"}}>
                 <div style={{display:"flex",gap:5,marginBottom:14}}>
                   {[["spread_pct","% nominal"],["spread_precio","Por precio"],["cadena","Cadena USDT-USD-ARS"]].map(([id,lbl])=>(
@@ -1488,7 +1643,7 @@ export default function CajaFinanciera() {
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:4}}>GASTOS</div>
             <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Registra tus gastos fijos y variables</div>
-            <div style={S.grid("1fr 1fr",18)}>
+            <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
               <Card sx={{border:"1px solid #f43f5e33"}}>
                 <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:12}}>NUEVO GASTO</div>
                 <div style={{marginBottom:8}}><Lbl>Categoria</Lbl>
@@ -1591,7 +1746,7 @@ export default function CajaFinanciera() {
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:4}}>SOCIOS</div>
               <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Inversion y distribucion de capital</div>
-              <div style={S.grid("1fr 1fr",18)}>
+              <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
                 <Card sx={{border:"1px solid #a78bfa33"}}>
                   <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:12}}>AGREGAR SOCIO</div>
                   <div style={S.grid("1fr 1fr",8)}>
