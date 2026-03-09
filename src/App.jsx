@@ -1225,32 +1225,36 @@ export default function CajaFinanciera() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr style={{borderTop:"2px solid #374151",background:"#0a0a0a"}}>
-                      <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL CC</td>
-                      {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
-                        <span style={{fontSize:13,fontWeight:700,color:tots[m.id]>0?"#4ade80":tots[m.id]<0?"#f87171":"#374151"}}>{tots[m.id]!==0?fmt(tots[m.id]):"—"}</span>
-                      </td>)}
-                    </tr>
                     {(()=>{
                       const difPend=diferidos.filter(d=>!d.cobrado);
                       const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
-                      if(!totalDif) return null;
-                      return (
-                        <tr style={{background:"#0a0a1a",borderTop:"1px solid #c084fc33"}}>
-                          <td style={{padding:"9px 10px",fontSize:9,color:"#c084fc",cursor:"pointer"}} onClick={()=>setPant("cartera")}>
-                            CHEQUES A COBRAR ({difPend.length})
-                          </td>
-                          <td colSpan={MONEDAS.length-1}/>
-                          <td style={{textAlign:"right",padding:"9px 10px",gridColumn:"2"}}>
-                          </td>
-                          {MONEDAS.map(m=>{
-                            if(m.id!=="ARS") return <td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}><span style={{color:"#374151"}}>—</span></td>;
-                            return <td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
-                              <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmt(totalDif)}</span>
-                            </td>;
-                          })}
+                      const grandTot=Object.fromEntries(MONEDAS.map(m=>[m.id, tots[m.id]+(m.id==="ARS"?totalDif:0)]));
+                      return (<>
+                        <tr style={{borderTop:"2px solid #374151",background:"#0a0a0a"}}>
+                          <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL CC</td>
+                          {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
+                            <span style={{fontSize:13,fontWeight:700,color:tots[m.id]>0?"#4ade80":tots[m.id]<0?"#f87171":"#374151"}}>{tots[m.id]!==0?fmt(tots[m.id]):"—"}</span>
+                          </td>)}
                         </tr>
-                      );
+                        {totalDif>0&&(
+                          <tr style={{background:"#0a0a1a",borderTop:"1px solid #c084fc22"}}>
+                            <td style={{padding:"9px 10px",fontSize:9,color:"#c084fc",cursor:"pointer"}} onClick={()=>setPant("cartera")}>
+                              CHEQUES A COBRAR ({difPend.length}) ↗
+                            </td>
+                            {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
+                              {m.id==="ARS"
+                                ? <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmt(totalDif)}</span>
+                                : <span style={{color:"#374151"}}>—</span>}
+                            </td>)}
+                          </tr>
+                        )}
+                        <tr style={{background:"#0d0d12",borderTop:"2px solid #6366f1"}}>
+                          <td style={{padding:"10px 10px",fontSize:9,color:"#818cf8",fontWeight:700,letterSpacing:1}}>GRAN TOTAL</td>
+                          {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"10px 10px"}}>
+                            <span style={{fontSize:14,fontWeight:700,color:grandTot[m.id]>0?"#818cf8":grandTot[m.id]<0?"#f87171":"#374151"}}>{grandTot[m.id]!==0?fmt(grandTot[m.id]):"—"}</span>
+                          </td>)}
+                        </tr>
+                      </>);
                     })()}
                   </tfoot>
                 </table>
