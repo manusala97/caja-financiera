@@ -409,7 +409,7 @@ export default function CajaFinanciera() {
         }
         // Operaciones - schema: id bigint, dia_id, hora, fecha, tipo, datos jsonb
         const {data:opsData} = await SB.from("operaciones").select("*").order("hora",{ascending:true});
-        if (opsData) setOps(opsData.map(o=>({...( o.datos||{}), id:o.id, fecha:o.fecha, hora:o.hora, tipo:o.tipo})));
+        if (opsData) setOps(opsData.map(o=>({...(o.datos||{}), id:o.id, fecha:o.fecha||o.datos?.fecha, hora:o.hora||o.datos?.hora, tipo:o.tipo})));
         // Diferidos - schema: columnas propias (no jsonb datos)
         const {data:difs} = await SB.from("diferidos").select("*");
         if (difs) setDiferidos(difs.map(d=>({
@@ -586,9 +586,24 @@ export default function CajaFinanciera() {
   }
 
   async function eliminarOpHoy(op) {
-    if (!window.confirm("Eliminar esta operacion? Los saldos NO se revierten.")) return;
+    if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir.")) return;
+    // Revertir el impacto en saldos
+    const ns={...saldos};
+    const t=op.tipo;
+    if (t==="compra")    { ns[op.moneda]-=op.monto; ns[op.moneda2]+=op.monto2; }
+    else if (t==="venta"){ ns[op.moneda]+=op.monto; ns[op.moneda2]-=op.monto2; }
+    else if (t==="cheque_dia") { ns.ARS-=op.cn; }
+    else if (t==="cheque_dif") { ns.ARS+=op.montoFinal||op.monto; }
+    else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
+    else if (t==="ajuste") { ns[op.moneda]-=op.delta; }
+    else if (t==="cobro_dif") { ns[op.moneda]-=op.monto; }
+    else if (t==="cc_ingreso_transf"||t==="cc_ingreso_dep") { ns[op.moneda]-=op.monto; }
+    else if (t==="cc_retiro_transf"||t==="cc_retiro_efectivo") { ns[op.moneda]+=op.monto; }
+    setSaldos(ns);
     await SB.from("operaciones").delete().eq("id",op.id);
-    setOps(p=>p.filter(o=>o.id!==op.id)); notify("Eliminada");
+    setOps(p=>p.filter(o=>o.id!==op.id));
+    await guardarDia(ns,null,null);
+    notify("Eliminada y saldo revertido");
   }
 
   async function cobrarDif(id) {
