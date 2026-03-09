@@ -387,11 +387,17 @@ export default function CajaFinanciera() {
           setDiaId(dia.id);
           const ci = dia.caja_ini || {};
           setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
-          // saldos actuales guardados en caja_ini.saldos_finales
           const sf = ci._saldos_finales;
           if (sf) { setSaldos(sf); setPant("home"); }
           const ft = ci._fact; if (ft) setFact(ft);
           const po = ci._pos_ovr; if (po) setPosOvr(po);
+        } else {
+          // Dia nuevo: pre-cargar saldos del ultimo cierre
+          const {data:ultimoCierreData} = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single();
+          if (ultimoCierreData?.saldos_finales) {
+            const sf = ultimoCierreData.saldos_finales;
+            setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, sf[m.id]||""])));
+          }
         }
         // Operaciones - schema: id bigint, dia_id, hora, fecha, tipo, datos jsonb
         const {data:opsData} = await SB.from("operaciones").select("*").order("hora",{ascending:true});
