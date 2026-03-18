@@ -45,8 +45,10 @@ const fmt = (n) => {
 };
 const fmtUSD = (n) => "USD "+fmt(n);
 const diasEntre = (a,b) => { if(!a||!b) return 0; return Math.max(0,Math.round((new Date(b)-new Date(a))/86400000)); };
-const hoy = new Date().toISOString().split("T")[0];
-const fechaLarga = new Date().toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+// Siempre usar horario Argentina (UTC-3)
+const ahoraAR = new Date(new Date().toLocaleString("en-US", {timeZone:"America/Argentina/Buenos_Aires"}));
+const hoy = ahoraAR.getFullYear()+"-"+String(ahoraAR.getMonth()+1).padStart(2,"0")+"-"+String(ahoraAR.getDate()).padStart(2,"0");
+const fechaLarga = ahoraAR.toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
 const fmtFecha = (f) => f ? new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",year:"numeric",month:"short",day:"numeric"}) : "";
 
 function calcTotalUSD(saldos, cotiz) {
