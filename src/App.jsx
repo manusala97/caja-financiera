@@ -371,6 +371,11 @@ export default function CajaFinanciera() {
   const [mostrarFormDif, setMostrarFormDif] = useState(false);
   const [nuevoC, setNuevoC] = useState({ nombre:"", apellido:"", socio:"Manuel Sala" });
   const [busqCliente, setBusqCliente] = useState("");
+  const [histDesde, setHistDesde] = useState("");
+  const [histHasta, setHistHasta] = useState("");
+  const [histFiltroTipo, setHistFiltroTipo] = useState("todos");
+  const [histFiltroCliente, setHistFiltroCliente] = useState("");
+  const [histModoVista, setHistModoVista] = useState("ops"); // ops | resumen
   const [editandoCliente, setEditandoCliente] = useState(null);
   const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
   const [editandoMov, setEditandoMov] = useState(null);
@@ -1457,42 +1462,174 @@ export default function CajaFinanciera() {
           );
         })()}
 
-        {pant==="historial"&&(
-          <div>
-            <div style={{fontSize:10,letterSpacing:3,color:"#fb923c",marginBottom:4}}>HISTORIAL</div>
-            <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Agrega, edita o elimina operaciones de cualquier dia. Si el dia tiene cierre, se recalcula automaticamente.</div>
-            <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:20,flexWrap:"wrap"}}>
-              <div style={{flex:"1 1 240px",maxWidth:340}}>
-                <Lbl>Elegir dia</Lbl>
-                <Sel value={histFecha} onChange={e=>cargarHistorial(e.target.value)}>
-                  <option value="">-- selecciona fecha --</option>
-                  {histDias.map(d=><option key={d} value={d}>{fmtFecha(d)}{d===hoy?" (hoy)":""}{cierres.find(c=>c.fecha===d)?" (cerrado)":""}</option>)}
-                </Sel>
-              </div>
-              {histFecha&&(
-                <button onClick={()=>setHistModo(m=>m==="agregar"?"ver":"agregar")} style={{padding:"8px 16px",borderRadius:7,background:histModo==="agregar"?"#1c0a0a":"#0a1a0a",border:"1px solid "+(histModo==="agregar"?"#f43f5e":"#fb923c"),color:histModo==="agregar"?"#f87171":"#fb923c",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                  {histModo==="agregar"?"Cancelar":"+ Agregar operacion"}
-                </button>
+        {pant==="historial"&&(()=>{
+          // Filtrar ops por rango y filtros
+          const opsFiltradas = ops.filter(op=>{
+            if(histDesde && op.fecha < histDesde) return false;
+            if(histHasta && op.fecha > histHasta) return false;
+            if(histFiltroTipo!=="todos" && op.tipo!==histFiltroTipo) return false;
+            if(histFiltroCliente && !(op.cliente||"").toLowerCase().includes(histFiltroCliente.toLowerCase())) return false;
+            return true;
+          }).sort((a,b)=>b.fecha?.localeCompare(a.fecha)||b.hora?.localeCompare(a.hora));
+
+          // Totales del periodo
+          const totPeriodo=Object.fromEntries(MONEDAS.map(m=>[m.id,0]));
+          opsFiltradas.forEach(op=>{
+            const t=op.tipo;
+            if(t==="compra"){totPeriodo[op.moneda]+=op.monto;totPeriodo[op.moneda2]-=op.monto2;}
+            else if(t==="venta"){totPeriodo[op.moneda]-=op.monto;totPeriodo[op.moneda2]+=op.monto2;}
+            else if(t==="cheque_dia"||t==="cobro_dif") totPeriodo.ARS+=op.cn||op.monto;
+            else if(t==="cheque_dif") totPeriodo.ARS-=op.montoFinal||op.monto;
+            else if(t==="transferencia") totPeriodo.ARS+=op.tcom||op.monto;
+            else if(t==="ajuste") totPeriodo[op.moneda]+=op.delta||0;
+          });
+
+          // Agrupar por fecha para vista de ops
+          const porFecha={};
+          opsFiltradas.forEach(op=>{ if(!porFecha[op.fecha]) porFecha[op.fecha]=[]; porFecha[op.fecha].push(op); });
+
+          return (
+            <div>
+              <div style={{fontSize:10,letterSpacing:3,color:"#fb923c",marginBottom:4}}>HISTORIAL</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Analizá, editá o agregá operaciones de cualquier período</div>
+
+              {/* Filtros */}
+              <Card sx={{marginBottom:16,border:"1px solid #fb923c22"}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10,marginBottom:10}}>
+                  <div><Lbl>Desde</Lbl><Inp type="date" value={histDesde} onChange={e=>setHistDesde(e.target.value)}/></div>
+                  <div><Lbl>Hasta</Lbl><Inp type="date" value={histHasta} onChange={e=>setHistHasta(e.target.value)}/></div>
+                  <div><Lbl>Tipo</Lbl>
+                    <Sel value={histFiltroTipo} onChange={e=>setHistFiltroTipo(e.target.value)}>
+                      <option value="todos">Todos</option>
+                      {Object.entries(TIPOS_OP).map(([id,t])=><option key={id} value={id}>{t.label}</option>)}
+                    </Sel>
+                  </div>
+                  <div><Lbl>Cliente</Lbl><Inp placeholder="Buscar cliente..." value={histFiltroCliente} onChange={e=>setHistFiltroCliente(e.target.value)}/></div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  <button onClick={()=>{
+                    const ahora=new Date(new Date().toLocaleString("en-US",{timeZone:"America/Argentina/Buenos_Aires"}));
+                    const lunes=new Date(ahora); lunes.setDate(ahora.getDate()-ahora.getDay()+1);
+                    setHistDesde(lunes.toISOString().split("T")[0]); setHistHasta(hoy);
+                  }} style={{...S.btn(false,"#fb923c"),fontSize:10}}>Esta semana</button>
+                  <button onClick={()=>{
+                    const ahora=new Date(new Date().toLocaleString("en-US",{timeZone:"America/Argentina/Buenos_Aires"}));
+                    setHistDesde(ahora.getFullYear()+"-"+String(ahora.getMonth()+1).padStart(2,"0")+"-01"); setHistHasta(hoy);
+                  }} style={{...S.btn(false,"#fb923c"),fontSize:10}}>Este mes</button>
+                  <button onClick={()=>{setHistDesde("");setHistHasta("");setHistFiltroTipo("todos");setHistFiltroCliente("");}} style={{...S.btn(false,"#64748b"),fontSize:10}}>Limpiar</button>
+                  <span style={{fontSize:11,color:"#64748b",marginLeft:4}}>{opsFiltradas.length} operaciones</span>
+                  <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                    <button onClick={()=>setHistModoVista("ops")} style={{...S.btn(histModoVista==="ops","#fb923c"),fontSize:10}}>Detalle</button>
+                    <button onClick={()=>setHistModoVista("resumen")} style={{...S.btn(histModoVista==="resumen","#38bdf8"),fontSize:10}}>Resumen</button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Totales del periodo */}
+              {opsFiltradas.length>0&&(
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+                  {MONEDAS.map(m=>{ const v=totPeriodo[m.id]; if(!v) return null;
+                    return <div key={m.id} style={{background:"#0f1420",border:"1px solid "+m.color+"22",borderRadius:8,padding:"8px 14px"}}>
+                      <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:2}}>{m.id}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:v>0?"#4ade80":"#f87171",fontFamily:"'Space Mono',monospace"}}>{v>0?"+":""}{m.simbolo}{fmt(Math.abs(v))}</div>
+                    </div>;
+                  })}
+                </div>
+              )}
+
+              {/* Vista detalle: por dia */}
+              {histModoVista==="ops"&&(
+                <div>
+                  {/* Selector dia para editar */}
+                  <Card sx={{marginBottom:14,border:"1px solid #1e2535"}}>
+                    <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+                      <div style={{flex:"1 1 200px",maxWidth:300}}>
+                        <Lbl>Dia para editar / agregar op</Lbl>
+                        <Sel value={histFecha} onChange={e=>cargarHistorial(e.target.value)}>
+                          <option value="">-- selecciona fecha --</option>
+                          {histDias.map(d=><option key={d} value={d}>{fmtFecha(d)}{d===hoy?" (hoy)":""}{cierres.find(c=>c.fecha===d)?" ✓":""}</option>)}
+                        </Sel>
+                      </div>
+                      {histFecha&&(
+                        <button onClick={()=>setHistModo(m=>m==="agregar"?"ver":"agregar")} style={{padding:"8px 14px",borderRadius:7,background:histModo==="agregar"?"#1c0a0a":"#0a1a0a",border:"1px solid "+(histModo==="agregar"?"#f43f5e":"#fb923c"),color:histModo==="agregar"?"#f87171":"#fb923c",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          {histModo==="agregar"?"Cancelar":"+ Agregar operacion"}
+                        </button>
+                      )}
+                    </div>
+                    {histFecha&&histModo==="agregar"&&(
+                      <div style={{marginTop:14}}>
+                        <FormOp fechaDefault={histFecha} titulo="NUEVA OPERACION EN FECHA PASADA" color="#fb923c" onGuardar={agregarOpHistorial} onCancelar={()=>setHistModo("ver")}/>
+                      </div>
+                    )}
+                    {histEditando&&(
+                      <div style={{marginTop:14}}>
+                        <FormOp fechaDefault={histFecha} titulo="EDITAR OPERACION" color="#38bdf8" opInicial={histEditando} onGuardar={(d)=>editarOpHistorial(histEditando,d)} onCancelar={()=>setHistEditando(null)}/>
+                      </div>
+                    )}
+                  </Card>
+
+                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el período seleccionado</div>}
+                  {Object.entries(porFecha).map(([fecha,fops])=>(
+                    <div key={fecha} style={{marginBottom:20}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                        <div style={{fontSize:11,fontWeight:700,color:"#fb923c"}}>{fmtFecha(fecha)}</div>
+                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#475569"}}>{fops.length} ops</span>
+                          {cierres.find(c=>c.fecha===fecha)&&<span style={{fontSize:9,color:"#4ade80",background:"#4ade8015",padding:"1px 6px",borderRadius:4}}>CERRADO</span>}
+                        </div>
+                      </div>
+                      <Card sx={{padding:0,overflow:"hidden"}}>
+                        {fops.map((op,i)=>(
+                          <div key={op.id} style={{borderBottom:i<fops.length-1?"1px solid #1e2535":"none"}}>
+                            {renderOpRow(op,true,op.fecha===hoy&&!cajaCerrada)}
+                          </div>
+                        ))}
+                      </Card>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Vista resumen: por tipo */}
+              {histModoVista==="resumen"&&(
+                <div>
+                  {Object.entries(TIPOS_OP).map(([tipo,t])=>{
+                    const tOps=opsFiltradas.filter(o=>o.tipo===tipo);
+                    if(!tOps.length) return null;
+                    const totalARS=tOps.reduce((s,o)=>{
+                      if(tipo==="cheque_dia"||tipo==="cobro_dif") return s+(o.cn||o.monto||0);
+                      if(tipo==="transferencia") return s+(o.tcom||o.monto||0);
+                      if(tipo==="compra"||tipo==="venta") return s+(o.monto||0);
+                      return s+(o.monto||0);
+                    },0);
+                    return (
+                      <Card key={tipo} sx={{marginBottom:10,border:"1px solid "+t.color+"22"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                            <div style={{width:8,height:8,borderRadius:"50%",background:t.color}}/>
+                            <span style={{fontWeight:700,color:t.color}}>{t.label}</span>
+                            <span style={{fontSize:11,color:"#475569"}}>{tOps.length} ops</span>
+                          </div>
+                          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>{fmt(totalARS)}</span>
+                        </div>
+                        <div style={{fontSize:11,color:"#475569"}}>
+                          {tOps.slice(0,3).map(op=>(
+                            <div key={op.id} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderTop:"1px solid #1e2535"}}>
+                              <span>{op.fecha} {op.cliente&&"— "+op.cliente}</span>
+                              <span style={{color:"#94a3b8",fontFamily:"'Space Mono',monospace"}}>{fmt(op.monto||0)}</span>
+                            </div>
+                          ))}
+                          {tOps.length>3&&<div style={{color:"#334155",paddingTop:3,borderTop:"1px solid #1e2535"}}>...y {tOps.length-3} más</div>}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el período</div>}
+                </div>
               )}
             </div>
-            {histFecha&&histModo==="agregar"&&(
-              <div style={{marginBottom:20}}>
-                <FormOp fechaDefault={histFecha} titulo="NUEVA OPERACION EN FECHA PASADA" color="#fb923c" onGuardar={agregarOpHistorial} onCancelar={()=>setHistModo("ver")}/>
-              </div>
-            )}
-            {histEditando&&(
-              <div style={{marginBottom:20}}>
-                <FormOp fechaDefault={histFecha} titulo="EDITAR OPERACION" color="#38bdf8" opInicial={histEditando} onGuardar={(d)=>editarOpHistorial(histEditando,d)} onCancelar={()=>setHistEditando(null)}/>
-              </div>
-            )}
-            {histFecha&&!histEditando&&histModo==="ver"&&(
-              <div>
-                {histOps.length===0&&<div style={{color:"#374151"}}>Sin operaciones ese dia</div>}
-                {histOps.map(op=>renderOpRow(op,true,false))}
-              </div>
-            )}
-          </div>
-        )}
+          );
+        })()}
 
         {pant==="evolucion"&&(
           <div>
