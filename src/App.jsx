@@ -65,32 +65,46 @@ function calcTotalUSD(saldos, cotiz) {
 }
 
 const S = {
-  app:   { minHeight:"100vh", background:"#07090f", color:"#e2e8f0", fontFamily:"'Inter',system-ui,sans-serif", fontSize:13 },
-  nav:   { background:"#0b0f1a", borderBottom:"1px solid #1e2535", padding:"0 16px", display:"flex", gap:2, overflowX:"auto", alignItems:"center", height:52, position:"sticky", top:0, zIndex:100 },
-  main:  { maxWidth:1280, margin:"0 auto", padding:"24px 16px 100px" },
-  card:  { background:"linear-gradient(145deg,#0f1420,#0b0f1a)", border:"1px solid #1e2535", borderRadius:12, padding:18 },
-  inp:   (x={}) => ({ width:"100%", background:"#080b14", border:"1px solid #1e2535", borderRadius:8, padding:"9px 12px", color:"#e2e8f0", fontFamily:"inherit", fontSize:13, outline:"none", boxSizing:"border-box", transition:"border-color .15s", ...x }),
-  lbl:   { display:"block", fontSize:10, letterSpacing:1.5, color:"#64748b", textTransform:"uppercase", marginBottom:5, fontWeight:600 },
-  btn:   (on,c="#34d399") => ({ padding:"6px 14px", borderRadius:7, border:"1px solid", borderColor:on?c:"#1e2535", background:on?c+"22":"transparent", color:on?c:"#475569", fontFamily:"inherit", fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", transition:"all .15s" }),
+  app:   { minHeight:"100vh", background:"#060810", color:"#cbd5e1", fontFamily:"'Inter',system-ui,sans-serif", fontSize:13 },
+  nav:   { background:"#060810", borderBottom:"1px solid rgba(255,255,255,0.06)", padding:"0 20px", display:"flex", gap:1, overflowX:"auto", alignItems:"center", height:56, position:"sticky", top:0, zIndex:100, backdropFilter:"blur(20px)" },
+  main:  { maxWidth:1320, margin:"0 auto", padding:"28px 20px 100px" },
+  card:  { background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:20 },
+  inp:   (x={}) => ({ width:"100%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 14px", color:"#e2e8f0", fontFamily:"inherit", fontSize:13, outline:"none", boxSizing:"border-box", transition:"border-color .2s, background .2s", ...x }),
+  lbl:   { display:"block", fontSize:10, letterSpacing:1.5, color:"#475569", textTransform:"uppercase", marginBottom:5, fontWeight:600 },
+  btn:   (on,c="#34d399") => ({ padding:"7px 15px", borderRadius:8, border:"1px solid", borderColor:on?c+"99":"rgba(255,255,255,0.08)", background:on?"rgba("+hexToRgb(c)+",0.12)":"transparent", color:on?c:"#475569", fontFamily:"inherit", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all .2s" }),
   grid:  (cols,gap=12) => ({ display:"grid", gridTemplateColumns:cols, gap }),
-  toast: (ok) => ({ position:"fixed", bottom:24, right:24, zIndex:9999, background:ok?"#052e16":"#1c0505", border:"1px solid "+(ok?"#34d399":"#f43f5e"), color:ok?"#34d399":"#f87171", padding:"12px 20px", borderRadius:10, fontSize:13, fontWeight:700, boxShadow:"0 8px 32px #00000066", backdropFilter:"blur(8px)" }),
+  toast: (ok) => ({ position:"fixed", bottom:24, right:24, zIndex:9999, background:ok?"rgba(5,46,22,0.95)":"rgba(28,5,5,0.95)", border:"1px solid "+(ok?"#34d39966":"#f43f5e66"), color:ok?"#34d399":"#f87171", padding:"12px 20px", borderRadius:12, fontSize:13, fontWeight:600, boxShadow:"0 20px 60px #00000099", backdropFilter:"blur(20px)" }),
 };
+
+function hexToRgb(hex) {
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return r+","+g+","+b;
+}
 
 // Inject global styles
 if (typeof document !== "undefined") {
   const style = document.createElement("style");
   style.textContent = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
-    * { box-sizing: border-box; }
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: #07090f; }
-    ::-webkit-scrollbar-thumb { background: #1e2535; border-radius: 2px; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; }
+    body { background: #060810; }
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
     input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-    select option { background: #0f1420; }
-    .nav-btn { transition: all .15s !important; }
-    .nav-btn:hover { opacity: .85; }
-    .card-hover { transition: border-color .2s, transform .2s; }
-    .card-hover:hover { border-color: #2d3f5a !important; transform: translateY(-1px); }
+    select option { background: #0d1117; }
+    input:focus, select:focus { border-color: rgba(99,102,241,0.5) !important; background: rgba(99,102,241,0.05) !important; }
+    .mono { font-family: 'JetBrains Mono', monospace !important; }
+    .btn-glow:hover { box-shadow: 0 0 20px rgba(99,102,241,0.3); }
+    .card-glass { backdrop-filter: blur(10px); }
+    .fade-in { animation: fadeIn .3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    .op-row { transition: background .15s; }
+    .op-row:hover { background: rgba(255,255,255,0.02) !important; }
+    .saldo-card { transition: all .2s; cursor: pointer; }
+    .saldo-card:hover { border-color: rgba(255,255,255,0.15) !important; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .nav-item { transition: all .15s; border-radius: 8px; }
+    .nav-item:hover { background: rgba(255,255,255,0.05) !important; }
     @media (max-width: 768px) {
       .desktop-nav { display: none !important; }
       .mobile-nav { display: flex !important; }
@@ -710,7 +724,7 @@ export default function CajaFinanciera() {
     const t=TIPOS_OP[op.tipo]||{label:op.tipo,icon:".",color:"#6b7280"};
     const m=MONEDAS.find(x=>x.id===op.moneda);
     return (
-      <div key={op.id} style={{borderBottom:"1px solid #1a1a1a",padding:"7px 0",display:"flex",gap:8,alignItems:"flex-start"}}>
+      <div key={op.id} className="op-row" style={{borderBottom:"1px solid rgba(255,255,255,0.04)",padding:"8px 10px 8px 14px",display:"flex",gap:8,alignItems:"flex-start",borderLeft:"2px solid "+t.color+"55",marginBottom:2,borderRadius:"0 8px 8px 0"}}>
         <span style={{color:t.color,fontSize:13,marginTop:1,width:14}}>{t.icon}</span>
         <div style={{flex:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
@@ -782,43 +796,49 @@ export default function CajaFinanciera() {
         </div>
       )}
       <nav style={S.nav}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginRight:12,flexShrink:0}}>
-          <div style={{width:28,height:28,borderRadius:8,background:"linear-gradient(135deg,#34d399,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#000"}}>S</div>
-          <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",letterSpacing:.5,fontFamily:"'Space Mono',monospace"}} className="hide-mobile">STS</span>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginRight:16,flexShrink:0}}>
+          <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",letterSpacing:-1,fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 4px 12px rgba(99,102,241,0.4)"}}>S</div>
+          <div className="hide-mobile">
+            <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",letterSpacing:.3,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>STS</div>
+            <div style={{fontSize:9,color:"#475569",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
+          </div>
         </div>
-        <div className="desktop-nav" style={{display:"flex",gap:2,flex:1,overflowX:"auto"}}>
+        <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
           {navItems.map(n=>(
-            <button key={n.id} className="nav-btn" onClick={()=>setPant(n.id)} style={{
-              ...S.btn(pant===n.id,n.c),
-              padding:"6px 12px",
-              borderRadius:6,
-              fontSize:11,
+            <button key={n.id} className="nav-item" onClick={()=>setPant(n.id)} style={{
+              padding:"6px 13px",
+              borderRadius:8,
+              border:"none",
+              background:pant===n.id?"rgba(255,255,255,0.07)":"transparent",
+              color:pant===n.id?n.c:"#475569",
+              fontFamily:"inherit",fontSize:11,fontWeight:pant===n.id?600:500,
+              cursor:"pointer",whiteSpace:"nowrap",
               position:"relative",
             }}>
               {n.label}
-              {pant===n.id&&<div style={{position:"absolute",bottom:-13,left:"50%",transform:"translateX(-50%)",width:20,height:2,background:n.c,borderRadius:2}}/>}
+              {pant===n.id&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:16,height:2,background:n.c,borderRadius:2,opacity:.8}}/>}
             </button>
           ))}
         </div>
         <div className="mobile-nav" style={{display:"none",flex:1,justifyContent:"flex-end",alignItems:"center",gap:8}}>
-          <span style={{fontSize:12,fontWeight:700,color:navItems.find(n=>n.id===pant)?.c||"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>
+          <span style={{fontSize:12,fontWeight:600,color:navItems.find(n=>n.id===pant)?.c||"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>
             {navItems.find(n=>n.id===pant)?.label}
           </span>
-          <button onClick={()=>setMobileMenu(v=>!v)} style={{background:"transparent",border:"1px solid #1e2535",borderRadius:7,padding:"6px 10px",color:"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>
+          <button onClick={()=>setMobileMenu(v=>!v)} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,padding:"7px 11px",color:"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>
             {mobileMenu?"✕":"☰"}
           </button>
         </div>
       </nav>
       {mobileMenu&&(
-        <div className="mobile-menu" style={{position:"fixed",inset:0,top:52,background:"#07090fee",zIndex:99,padding:16,overflowY:"auto"}}>
+        <div className="mobile-menu" style={{position:"fixed",inset:0,top:56,background:"rgba(6,8,16,0.97)",zIndex:99,padding:16,overflowY:"auto",backdropFilter:"blur(20px)"}}>
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>{setPant(n.id);setMobileMenu(false);}} style={{
               display:"block",width:"100%",textAlign:"left",
-              padding:"14px 18px",marginBottom:6,borderRadius:10,
-              border:"1px solid "+(pant===n.id?n.c:"#1e2535"),
-              background:pant===n.id?n.c+"15":"#0f1420",
-              color:pant===n.id?n.c:"#94a3b8",
-              fontFamily:"inherit",fontSize:14,fontWeight:pant===n.id?700:500,cursor:"pointer"
+              padding:"15px 18px",marginBottom:6,borderRadius:12,
+              border:"1px solid "+(pant===n.id?"rgba("+hexToRgb(n.c)+",0.3)":"rgba(255,255,255,0.06)"),
+              background:pant===n.id?"rgba("+hexToRgb(n.c)+",0.08)":"rgba(255,255,255,0.02)",
+              color:pant===n.id?n.c:"#64748b",
+              fontFamily:"inherit",fontSize:14,fontWeight:pant===n.id?600:400,cursor:"pointer"
             }}>
               {n.label}
             </button>
@@ -836,7 +856,7 @@ export default function CajaFinanciera() {
           return (
             <div>
               <div style={{marginBottom:24}}>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:2,fontFamily:"'Space Mono',monospace"}}>Buenos días —</div>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:2,fontFamily:"'JetBrains Mono',monospace"}}>Buenos días —</div>
                 <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",letterSpacing:-.3}}>{fechaLarga}</div>
               </div>
               {cajaCerrada&&<div style={{background:"#1c0505",border:"1px solid #f43f5e33",borderRadius:10,padding:"10px 16px",marginBottom:16,fontSize:12,color:"#f87171",display:"flex",alignItems:"center",gap:8}}>
@@ -847,9 +867,9 @@ export default function CajaFinanciera() {
               </div>}
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12,marginBottom:24}}>
                 {MONEDAS.map(m=>{ const v=saldos[m.id]||0; return (
-                  <div key={m.id} style={{background:"#0f1420",border:"1px solid "+m.color+"22",borderRadius:12,padding:"14px 16px",cursor:"pointer"}} onClick={()=>setPant("ops")}>
+                  <div key={m.id} className="saldo-card" style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba("+m.color+"ff,0.15)",borderRadius:14,padding:"16px 18px"}} onClick={()=>setPant("ops")}>
                     <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
-                    <div style={{fontSize:18,fontWeight:700,color:v<0?"#f87171":"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>{m.simbolo}{fmt(v)}</div>
+                    <div style={{fontSize:18,fontWeight:700,color:v<0?"#f87171":"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{m.simbolo}{fmt(v)}</div>
                     <div style={{fontSize:10,color:"#475569",marginTop:4}}>saldo actual</div>
                   </div>
                 );})}
@@ -857,23 +877,23 @@ export default function CajaFinanciera() {
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,marginBottom:24}}>
                 <div style={{background:"#0f1420",border:"1px solid #3b82f633",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("ops")}>
                   <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>OPERACIONES HOY</div>
-                  <div style={{fontSize:28,fontWeight:700,color:"#3b82f6",fontFamily:"'Space Mono',monospace"}}>{opsHoy.length}</div>
+                  <div style={{fontSize:28,fontWeight:700,color:"#3b82f6",fontFamily:"'JetBrains Mono',monospace"}}>{opsHoy.length}</div>
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>registradas hoy</div>
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #c084fc33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("cartera")}>
                   <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>CHEQUES A COBRAR</div>
-                  <div style={{fontSize:28,fontWeight:700,color:"#c084fc",fontFamily:"'Space Mono',monospace"}}>{difPend.length}</div>
+                  <div style={{fontSize:28,fontWeight:700,color:"#c084fc",fontFamily:"'JetBrains Mono',monospace"}}>{difPend.length}</div>
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>${fmt(totalCheques)} ARS total</div>
                   {(vencHoy>0||vencProx>0)&&<div style={{marginTop:8,fontSize:11,color:"#f59e0b",fontWeight:600}}>⚠ {vencHoy>0?vencHoy+" vencido/s":""}  {vencProx>0?vencProx+" por vencer":""}</div>}
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #34d39933",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("posicion")}>
                   <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>POSICION CC</div>
-                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>=0?"#34d399":"#f87171",fontFamily:"'Space Mono',monospace"}}>{tots.ARS>=0?"+":""}{fmt(tots.ARS)}</div>
+                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>=0?"#34d399":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{tots.ARS>=0?"+":""}{fmt(tots.ARS)}</div>
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>ARS neto en CCs</div>
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #f59e0b33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("clientes")}>
                   <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>CLIENTES</div>
-                  <div style={{fontSize:28,fontWeight:700,color:"#f59e0b",fontFamily:"'Space Mono',monospace"}}>{clientes.length}</div>
+                  <div style={{fontSize:28,fontWeight:700,color:"#f59e0b",fontFamily:"'JetBrains Mono',monospace"}}>{clientes.length}</div>
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>cuentas corrientes</div>
                 </div>
               </div>
@@ -885,18 +905,18 @@ export default function CajaFinanciera() {
                     const venc=dr===0,urg=dr<=3&&!venc;
                     return <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #1e2535",alignItems:"center"}}>
                       <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-                        <span style={{fontSize:12,fontWeight:700,color:"#475569",fontFamily:"'Space Mono',monospace",minWidth:90}}>{d.fechaAcr}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:"#475569",fontFamily:"'JetBrains Mono',monospace",minWidth:90}}>{d.fechaAcr}</span>
                         {venc&&<span style={{fontSize:10,fontWeight:700,color:"#f43f5e",background:"#f43f5e15",padding:"2px 7px",borderRadius:4}}>VENCIDO</span>}
                         {urg&&<span style={{fontSize:10,fontWeight:700,color:"#f59e0b",background:"#f59e0b15",padding:"2px 7px",borderRadius:4}}>en {dr}d</span>}
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#334155",background:"#1e2535",padding:"2px 7px",borderRadius:4}}>{dr}d</span>}
                         {d.cliente&&<span style={{fontSize:11,color:"#64748b"}}>👤 {d.cliente}</span>}
                       </div>
-                      <span style={{fontSize:13,fontWeight:700,color:venc?"#f43f5e":urg?"#f59e0b":"#c084fc",fontFamily:"'Space Mono',monospace"}}>${fmt(d.nominal)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:venc?"#f43f5e":urg?"#f59e0b":"#c084fc",fontFamily:"'JetBrains Mono',monospace"}}>${fmt(d.nominal)}</span>
                     </div>;
                   })}
                   <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",marginTop:4,borderTop:"2px solid #1e2535"}}>
                     <span style={{fontSize:11,fontWeight:700,color:"#64748b"}}>TOTAL</span>
-                    <span style={{fontSize:14,fontWeight:700,color:"#c084fc",fontFamily:"'Space Mono',monospace"}}>${fmt(totalCheques)}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:"#c084fc",fontFamily:"'JetBrains Mono',monospace"}}>${fmt(totalCheques)}</span>
                   </div>
                 </Card>
               )}
@@ -911,7 +931,7 @@ export default function CajaFinanciera() {
                       <span style={{fontSize:12,color:t.color,fontWeight:600}}>{t.label}</span>
                       {op.cliente&&<span style={{fontSize:11,color:"#475569"}}>{op.cliente}</span>}
                     </div>
-                    <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>{op.moneda} {fmt(op.monto)}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{op.moneda} {fmt(op.monto)}</span>
                   </div>;
                 })}
               </Card>
@@ -921,7 +941,7 @@ export default function CajaFinanciera() {
 
         {pant==="ape"&&(
           <div>
-            <div style={{fontSize:10,letterSpacing:3,color:"#4ade80",marginBottom:4}}>APERTURA DE CAJA</div>
+            <div style={{fontSize:9,letterSpacing:4,color:"#6366f1",marginBottom:6,fontWeight:600}}>APERTURA DE CAJA</div>
             <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>{fechaLarga}</div>
             <Card sx={{maxWidth:460}}>
               {MONEDAS.map(m=>(
@@ -933,7 +953,7 @@ export default function CajaFinanciera() {
                   </div>
                 </div>
               ))}
-              <button onClick={abrirCaja} style={{marginTop:8,width:"100%",padding:12,borderRadius:8,background:"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:2}}>ABRIR CAJA</button>
+              <button onClick={abrirCaja} style={{marginTop:8,width:"100%",padding:14,borderRadius:10,background:"linear-gradient(135deg,rgba(99,102,241,0.2),rgba(52,211,153,0.1))",border:"1px solid rgba(99,102,241,0.4)",color:"#a5b4fc",fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer",letterSpacing:2,transition:"all .2s"}}>ABRIR CAJA</button>
             </Card>
           </div>
         )}
@@ -946,7 +966,7 @@ export default function CajaFinanciera() {
               <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:18}}>
                 {MONEDAS.map(m=>{ const v=saldos[m.id]||0,ed=editSaldo===m.id&&!cajaCerrada;
                   return (
-                    <div key={m.id} style={{flex:"1 1 120px",background:"#111",border:"1px solid "+m.color+"33",borderRadius:8,padding:"10px 12px",cursor:cajaCerrada?"default":"pointer"}}
+                    <div key={m.id} className="saldo-card" style={{flex:"1 1 120px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba("+hexToRgb(m.color)+",0.2)",borderRadius:12,padding:"12px 14px",cursor:cajaCerrada?"default":"pointer"}}
                       onClick={()=>{if(!cajaCerrada&&!ed){setEditSaldo(m.id);setEditSaldoV(String(v));}}}>
                       <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:3}}>{m.id}</div>
                       {ed?(
@@ -1173,7 +1193,7 @@ export default function CajaFinanciera() {
               }).map(c=>{ const sal=saldoCC(c);
                 const colorSocio=c.socio==="Manuel Sala"?"#4ade80":c.socio==="Gonzalo Spadafora"?"#38bdf8":"#f59e0b";
                 return (
-                  <Card key={c.id} sx={{position:"relative"}}>
+                  <Card key={c.id} className="card-hover" style={{...S.card,position:"relative",cursor:"pointer"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                       <div style={{fontSize:9,color:colorSocio,fontWeight:700}}>{c.socio||"Sin socio"}</div>
                       <div style={{display:"flex",gap:4}}>
@@ -1531,7 +1551,7 @@ export default function CajaFinanciera() {
                   {MONEDAS.map(m=>{ const v=totPeriodo[m.id]; if(!v) return null;
                     return <div key={m.id} style={{background:"#0f1420",border:"1px solid "+m.color+"22",borderRadius:8,padding:"8px 14px"}}>
                       <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:2}}>{m.id}</div>
-                      <div style={{fontSize:14,fontWeight:700,color:v>0?"#4ade80":"#f87171",fontFamily:"'Space Mono',monospace"}}>{v>0?"+":""}{m.simbolo}{fmt(Math.abs(v))}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:v>0?"#4ade80":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{v>0?"+":""}{m.simbolo}{fmt(Math.abs(v))}</div>
                     </div>;
                   })}
                 </div>
@@ -1610,13 +1630,13 @@ export default function CajaFinanciera() {
                             <span style={{fontWeight:700,color:t.color}}>{t.label}</span>
                             <span style={{fontSize:11,color:"#475569"}}>{tOps.length} ops</span>
                           </div>
-                          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0",fontFamily:"'Space Mono',monospace"}}>{fmt(totalARS)}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{fmt(totalARS)}</span>
                         </div>
                         <div style={{fontSize:11,color:"#475569"}}>
                           {tOps.slice(0,3).map(op=>(
                             <div key={op.id} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderTop:"1px solid #1e2535"}}>
                               <span>{op.fecha} {op.cliente&&"— "+op.cliente}</span>
-                              <span style={{color:"#94a3b8",fontFamily:"'Space Mono',monospace"}}>{fmt(op.monto||0)}</span>
+                              <span style={{color:"#94a3b8",fontFamily:"'JetBrains Mono',monospace"}}>{fmt(op.monto||0)}</span>
                             </div>
                           ))}
                           {tOps.length>3&&<div style={{color:"#334155",paddingTop:3,borderTop:"1px solid #1e2535"}}>...y {tOps.length-3} más</div>}
