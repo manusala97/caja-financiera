@@ -270,8 +270,8 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
   );
 }
 
-function ModalCierre({ saldos, onCerrar, onCancelar, ultimaCotiz={} }) {
-  const [cotiz, setCotiz] = useState({ ARS:ultimaCotiz.ARS||"", BRL:ultimaCotiz.BRL||"", GBP:ultimaCotiz.GBP||"", EUR:ultimaCotiz.EUR||"", USDT:"1" });
+function ModalCierre({ saldos, onCerrar, onCancelar }) {
+  const [cotiz, setCotiz] = useState({ ARS:"", BRL:"", GBP:"", EUR:"", USDT:"1" });
   const sc = (k,v) => setCotiz(c=>({...c,[k]:v}));
   const totalUSD = useMemo(()=>{
     if (!parse(cotiz.ARS)) return null;
@@ -369,8 +369,6 @@ export default function CajaFinanciera() {
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"" });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [subMenu, setSubMenu] = useState(null);
-  const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
   const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
   const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Otros"];
@@ -466,11 +464,6 @@ export default function CajaFinanciera() {
         // Cierres
         const {data:ciData} = await SB.from("cierres").select("*").order("fecha",{ascending:true});
         if (ciData) setCierres(ciData);
-        // Pre-cargar ultima cotizacion del ultimo cierre
-        if (ciData&&ciData.length>0) {
-          const ult=ciData[ciData.length-1];
-          if (ult.cotizaciones) setUltimaCotiz(prev=>({...prev,...ult.cotizaciones}));
-        }
         const {data:ciHoy,error:ciHoyErr} = await SB.from("cierres").select("id").eq("fecha",hoy).single();
         if (ciHoy&&!ciHoyErr) setCajaCerrada(true);
       } catch(e) { console.error("Error carga:",e); }
@@ -769,13 +762,10 @@ export default function CajaFinanciera() {
 
   const navItems=[
     {id:"home",label:"Dashboard",c:"#38bdf8"},
-    {id:"ape",label:"Apertura",c:"#4ade80"},
-    {id:"ops",label:"Operaciones",c:"#f59e0b"},
-    {id:"libro",label:"Libro",c:"#38bdf8"},
-    {id:"cartera",label:"Cartera",c:"#c084fc"},
+    {id:"ape",label:"Apertura",c:"#4ade80"},{id:"ops",label:"Operaciones",c:"#f59e0b"},
+    {id:"libro",label:"Libro",c:"#38bdf8"},{id:"cartera",label:"Cartera",c:"#c084fc"},
     {id:"clientes",label:"Clientes"+(clientes.length?" ("+clientes.length+")":""),c:"#34d399"},
-    {id:"trade",label:"Trade",c:"#f43f5e"},
-    {id:"posicion",label:"Posicion",c:"#e879f9"},
+    {id:"trade",label:"Trade",c:"#f43f5e"},{id:"posicion",label:"Posicion",c:"#e879f9"},
     {id:"historial",label:"Historial",c:"#fb923c"},
     {id:"evolucion",label:"Evolucion USD",c:"#4ade80"},
     {id:"resumen_socios",label:"Por socio",c:"#34d399"},
@@ -796,7 +786,7 @@ export default function CajaFinanciera() {
   return (
     <div style={S.app}>
       {toast&&<div style={S.toast(toast.ok)}>{toast.msg}</div>}
-      {showModalCierre&&<ModalCierre saldos={saldos} ultimaCotiz={ultimaCotiz} onCerrar={(cotiz,total)=>{setUltimaCotiz(cotiz);ejecutarCierre(cotiz,total);}} onCancelar={()=>setShowModalCierre(false)}/>}
+      {showModalCierre&&<ModalCierre saldos={saldos} onCerrar={ejecutarCierre} onCancelar={()=>setShowModalCierre(false)}/>}
       {editandoOp&&(
         <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}}>
@@ -813,42 +803,22 @@ export default function CajaFinanciera() {
             <div style={{fontSize:9,color:"#475569",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
           </div>
         </div>
-        <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto",position:"relative"}}>
-          {navGrupos.map(g=>{
-            const activo=g.pantallas.some(p=>p.id===pant);
-            const abierto=subMenu===g.id;
-            return (
-              <div key={g.id} style={{position:"relative"}}>
-                <button
-                  className="nav-item"
-                  onClick={(e)=>{ e.stopPropagation(); if(g.pantallas.length===1){setPant(g.pantallas[0].id);setSubMenu(null);}else{setSubMenu(abierto?null:g.id);}}}
-
-                  style={{padding:"7px 14px",borderRadius:8,border:"none",
-                    background:activo?"rgba(255,255,255,0.07)":abierto?"rgba(255,255,255,0.04)":"transparent",
-                    color:activo?g.c:abierto?"#94a3b8":"#475569",
-                    fontFamily:"inherit",fontSize:12,fontWeight:activo?600:500,
-                    cursor:"pointer",whiteSpace:"nowrap",position:"relative",
-                    display:"flex",alignItems:"center",gap:5}}>
-                  <span style={{fontSize:13}}>{g.icon}</span>
-                  {g.label}
-                  {g.pantallas.length>1&&<span style={{fontSize:9,opacity:.5,marginLeft:2}}>▾</span>}
-                  {activo&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:20,height:2,background:g.c,borderRadius:2}}/>}
-                </button>
-                {abierto&&(
-                  <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:200,background:"rgba(10,12,20,0.97)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:6,zIndex:200,backdropFilter:"blur(20px)",boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
-                    {g.pantallas.map(p=>(
-                      <button key={p.id} onClick={()=>{setPant(p.id);setSubMenu(null);}} style={{
-                        display:"block",width:"100%",textAlign:"left",padding:"9px 14px",borderRadius:8,
-                        border:"none",background:pant===p.id?"rgba("+hexToRgb(g.c)+",0.12)":"transparent",
-                        color:pant===p.id?g.c:"#94a3b8",fontFamily:"inherit",fontSize:12,
-                        fontWeight:pant===p.id?600:400,cursor:"pointer",transition:"all .15s"
-                      }}>{p.label}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
+          {navItems.map(n=>(
+            <button key={n.id} className="nav-item" onClick={()=>setPant(n.id)} style={{
+              padding:"6px 13px",
+              borderRadius:8,
+              border:"none",
+              background:pant===n.id?"rgba(255,255,255,0.07)":"transparent",
+              color:pant===n.id?n.c:"#475569",
+              fontFamily:"inherit",fontSize:11,fontWeight:pant===n.id?600:500,
+              cursor:"pointer",whiteSpace:"nowrap",
+              position:"relative",
+            }}>
+              {n.label}
+              {pant===n.id&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:16,height:2,background:n.c,borderRadius:2,opacity:.8}}/>}
+            </button>
+          ))}
         </div>
         <div className="mobile-nav" style={{display:"none",flex:1,justifyContent:"flex-end",alignItems:"center",gap:8}}>
           <span style={{fontSize:12,fontWeight:600,color:navItems.find(n=>n.id===pant)?.c||"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>
@@ -864,12 +834,14 @@ export default function CajaFinanciera() {
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>{setPant(n.id);setMobileMenu(false);}} style={{
               display:"block",width:"100%",textAlign:"left",
-              padding:"14px 18px",marginBottom:6,borderRadius:12,
+              padding:"15px 18px",marginBottom:6,borderRadius:12,
               border:"1px solid "+(pant===n.id?"rgba("+hexToRgb(n.c)+",0.3)":"rgba(255,255,255,0.06)"),
               background:pant===n.id?"rgba("+hexToRgb(n.c)+",0.08)":"rgba(255,255,255,0.02)",
               color:pant===n.id?n.c:"#64748b",
               fontFamily:"inherit",fontSize:14,fontWeight:pant===n.id?600:400,cursor:"pointer"
-            }}>{n.label}</button>
+            }}>
+              {n.label}
+            </button>
           ))}
         </div>
       )}
