@@ -767,36 +767,22 @@ export default function CajaFinanciera() {
   const varUSD=ultimoCierre&&penultimoCierre?ultimoCierre.total_usd-penultimoCierre.total_usd:null;
   const grafData=useMemo(()=>cierres.filter(c=>c.total_usd).map(c=>({x:c.fecha,y:c.total_usd})),[cierres]);
 
-  // Nav agrupado
-  const navGrupos = [
-    { id:"inicio", label:"Inicio", icon:"⬡", c:"#6366f1", pantallas:[
-      {id:"home", label:"Dashboard"},
-      {id:"ape", label:"Apertura"},
-    ]},
-    { id:"operar", label:"Operar", icon:"⇄", c:"#f59e0b", pantallas:[
-      {id:"ops", label:"Operaciones"},
-      {id:"libro", label:"Libro diario"},
-      {id:"trade", label:"Trade"},
-    ]},
-    { id:"clientes_g", label:"Clientes", icon:"◎", c:"#34d399", pantallas:[
-      {id:"clientes", label:"Cuentas corrientes"+(clientes.length?" ("+clientes.length+")":"")},
-      {id:"cartera", label:"Cartera diferidos"},
-      {id:"posicion", label:"Posición"},
-      {id:"resumen_socios", label:"Por socio"},
-    ]},
-    { id:"analisis", label:"Análisis", icon:"↗", c:"#38bdf8", pantallas:[
-      {id:"historial", label:"Historial"},
-      {id:"evolucion", label:"Evolución USD"},
-    ]},
-    { id:"admin", label:"Admin", icon:"⚙", c:"#94a3b8", pantallas:[
-      {id:"gastos", label:"Gastos"},
-      {id:"socios", label:"Socios"},
-      {id:"cierre", label:cajaCerrada?"Cierre 🔒":"Cierre"},
-    ]},
+  const navItems=[
+    {id:"home",label:"Dashboard",c:"#38bdf8"},
+    {id:"ape",label:"Apertura",c:"#4ade80"},
+    {id:"ops",label:"Operaciones",c:"#f59e0b"},
+    {id:"libro",label:"Libro",c:"#38bdf8"},
+    {id:"cartera",label:"Cartera",c:"#c084fc"},
+    {id:"clientes",label:"Clientes"+(clientes.length?" ("+clientes.length+")":""),c:"#34d399"},
+    {id:"trade",label:"Trade",c:"#f43f5e"},
+    {id:"posicion",label:"Posicion",c:"#e879f9"},
+    {id:"historial",label:"Historial",c:"#fb923c"},
+    {id:"evolucion",label:"Evolucion USD",c:"#4ade80"},
+    {id:"resumen_socios",label:"Por socio",c:"#34d399"},
+    {id:"gastos",label:"Gastos",c:"#f43f5e"},
+    {id:"socios",label:"Socios",c:"#a78bfa"},
+    {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
-  const grupoActivo = navGrupos.find(g=>g.pantallas.some(p=>p.id===pant));
-  // Mantener navItems para compatibilidad con mobile menu
-  const navItems = navGrupos.flatMap(g=>g.pantallas.map(p=>({...p,c:g.c})));
 
   if (cargando) return (
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -875,20 +861,15 @@ export default function CajaFinanciera() {
       </nav>
       {mobileMenu&&(
         <div className="mobile-menu" style={{position:"fixed",inset:0,top:56,background:"rgba(6,8,16,0.97)",zIndex:99,padding:16,overflowY:"auto",backdropFilter:"blur(20px)"}}>
-          {navGrupos.map(g=>(
-            <div key={g.id} style={{marginBottom:16}}>
-              <div style={{fontSize:9,letterSpacing:2,color:g.c,fontWeight:600,marginBottom:6,paddingLeft:4}}>{g.label.toUpperCase()}</div>
-              {g.pantallas.map(p=>(
-                <button key={p.id} onClick={()=>{setPant(p.id);setMobileMenu(false);}} style={{
-                  display:"block",width:"100%",textAlign:"left",
-                  padding:"12px 16px",marginBottom:4,borderRadius:10,
-                  border:"1px solid "+(pant===p.id?"rgba("+hexToRgb(g.c)+",0.3)":"rgba(255,255,255,0.05)"),
-                  background:pant===p.id?"rgba("+hexToRgb(g.c)+",0.1)":"rgba(255,255,255,0.02)",
-                  color:pant===p.id?g.c:"#64748b",
-                  fontFamily:"inherit",fontSize:13,fontWeight:pant===p.id?600:400,cursor:"pointer"
-                }}>{p.label}</button>
-              ))}
-            </div>
+          {navItems.map(n=>(
+            <button key={n.id} onClick={()=>{setPant(n.id);setMobileMenu(false);}} style={{
+              display:"block",width:"100%",textAlign:"left",
+              padding:"14px 18px",marginBottom:6,borderRadius:12,
+              border:"1px solid "+(pant===n.id?"rgba("+hexToRgb(n.c)+",0.3)":"rgba(255,255,255,0.06)"),
+              background:pant===n.id?"rgba("+hexToRgb(n.c)+",0.08)":"rgba(255,255,255,0.02)",
+              color:pant===n.id?n.c:"#64748b",
+              fontFamily:"inherit",fontSize:14,fontWeight:pant===n.id?600:400,cursor:"pointer"
+            }}>{n.label}</button>
           ))}
         </div>
       )}
