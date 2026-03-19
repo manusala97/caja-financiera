@@ -370,6 +370,13 @@ export default function CajaFinanciera() {
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
   const [subMenu, setSubMenu] = useState(null); // para nav agrupado
+  // Cerrar submenu al clickear fuera
+  useEffect(()=>{
+    if(!subMenu) return;
+    const handler = ()=>setSubMenu(null);
+    document.addEventListener("click", handler);
+    return ()=>document.removeEventListener("click", handler);
+  },[subMenu]);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
   const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
@@ -835,8 +842,8 @@ export default function CajaFinanciera() {
               <div key={g.id} style={{position:"relative"}}>
                 <button
                   className="nav-item"
-                  onClick={()=>{ if(g.pantallas.length===1){setPant(g.pantallas[0].id);setSubMenu(null);}else{setSubMenu(abierto?null:g.id);}}}
-                  onBlur={()=>setTimeout(()=>setSubMenu(null),150)}
+                  onClick={(e)=>{ e.stopPropagation(); if(g.pantallas.length===1){setPant(g.pantallas[0].id);setSubMenu(null);}else{setSubMenu(abierto?null:g.id);}}}
+
                   style={{padding:"7px 14px",borderRadius:8,border:"none",
                     background:activo?"rgba(255,255,255,0.07)":abierto?"rgba(255,255,255,0.04)":"transparent",
                     color:activo?g.c:abierto?"#94a3b8":"#475569",
@@ -849,7 +856,7 @@ export default function CajaFinanciera() {
                   {activo&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:20,height:2,background:g.c,borderRadius:2}}/>}
                 </button>
                 {abierto&&(
-                  <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:200,background:"rgba(10,12,20,0.97)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:6,zIndex:200,backdropFilter:"blur(20px)",boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
+                  <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:200,background:"rgba(10,12,20,0.97)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:6,zIndex:200,backdropFilter:"blur(20px)",boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
                     {g.pantallas.map(p=>(
                       <button key={p.id} onClick={()=>{setPant(p.id);setSubMenu(null);}} style={{
                         display:"block",width:"100%",textAlign:"left",padding:"9px 14px",borderRadius:8,
