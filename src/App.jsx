@@ -369,8 +369,6 @@ export default function CajaFinanciera() {
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"" });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [grupoNav, setGrupoNav] = useState(null);
-  const [subMenu, setSubMenu] = useState(null);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
   const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
@@ -785,17 +783,6 @@ export default function CajaFinanciera() {
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
 
-  const navGrupos = [
-    {id:"g_inicio",   label:"Inicio",   c:"#38bdf8", subs:[{id:"home",label:"Dashboard"},{id:"ape",label:"Apertura"}]},
-    {id:"g_operar",   label:"Operar",   c:"#f59e0b", subs:[{id:"ops",label:"Operaciones"},{id:"libro",label:"Libro"},{id:"trade",label:"Trade"}]},
-    {id:"g_clientes", label:"Clientes", c:"#34d399", subs:[{id:"clientes",label:"Cuentas"+(clientes.length?" ("+clientes.length+")":"")},{id:"cartera",label:"Cartera"},{id:"posicion",label:"Posicion"},{id:"resumen_socios",label:"Por socio"}]},
-    {id:"g_analisis", label:"Analisis", c:"#fb923c", subs:[{id:"historial",label:"Historial"},{id:"evolucion",label:"Evolucion"}]},
-    {id:"g_admin",    label:"Admin",    c:"#a78bfa", subs:[{id:"gastos",label:"Gastos"},{id:"socios",label:"Socios"},{id:"cierre",label:cajaCerrada?"CERRADO":"Cierre"}]},
-  ];
-  const grupoDePane = navGrupos.find(g=>g.subs.some(s=>s.id===pant));
-  const subsActivos = grupoNav ? (navGrupos.find(g=>g.id===grupoNav)?.subs||[]) : (grupoDePane?.subs||[]);
-  const colorGrupo = grupoNav ? (navGrupos.find(g=>g.id===grupoNav)?.c||"#38bdf8") : (grupoDePane?.c||"#38bdf8");
-
   if (cargando) return (
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
@@ -825,42 +812,19 @@ export default function CajaFinanciera() {
             <div style={{fontSize:9,color:"#475569",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
           </div>
         </div>
-        <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto",position:"relative"}}>
-          {navGrupos.map(g=>{
-            const activo=g.pantallas.some(p=>p.id===pant);
-            const abierto=subMenu===g.id;
-            return (
-              <div key={g.id} style={{position:"relative"}}>
-                <button
-                  className="nav-item"
-                  onClick={(e)=>{ e.stopPropagation(); if(g.pantallas.length===1){setPant(g.pantallas[0].id);setSubMenu(null);}else{setSubMenu(abierto?null:g.id);}}}
-
-                  style={{padding:"7px 14px",borderRadius:8,border:"none",
-                    background:activo?"rgba(255,255,255,0.07)":abierto?"rgba(255,255,255,0.04)":"transparent",
-                    color:activo?g.c:abierto?"#94a3b8":"#475569",
-                    fontFamily:"inherit",fontSize:12,fontWeight:activo?600:500,
-                    cursor:"pointer",whiteSpace:"nowrap",position:"relative",
-                    display:"flex",alignItems:"center",gap:5}}>
-                  <span style={{fontSize:13}}>{g.icon}</span>
-                  {g.label}
-                  {g.pantallas.length>1&&<span style={{fontSize:9,opacity:.5,marginLeft:2}}>▾</span>}
-                  {activo&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:20,height:2,background:g.c,borderRadius:2}}/>}
-                </button>
-                {abierto&&(
-                  <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:200,background:"rgba(10,12,20,0.97)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:12,padding:6,zIndex:200,backdropFilter:"blur(20px)",boxShadow:"0 16px 48px rgba(0,0,0,0.6)"}}>
-                    {g.pantallas.map(p=>(
-                      <button key={p.id} onClick={()=>{setPant(p.id);setSubMenu(null);}} style={{
-                        display:"block",width:"100%",textAlign:"left",padding:"9px 14px",borderRadius:8,
-                        border:"none",background:pant===p.id?"rgba("+hexToRgb(g.c)+",0.12)":"transparent",
-                        color:pant===p.id?g.c:"#94a3b8",fontFamily:"inherit",fontSize:12,
-                        fontWeight:pant===p.id?600:400,cursor:"pointer",transition:"all .15s"
-                      }}>{p.label}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
+          {navItems.map(n=>(
+            <button key={n.id} className="nav-item" onClick={()=>setPant(n.id)} style={{
+              padding:"6px 12px",borderRadius:8,border:"none",
+              background:pant===n.id?"rgba(255,255,255,0.07)":"transparent",
+              color:pant===n.id?n.c:"#475569",
+              fontFamily:"inherit",fontSize:11,fontWeight:pant===n.id?600:500,
+              cursor:"pointer",whiteSpace:"nowrap",position:"relative",
+            }}>
+              {n.label}
+              {pant===n.id&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:16,height:2,background:n.c,borderRadius:2}}/>}
+            </button>
+          ))}
         </div>
         <div className="mobile-nav" style={{display:"none",flex:1,justifyContent:"flex-end",alignItems:"center",gap:8}}>
           <span style={{fontSize:12,fontWeight:600,color:navItems.find(n=>n.id===pant)?.c||"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>
@@ -871,23 +835,6 @@ export default function CajaFinanciera() {
           </button>
         </div>
       </nav>
-      {/* Barra secundaria */}
-      {subsActivos.length>0&&(
-        <div style={{background:"rgba(255,255,255,0.02)",borderBottom:"1px solid rgba(255,255,255,0.05)",padding:"0 20px",display:"flex",gap:2,overflowX:"auto",height:38,alignItems:"center"}}>
-          {subsActivos.map(s=>(
-            <button key={s.id} onClick={()=>{setPant(s.id);setGrupoNav(null);}} style={{
-              padding:"4px 12px", borderRadius:6, border:"none",
-              background: pant===s.id ? "rgba(255,255,255,0.08)" : "transparent",
-              color: pant===s.id ? colorGrupo : "#475569",
-              fontFamily:"inherit", fontSize:11, fontWeight: pant===s.id ? 600 : 400,
-              cursor:"pointer", whiteSpace:"nowrap", position:"relative",
-            }}>
-              {s.label}
-              {pant===s.id&&<div style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:12,height:2,background:colorGrupo,borderRadius:2}}/>}
-            </button>
-          ))}
-        </div>
-      )}
       {mobileMenu&&(
         <div className="mobile-menu" style={{position:"fixed",inset:0,top:56,background:"rgba(6,8,16,0.97)",zIndex:99,padding:16,overflowY:"auto",backdropFilter:"blur(20px)"}}>
           {navItems.map(n=>(
