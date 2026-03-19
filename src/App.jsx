@@ -369,14 +369,7 @@ export default function CajaFinanciera() {
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"" });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [subMenu, setSubMenu] = useState(null); // para nav agrupado
-  // Cerrar submenu al clickear fuera
-  useEffect(()=>{
-    if(!subMenu) return;
-    const handler = ()=>setSubMenu(null);
-    document.addEventListener("click", handler);
-    return ()=>document.removeEventListener("click", handler);
-  },[subMenu]);
+  const [subMenu, setSubMenu] = useState(null);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
   const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
