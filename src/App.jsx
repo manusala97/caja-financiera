@@ -785,6 +785,17 @@ export default function CajaFinanciera() {
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
 
+  const navGrupos = [
+    {id:"g_inicio",   label:"Inicio",   c:"#38bdf8", subs:[{id:"home",label:"Dashboard"},{id:"ape",label:"Apertura"}]},
+    {id:"g_operar",   label:"Operar",   c:"#f59e0b", subs:[{id:"ops",label:"Operaciones"},{id:"libro",label:"Libro"},{id:"trade",label:"Trade"}]},
+    {id:"g_clientes", label:"Clientes", c:"#34d399", subs:[{id:"clientes",label:"Cuentas"+(clientes.length?" ("+clientes.length+")":"")},{id:"cartera",label:"Cartera"},{id:"posicion",label:"Posicion"},{id:"resumen_socios",label:"Por socio"}]},
+    {id:"g_analisis", label:"Analisis", c:"#fb923c", subs:[{id:"historial",label:"Historial"},{id:"evolucion",label:"Evolucion"}]},
+    {id:"g_admin",    label:"Admin",    c:"#a78bfa", subs:[{id:"gastos",label:"Gastos"},{id:"socios",label:"Socios"},{id:"cierre",label:cajaCerrada?"CERRADO":"Cierre"}]},
+  ];
+  const grupoDePane = navGrupos.find(g=>g.subs.some(s=>s.id===pant));
+  const subsActivos = grupoNav ? (navGrupos.find(g=>g.id===grupoNav)?.subs||[]) : (grupoDePane?.subs||[]);
+  const colorGrupo = grupoNav ? (navGrupos.find(g=>g.id===grupoNav)?.c||"#38bdf8") : (grupoDePane?.c||"#38bdf8");
+
   if (cargando) return (
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
