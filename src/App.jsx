@@ -1455,8 +1455,7 @@ export default function CajaFinanciera() {
             lines.push(`Ops hoy: ${opsHoy.length}`);
             lines.push("---------------------------------------");
 
-            const texto=lines.join("
-");
+            const texto=lines.join("\n");
             // Copiar al portapapeles
             navigator.clipboard.writeText(texto).then(()=>{
               notify("Reporte copiado al portapapeles ✓");
