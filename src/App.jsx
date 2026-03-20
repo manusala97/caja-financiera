@@ -1451,9 +1451,16 @@ export default function CajaFinanciera() {
                     {(()=>{
                       const difPend=diferidos.filter(d=>!d.cobrado);
                       const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
-                      const grandTot=Object.fromEntries(MONEDAS.map(m=>[m.id, tots[m.id]+(m.id==="ARS"?totalDif:0)]));
+                      // Patrimonio total = caja fisica + CCs + cheques a cobrar
+                      const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
                       return (<>
-                        <tr style={{borderTop:"2px solid #374151",background:"#0a0a0a"}}>
+                        <tr style={{borderTop:"2px solid #1f2937",background:"#0a1a0a"}}>
+                          <td style={{padding:"9px 10px",fontSize:9,color:"#4ade80",fontWeight:700,letterSpacing:1}}>CAJA OFICINA</td>
+                          {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
+                            <span style={{fontSize:13,fontWeight:700,color:saldos[m.id]>0?"#4ade80":saldos[m.id]<0?"#f87171":"#374151"}}>{saldos[m.id]!==0?fmt(saldos[m.id]):"—"}</span>
+                          </td>)}
+                        </tr>
+                        <tr style={{borderTop:"1px solid #1f2937",background:"#0a0a0a"}}>
                           <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL CC</td>
                           {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
                             <span style={{fontSize:13,fontWeight:700,color:tots[m.id]>0?"#4ade80":tots[m.id]<0?"#f87171":"#374151"}}>{tots[m.id]!==0?fmt(tots[m.id]):"—"}</span>
@@ -1472,9 +1479,9 @@ export default function CajaFinanciera() {
                           </tr>
                         )}
                         <tr style={{background:"#0d0d12",borderTop:"2px solid #6366f1"}}>
-                          <td style={{padding:"10px 10px",fontSize:9,color:"#818cf8",fontWeight:700,letterSpacing:1}}>GRAN TOTAL</td>
+                          <td style={{padding:"10px 10px",fontSize:9,color:"#818cf8",fontWeight:700,letterSpacing:1}}>PATRIMONIO TOTAL</td>
                           {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"10px 10px"}}>
-                            <span style={{fontSize:14,fontWeight:700,color:grandTot[m.id]>0?"#818cf8":grandTot[m.id]<0?"#f87171":"#374151"}}>{grandTot[m.id]!==0?fmt(grandTot[m.id]):"—"}</span>
+                            <span style={{fontSize:14,fontWeight:700,color:patrimonioTot[m.id]>0?"#818cf8":patrimonioTot[m.id]<0?"#f87171":"#374151"}}>{patrimonioTot[m.id]!==0?fmt(patrimonioTot[m.id]):"—"}</span>
                           </td>)}
                         </tr>
                       </>);
