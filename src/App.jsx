@@ -1474,7 +1474,6 @@ export default function CajaFinanciera() {
                     📋 Copiar resumen
                   </button>
                 </div>
-                </div>
                 <Card sx={{border:"1px solid #e879f933",minWidth:190}}>
                   <div style={{fontSize:10,letterSpacing:3,color:"#e879f9",marginBottom:10}}>FACTURACION</div>
                   {meses.map(([mes,val])=>(
