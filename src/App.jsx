@@ -1422,9 +1422,9 @@ export default function CajaFinanciera() {
             const COLS=MONEDAS.filter(m=>patrimonioSaldos[m.id]!==0||saldos[m.id]!==0||tots[m.id]!==0);
 
             const lines=[];
-            lines.push("╔══════════════════════════════════════╗");
-            lines.push("║     STS FINANCIERA — RESUMEN DÍA     ║");
-            lines.push("╚══════════════════════════════════════╝");
+            lines.push("======================================");
+            lines.push("  STS FINANCIERA - RESUMEN DEL DIA");
+            lines.push("======================================");
             lines.push(fechaLarga.toUpperCase());
             lines.push("");
             lines.push("💰 CAJA FÍSICA");
@@ -1448,12 +1448,12 @@ export default function CajaFinanciera() {
               lines.push(`  TOTAL: $${fmt(totalDif)} ARS`);
               lines.push("");
             }
-            lines.push("═══════════════════════════════════════");
+            lines.push("---------------------------------------");
             lines.push("🏦 PATRIMONIO TOTAL");
             COLS.forEach(m=>{const v=patrimonioSaldos[m.id];if(v) lines.push(`  ${m.id}: ${m.simbolo}${fmt(v)}`);});
             lines.push("");
             lines.push(`Ops hoy: ${opsHoy.length}`);
-            lines.push("═══════════════════════════════════════");
+            lines.push("---------------------------------------");
 
             const texto=lines.join("
 ");
