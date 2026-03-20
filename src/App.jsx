@@ -1399,10 +1399,68 @@ export default function CajaFinanciera() {
           const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+getS(c.id,m.id),0)]));
           const meses=Object.entries(fact.meses||{});
           const ganAcum=meses.reduce((s,[,v])=>s+parse(v),0),obj=parse(fact.objetivo);
+
+          function generarReporte() {
+            const difPend=diferidos.filter(d=>!d.cobrado);
+            const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+            const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
+            const COLS=MONEDAS.filter(m=>patrimonioSaldos[m.id]!==0||saldos[m.id]!==0||tots[m.id]!==0);
+
+            const lines=[];
+            lines.push("╔══════════════════════════════════════╗");
+            lines.push("║     STS FINANCIERA — RESUMEN DÍA     ║");
+            lines.push("╚══════════════════════════════════════╝");
+            lines.push(fechaLarga.toUpperCase());
+            lines.push("");
+            lines.push("💰 CAJA FÍSICA");
+            COLS.forEach(m=>{const v=saldos[m.id]||0;if(v) lines.push(`  ${m.id}: ${m.simbolo}${fmt(v)}`);});
+            lines.push("");
+            lines.push("📊 CUENTAS CORRIENTES");
+            clientes.forEach(c=>{
+              const sal=saldoCC(c);
+              const tieneMovs=COLS.some(m=>sal[m.id]!==0);
+              if(!tieneMovs) return;
+              lines.push(`  ${c.nombre} ${c.apellido}:`);
+              COLS.forEach(m=>{ const v=sal[m.id]; if(v) lines.push(`    ${v>0?"Me debe":"Le debo"} ${m.simbolo}${fmt(Math.abs(v))} ${m.id}`); });
+            });
+            lines.push("");
+            if(difPend.length>0){
+              lines.push("📋 CHEQUES A COBRAR");
+              difPend.sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).forEach(d=>{
+                const dr=diasEntre(hoy,d.fechaAcr);
+                lines.push(`  ${d.fechaAcr} (${dr}d) — $${fmt(d.nominal)} ARS${d.cliente?" — "+d.cliente:""}`);
+              });
+              lines.push(`  TOTAL: $${fmt(totalDif)} ARS`);
+              lines.push("");
+            }
+            lines.push("═══════════════════════════════════════");
+            lines.push("🏦 PATRIMONIO TOTAL");
+            COLS.forEach(m=>{const v=patrimonioSaldos[m.id];if(v) lines.push(`  ${m.id}: ${m.simbolo}${fmt(v)}`);});
+            lines.push("");
+            lines.push(`Ops hoy: ${opsHoy.length}`);
+            lines.push("═══════════════════════════════════════");
+
+            const texto=lines.join("
+");
+            // Copiar al portapapeles
+            navigator.clipboard.writeText(texto).then(()=>{
+              notify("Reporte copiado al portapapeles ✓");
+            }).catch(()=>{
+              // Fallback: mostrar en alert para copiar manualmente
+              window.prompt("Copiá el reporte:", texto);
+            });
+          }
+
           return (
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:14}}>
-                <div style={{fontSize:10,letterSpacing:3,color:"#e879f9"}}>POSICION CONSOLIDADA</div>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{fontSize:10,letterSpacing:3,color:"#e879f9"}}>POSICION CONSOLIDADA</div>
+                  <button onClick={generarReporte} style={{padding:"5px 12px",borderRadius:7,background:"rgba(232,121,249,0.1)",border:"1px solid rgba(232,121,249,0.3)",color:"#e879f9",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    📋 Copiar resumen
+                  </button>
+                </div>
+                </div>
                 <Card sx={{border:"1px solid #e879f933",minWidth:190}}>
                   <div style={{fontSize:10,letterSpacing:3,color:"#e879f9",marginBottom:10}}>FACTURACION</div>
                   {meses.map(([mes,val])=>(
