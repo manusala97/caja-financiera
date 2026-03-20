@@ -380,7 +380,7 @@ export default function CajaFinanciera() {
     return [...fechas].sort().reverse();
   },[ops]);
   const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfa:"", tn:"", tpct:"" });
-  const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"" });
+  const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
@@ -672,7 +672,13 @@ export default function CajaFinanciera() {
   async function regMovCC(cId) {
     const monto=parse(formCC.monto); if (!monto) { notify("Ingresa un monto",false); return; }
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    // Los movimientos CC NO impactan la caja fisica - son registros contables
+    const ing=formCC.tipo==="ingreso_transf"||formCC.tipo==="ingreso_dep";
+    // Si impactaCaja=true, modificar el saldo fisico
+    if (formCC.impactaCaja) {
+      const ns={...saldos,[formCC.moneda]:saldos[formCC.moneda]+(ing?monto:-monto)};
+      setSaldos(ns);
+      await guardarDia(ns,null,null);
+    }
     const mv={id:Date.now(),hora,fecha:hoy,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota};
     await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||""});
     setClientes(p=>p.map(c=>c.id!==cId?c:{...c,movimientos:[...c.movimientos,mv]}));
@@ -1265,6 +1271,15 @@ export default function CajaFinanciera() {
                     <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={formCC.monto} onChange={e=>setFormCC(f=>({...f,monto:e.target.value}))}/></div>
                   </div>
                   <div style={{marginTop:8,marginBottom:10}}><Lbl>Nota</Lbl><Inp placeholder="Descripcion..." value={formCC.nota} onChange={e=>setFormCC(f=>({...f,nota:e.target.value}))}/></div>
+                  <div onClick={()=>setFormCC(f=>({...f,impactaCaja:!f.impactaCaja}))} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,border:"1px solid "+(formCC.impactaCaja?"#f59e0b44":"rgba(255,255,255,0.06)"),background:formCC.impactaCaja?"rgba(245,158,11,0.08)":"transparent",cursor:"pointer",marginBottom:10,userSelect:"none"}}>
+                    <div style={{width:16,height:16,borderRadius:4,border:"2px solid "+(formCC.impactaCaja?"#f59e0b":"#475569"),background:formCC.impactaCaja?"#f59e0b":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {formCC.impactaCaja&&<span style={{color:"#000",fontSize:11,fontWeight:900}}>✓</span>}
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,fontWeight:600,color:formCC.impactaCaja?"#f59e0b":"#475569"}}>Impacta caja física</div>
+                      <div style={{fontSize:10,color:"#334155"}}>{formCC.impactaCaja?"Se suma/resta de tu caja":"Solo registro contable"}</div>
+                    </div>
+                  </div>
                   <button onClick={()=>regMovCC(c.id)} style={{width:"100%",padding:10,borderRadius:7,background:esIngCC?"#052e16":formCC.tipo==="retiro_transf"?"#0a1e2e":"#1c0a0a",border:"1px solid "+colorCC[formCC.tipo],color:colorCC[formCC.tipo],fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                     {labelBtn[formCC.tipo]}
                   </button>
