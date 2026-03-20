@@ -270,13 +270,25 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
   );
 }
 
-function ModalCierre({ saldos, onCerrar, onCancelar, ultimaCotiz={} }) {
+function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancelar, ultimaCotiz={} }) {
   const [cotiz, setCotiz] = useState({ ARS:ultimaCotiz.ARS||"", BRL:ultimaCotiz.BRL||"", GBP:ultimaCotiz.GBP||"", EUR:ultimaCotiz.EUR||"", USDT:"1" });
   const sc = (k,v) => setCotiz(c=>({...c,[k]:v}));
-  const totalUSD = useMemo(()=>{
+  // Calcular patrimonio total = caja fisica + CCs + cheques a cobrar
+  const patrimonioTotal = useMemo(()=>{
     if (!parse(cotiz.ARS)) return null;
-    return calcTotalUSD(saldos, cotiz);
-  },[saldos,cotiz]);
+    const tots=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
+    const difPend=(diferidos||[]).filter(d=>!d.cobrado);
+    const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+    const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)]));
+    return {
+      totalUSD: calcTotalUSD(patrimonioSaldos, cotiz),
+      cajaUSD: calcTotalUSD(saldos, cotiz),
+      saldosPatrimonio: patrimonioSaldos,
+      totalDif,
+      tots,
+    };
+  },[saldos,cotiz,clientes,diferidos]);
+  const totalUSD = patrimonioTotal?.totalUSD||null;
   const monCotiz = MONEDAS.filter(m=>m.id!=="USD");
   return (
     <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -310,20 +322,22 @@ function ModalCierre({ saldos, onCerrar, onCancelar, ultimaCotiz={} }) {
           </div>
           <div style={{marginTop:8,fontSize:10,color:"#374151"}}>* ARS: pesos por USD (ej: 1400) | EUR/GBP/BRL: valor en USD (ej: EUR=1.2, BRL=0.19)</div>
         </div>
-        {totalUSD!==null&&(
-          <div style={{background:"#0a1a0a",border:"1px solid #22c55e44",borderRadius:8,padding:12,marginBottom:16,textAlign:"center"}}>
-            <div style={{fontSize:9,letterSpacing:3,color:"#4b5563",marginBottom:4}}>TOTAL CAJA EN USD</div>
-            <div style={{fontSize:28,fontWeight:700,color:"#4ade80"}}>{fmtUSD(totalUSD)}</div>
-            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>al cierre de hoy</div>
-            <div style={{marginTop:8,fontSize:11,color:"#6b7280"}}>
-              {MONEDAS.filter(m=>m.id!=="USD"&&(saldos[m.id]||0)!==0).map(m=>{
-                let usd=0;
-                if(m.id==="ARS") usd=parse(saldos.ARS||0)/(parse(cotiz.ARS)||1);
-                else if(m.id==="USDT") usd=parse(saldos.USDT||0);
-                else usd=parse(saldos[m.id]||0)*(parse(cotiz[m.id])||0);
-                return <span key={m.id} style={{marginRight:10,color:m.color}}>{m.id}: {fmtUSD(usd)}</span>;
-              })}
-              <span style={{color:"#4ade80"}}>USD: {fmtUSD(saldos.USD||0)}</span>
+        {totalUSD!==null&&patrimonioTotal&&(
+          <div style={{marginBottom:16}}>
+            <div style={{background:"#0a0a1a",border:"1px solid #6366f133",borderRadius:8,padding:12,marginBottom:8,textAlign:"center"}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#818cf8",marginBottom:4}}>PATRIMONIO TOTAL EN USD</div>
+              <div style={{fontSize:28,fontWeight:700,color:"#818cf8"}}>{fmtUSD(totalUSD)}</div>
+              <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>caja + cuentas corrientes + cheques</div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <div style={{flex:1,background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:10,textAlign:"center"}}>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CAJA FÍSICA</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioTotal.cajaUSD)}</div>
+              </div>
+              <div style={{flex:1,background:"#0a0a1a",border:"1px solid #c084fc33",borderRadius:8,padding:10,textAlign:"center"}}>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CCs + CHEQUES</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#c084fc"}}>{fmtUSD(totalUSD-patrimonioTotal.cajaUSD)}</div>
+              </div>
             </div>
           </div>
         )}
@@ -624,8 +638,7 @@ export default function CajaFinanciera() {
     else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
     else if (t==="ajuste") { ns[op.moneda]-=op.delta; }
     else if (t==="cobro_dif") { ns[op.moneda]-=op.monto; }
-    else if (t==="cc_ingreso_transf"||t==="cc_ingreso_dep") { ns[op.moneda]-=op.monto; }
-    else if (t==="cc_retiro_transf"||t==="cc_retiro_efectivo") { ns[op.moneda]+=op.monto; }
+    // cc_ingreso/retiro no impactan saldo fisico
     setSaldos(ns);
     await SB.from("operaciones").delete().eq("id",op.id);
     setOps(p=>p.filter(o=>o.id!==op.id));
@@ -659,13 +672,10 @@ export default function CajaFinanciera() {
   async function regMovCC(cId) {
     const monto=parse(formCC.monto); if (!monto) { notify("Ingresa un monto",false); return; }
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    const ing=formCC.tipo==="ingreso_transf"||formCC.tipo==="ingreso_dep";
-    const ns={...saldos,[formCC.moneda]:saldos[formCC.moneda]+(ing?monto:-monto)};
-    setSaldos(ns);
+    // Los movimientos CC NO impactan la caja fisica - son registros contables
     const mv={id:Date.now(),hora,fecha:hoy,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota};
     await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||""});
     setClientes(p=>p.map(c=>c.id!==cId?c:{...c,movimientos:[...c.movimientos,mv]}));
-    await guardarDia(ns,null,null);
     setFormCC(f=>({...f,monto:"",nota:""})); notify("Movimiento registrado");
   }
 
@@ -795,7 +805,7 @@ export default function CajaFinanciera() {
   return (
     <div style={S.app}>
       {toast&&<div style={S.toast(toast.ok)}>{toast.msg}</div>}
-      {showModalCierre&&<ModalCierre saldos={saldos} ultimaCotiz={ultimaCotiz} onCerrar={(cotiz,total)=>{setUltimaCotiz(cotiz);ejecutarCierre(cotiz,total);}} onCancelar={()=>setShowModalCierre(false)}/>}
+      {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} onCerrar={(cotiz,total)=>{setUltimaCotiz(cotiz);ejecutarCierre(cotiz,total);}} onCancelar={()=>setShowModalCierre(false)}/>}
       {editandoOp&&(
         <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}}>
@@ -1738,6 +1748,23 @@ export default function CajaFinanciera() {
         {pant==="cierre"&&(
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#94a3b8",marginBottom:18}}>CIERRE - {fechaLarga}</div>
+            {(()=>{
+              const difPend=diferidos.filter(d=>!d.cobrado);
+              const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+              const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+saldoCC(c)[m.id],0)]));
+              const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
+              return (
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:18}}>
+                  {MONEDAS.map(m=>{ const vFis=saldos[m.id]||0,vTot=patrimonioSaldos[m.id]; if(!vFis&&!vTot) return null;
+                    return <div key={m.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba("+hexToRgb(m.color)+",0.2)",borderRadius:10,padding:"10px 14px",minWidth:110}}>
+                      <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
+                      <div style={{fontSize:11,color:"#4b5563",marginBottom:2}}>Física: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#818cf8"}}>Total: {m.simbolo}{fmt(vTot)}</div>
+                    </div>;
+                  })}
+                </div>
+              );
+            })()}
             <div style={S.grid("1fr 1fr",14)}>
               <Card>
                 <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>SALDOS</div>
