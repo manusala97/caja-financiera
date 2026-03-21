@@ -1420,138 +1420,140 @@ export default function CajaFinanciera() {
             const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
             const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
             const COLS=MONEDAS.filter(m=>patrimonioSaldos[m.id]!==0||saldos[m.id]!==0||tots[m.id]!==0);
-            const clientesConSaldo=clientes.filter(c=>COLS.some(m=>saldoCC(c)[m.id]!==0));
+            const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b","STS":"#e879f9"};
+            const SOCIOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
-            const W=640, PAD=32, COL="#060810";
-            const VERDE="#34d399", ROJO="#f87171", LILA="#a78bfa", GRIS="#475569", BLANCO="#e2e8f0", DIM="#64748b";
+            // Calcular totales por socio
+            const totSocio={};
+            SOCIOS.forEach(s=>{totSocio[s]=Object.fromEntries(MONEDAS.map(m=>[m.id,0]));});
+            clientes.forEach(cl=>{
+              const socio=cl.socio||"Manuel Sala";
+              if(!totSocio[socio]) return;
+              const sal=saldoCC(cl);
+              MONEDAS.forEach(m=>{ totSocio[socio][m.id]+=sal[m.id]||0; });
+            });
 
-            // Calcular alto dinamico
-            let rows = 6 + COLS.length // header + caja
-              + 2 + clientesConSaldo.reduce((s,c)=>s+1+COLS.filter(m=>saldoCC(c)[m.id]!==0).length,0) // ccs
-              + (difPend.length>0 ? 2+difPend.length+1 : 0) // cheques
-              + 2 + COLS.length + 3; // patrimonio + footer
-            const H = Math.max(500, rows*22 + PAD*3);
+            const W=800, PAD=36;
+            const VERDE="#34d399", ROJO="#f87171", LILA="#a78bfa", GRIS="#475569", BLANCO="#e2e8f0", DIM="#64748b", BG="#07090f";
+
+            // Altura dinamica
+            const sociosActivos=SOCIOS.filter(s=>COLS.some(m=>totSocio[s][m.id]!==0));
+            const H=420 + sociosActivos.length*70 + (difPend.length>0?80:0);
 
             const canvas=document.createElement("canvas");
             canvas.width=W*2; canvas.height=H*2;
             const ctx=canvas.getContext("2d");
             ctx.scale(2,2);
 
-            // Fondo
-            ctx.fillStyle=COL;
-            ctx.fillRect(0,0,W,H);
-
-            // Borde sutil
-            ctx.strokeStyle="rgba(255,255,255,0.08)";
-            ctx.lineWidth=1;
-            ctx.strokeRect(1,1,W-2,H-2);
-
-            let y=PAD;
-            const lh=22;
-
-            function txt(text, x, fy, size, color, align="left", bold=false) {
+            function txt(t,x,fy,size,color,align="left",bold=false){
               ctx.font=(bold?"600 ":"400 ")+size+"px 'Inter',system-ui,sans-serif";
-              ctx.fillStyle=color;
-              ctx.textAlign=align;
-              ctx.fillText(text,x,fy);
+              ctx.fillStyle=color; ctx.textAlign=align; ctx.fillText(t,x,fy);
+            }
+            function hline(fy,alpha=0.08){
+              ctx.strokeStyle="rgba(255,255,255,"+alpha+")";
+              ctx.lineWidth=1; ctx.beginPath();
+              ctx.moveTo(PAD,fy); ctx.lineTo(W-PAD,fy); ctx.stroke();
+            }
+            function rect(x,fy,w,h,color,radius=8){
+              ctx.fillStyle=color; ctx.beginPath();
+              ctx.roundRect(x,fy,w,h,radius); ctx.fill();
             }
 
-            function line(fy, color="rgba(255,255,255,0.07)") {
-              ctx.strokeStyle=color;
-              ctx.lineWidth=1;
-              ctx.beginPath();
-              ctx.moveTo(PAD,fy);
-              ctx.lineTo(W-PAD,fy);
-              ctx.stroke();
-            }
+            // Fondo degradado
+            const grad=ctx.createLinearGradient(0,0,0,H);
+            grad.addColorStop(0,"#0a0c15"); grad.addColorStop(1,"#060810");
+            ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
 
-            function badge(text, x, fy, bg, color) {
-              ctx.font="600 9px 'Inter',system-ui,sans-serif";
-              const tw=ctx.measureText(text).width;
-              ctx.fillStyle=bg;
-              ctx.beginPath();
-              ctx.roundRect(x,fy-10,tw+12,14,4);
-              ctx.fill();
-              ctx.fillStyle=color;
-              ctx.textAlign="left";
-              ctx.fillText(text,x+6,fy);
-            }
+            // Borde
+            ctx.strokeStyle="rgba(99,102,241,0.3)"; ctx.lineWidth=1.5;
+            ctx.beginPath(); ctx.roundRect(1,1,W-2,H-2,12); ctx.stroke();
 
-            // Logo + titulo
-            ctx.fillStyle="rgba(99,102,241,0.9)";
-            ctx.beginPath(); ctx.roundRect(PAD,y-10,32,32,8); ctx.fill();
-            txt("S",PAD+10,y+12,16,BLANCO,"left",true);
-            txt("STS FINANCIERA",PAD+42,y+6,14,BLANCO,"left",true);
-            txt("RESUMEN DEL DIA",PAD+42,y+20,9,DIM,"left",false);
-            txt(fechaLarga,W-PAD,y+13,10,DIM,"right");
-            y+=36; line(y); y+=16;
+            // Acento top
+            const acent=ctx.createLinearGradient(0,0,W,0);
+            acent.addColorStop(0,"#6366f1"); acent.addColorStop(1,"#34d399");
+            ctx.fillStyle=acent; ctx.fillRect(PAD,0,W-PAD*2,3);
 
-            // Caja fisica
-            badge("CAJA FISICA",PAD,y,VERDE+"22",VERDE);
-            y+=lh;
+            let y=PAD+10;
+
+            // Header
+            rect(PAD,y-12,36,36,"rgba(99,102,241,0.85)",10);
+            txt("S",PAD+11,y+12,17,BLANCO,"left",true);
+            txt("STS FINANCIERA",PAD+48,y+5,15,BLANCO,"left",true);
+            txt("RESUMEN DEL DIA",PAD+48,y+20,9,"#6366f1","left",true);
+            txt(fechaLarga,W-PAD,y+12,10,DIM,"right");
+            txt("Ops: "+opsHoy.length,W-PAD,y+24,9,"#6366f1","right",true);
+            y+=46; hline(y,0.1); y+=20;
+
+            // Caja fisica + Patrimonio en dos columnas
+            const mid=W/2;
+            txt("CAJA FISICA",PAD,y,9,VERDE,"left",true);
+            txt("PATRIMONIO TOTAL",mid+10,y,9,LILA,"left",true);
+            y+=16;
             COLS.forEach(m=>{
-              const v=saldos[m.id]||0; if(!v) return;
-              txt(m.id,PAD+8,y,10,m.color,"left",true);
-              txt(m.simbolo+fmt(v),W-PAD,y,13,v<0?ROJO:BLANCO,"right",true);
-              y+=lh;
+              const vF=saldos[m.id]||0, vP=patrimonioSaldos[m.id]||0;
+              if(!vF&&!vP) return;
+              // Col izq - caja
+              rect(PAD,y-11,mid-PAD-10,20,"rgba(255,255,255,0.02)",4);
+              txt(m.id,PAD+8,y,9,m.color,"left",true);
+              txt(m.simbolo+fmt(vF),mid-20,y,12,vF<0?ROJO:BLANCO,"right",true);
+              // Col der - patrimonio
+              rect(mid+10,y-11,mid-PAD-10,20,"rgba(99,102,241,0.05)",4);
+              txt(m.id,mid+18,y,9,m.color,"left",true);
+              txt(m.simbolo+fmt(vP),W-PAD,y,12,vP<0?ROJO:LILA,"right",true);
+              y+=22;
             });
-            y+=6; line(y); y+=16;
+            y+=10; hline(y,0.1); y+=20;
 
-            // Cuentas corrientes
-            badge("CUENTAS CORRIENTES",PAD,y,"rgba(56,189,248,0.15)","#38bdf8");
-            y+=lh;
-            clientesConSaldo.forEach(c=>{
-              const sal=saldoCC(c);
-              txt((c.nombre+" "+c.apellido).toUpperCase(),PAD+8,y,9,DIM,"left",true);
-              y+=lh-4;
-              COLS.forEach(m=>{
-                const v=sal[m.id]; if(!v) return;
-                txt(v>0?"Me debe":"Le debo",PAD+16,y,9,DIM);
-                txt(m.simbolo+fmt(Math.abs(v))+" "+m.id,W-PAD,y,11,v>0?VERDE:ROJO,"right",true);
-                y+=lh-2;
+            // Por socio
+            txt("POSICION POR SOCIO",PAD,y,9,"#38bdf8","left",true);
+            y+=16;
+            sociosActivos.forEach(socio=>{
+              const col=COLORES_SOCIO[socio]||GRIS;
+              const totS=totSocio[socio];
+              const cantCli=clientes.filter(cl=>(cl.socio||"Manuel Sala")===socio&&COLS.some(m=>saldoCC(cl)[m.id]!==0)).length;
+              rect(PAD,y-2,W-PAD*2,54,"rgba(255,255,255,0.02)",8);
+              ctx.strokeStyle=col+"33"; ctx.lineWidth=1;
+              ctx.beginPath(); ctx.roundRect(PAD,y-2,W-PAD*2,54,8); ctx.stroke();
+              // Punto color
+              ctx.fillStyle=col; ctx.beginPath();
+              ctx.arc(PAD+16,y+22,5,0,Math.PI*2); ctx.fill();
+              txt(socio,PAD+28,y+16,12,BLANCO,"left",true);
+              txt(cantCli+" cliente"+(cantCli!==1?"s":""),PAD+28,y+30,9,DIM,"left");
+              // Saldos
+              let sx=W-PAD;
+              [...COLS].reverse().forEach(m=>{
+                const v=totS[m.id]; if(!v) return;
+                const label=(v>0?"+ ":"- ")+m.simbolo+fmt(Math.abs(v))+" "+m.id;
+                txt(label,sx,y+22,10,v>0?VERDE:ROJO,"right",true);
+                sx-=ctx.measureText(label).width+20;
               });
-              y+=2;
+              y+=64;
             });
-            if(clientesConSaldo.length===0){txt("Sin movimientos",PAD+8,y,10,GRIS);y+=lh;}
+            y+=4; hline(y,0.1); y+=20;
 
             // Cheques
             if(difPend.length>0){
-              y+=6; line(y); y+=16;
-              badge("CHEQUES A COBRAR",PAD,y,"rgba(192,132,252,0.15)","#c084fc");
-              y+=lh;
-              [...difPend].sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).forEach(d=>{
-                const dr=diasEntre(hoy,d.fechaAcr);
-                const col=dr===0?ROJO:dr<=3?"#f59e0b":"#c084fc";
-                txt(d.fechaAcr+(d.cliente?" — "+d.cliente:""),PAD+8,y,10,DIM);
-                txt((dr===0?"VENCIDO":dr+"d")+" $"+fmt(d.nominal),W-PAD,y,10,col,"right",true);
-                y+=lh-2;
-              });
-              txt("TOTAL",PAD+8,y,9,DIM,"left",true);
+              const venc=difPend.filter(d=>diasEntre(hoy,d.fechaAcr)===0).length;
+              const prox=difPend.filter(d=>{const dr=diasEntre(hoy,d.fechaAcr);return dr>0&&dr<=3;}).length;
+              txt("CHEQUES A COBRAR",PAD,y,9,"#c084fc","left",true);
+              txt(difPend.length+" cheques",mid,y,9,DIM,"left");
               txt("$"+fmt(totalDif)+" ARS",W-PAD,y,11,"#c084fc","right",true);
-              y+=lh;
+              y+=18;
+              if(venc>0){
+                rect(PAD,y-10,120,16,"rgba(244,63,94,0.15)",4);
+                txt(venc+" VENCIDO"+(venc>1?"S":""),PAD+6,y,9,ROJO,"left",true);
+              }
+              if(prox>0){
+                rect(venc>0?PAD+130:PAD,y-10,150,16,"rgba(245,158,11,0.15)",4);
+                txt(prox+" POR VENCER (<=3d)",venc>0?PAD+136:PAD+6,y,9,"#f59e0b","left",true);
+              }
+              y+=20;
             }
 
-            // Patrimonio total
-            y+=6;
-            ctx.fillStyle="rgba(99,102,241,0.08)";
-            ctx.beginPath(); ctx.roundRect(PAD,y,W-PAD*2,COLS.filter(m=>patrimonioSaldos[m.id]).length*lh+40,10); ctx.fill();
-            y+=14;
-            txt("PATRIMONIO TOTAL",PAD+12,y,10,LILA,"left",true);
-            txt("ops hoy: "+opsHoy.length,W-PAD-12,y,9,DIM,"right");
-            y+=lh;
-            COLS.forEach(m=>{
-              const v=patrimonioSaldos[m.id]; if(!v) return;
-              txt(m.id,PAD+16,y,10,m.color,"left",true);
-              txt(m.simbolo+fmt(v),W-PAD-12,y,14,v<0?ROJO:LILA,"right",true);
-              y+=lh;
-            });
-            y+=10;
-
             // Footer
-            line(y,"rgba(255,255,255,0.05)"); y+=14;
-            txt("Generado por STS Financiera • "+hoy,W/2,y,8,GRIS,"center");
+            hline(y,0.05); y+=14;
+            txt("Generado por STS Financiera  •  "+hoy,W/2,y,8,GRIS,"center");
 
-            // Descargar
             const link=document.createElement("a");
             link.download="STS-resumen-"+hoy+".png";
             link.href=canvas.toDataURL("image/png");
