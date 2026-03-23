@@ -399,33 +399,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-export default function CajaFinanciera() {
-  const [usuario, setUsuario] = useState(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-
-  useEffect(()=>{
-    // Verificar si hay sesion activa
-    SB.auth.getSession().then(({data:{session}})=>{
-      setUsuario(session?.user||null);
-      setCheckingAuth(false);
-    });
-    // Escuchar cambios de auth
-    const {data:{subscription}} = SB.auth.onAuthStateChange((_,session)=>{
-      setUsuario(session?.user||null);
-    });
-    return ()=>subscription.unsubscribe();
-  },[]);
-
-  if (checkingAuth) return (
-    <div style={{minHeight:"100vh",background:"#07090f",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{textAlign:"center"}}>
-        <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace"}}>S</div>
-        <div style={{color:"#334155",fontSize:12}}>Verificando sesión...</div>
-      </div>
-    </div>
-  );
-
-  if (!usuario) return <LoginScreen onLogin={()=>{}} />;
+function AppInterna({ usuario }) {
   const [pant, setPant] = useState("ape");
   const [toast, setToast] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -2302,4 +2276,32 @@ export default function CajaFinanciera() {
       </main>
     </div>
   );
+}
+
+export default function CajaFinanciera() {
+  const [usuario, setUsuario] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(()=>{
+    SB.auth.getSession().then(({data:{session}})=>{
+      setUsuario(session?.user||null);
+      setCheckingAuth(false);
+    });
+    const {data:{subscription}} = SB.auth.onAuthStateChange((_,session)=>{
+      setUsuario(session?.user||null);
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
+
+  if (checkingAuth) return (
+    <div style={{minHeight:"100vh",background:"#07090f",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace"}}>S</div>
+        <div style={{color:"#334155",fontSize:12}}>Verificando sesión...</div>
+      </div>
+    </div>
+  );
+
+  if (!usuario) return <LoginScreen onLogin={()=>{}} />;
+  return <AppInterna usuario={usuario} />;
 }
