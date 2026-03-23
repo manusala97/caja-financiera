@@ -463,6 +463,9 @@ function AppInterna({ usuario }) {
   useEffect(()=>{
     async function cargar() {
       try {
+        // Asegurar sesion activa antes de cargar datos
+        const {data:{session}} = await SB.auth.getSession();
+        if (!session) { setCargando(false); return; }
         // Dia de hoy - schema: id=fecha, caja_ini jsonb, abierta bool
         const {data:dia} = await SB.from("dias").select("*").eq("id",hoy).single();
         if (dia) {
@@ -532,7 +535,7 @@ function AppInterna({ usuario }) {
         }
         const {data:ciHoy,error:ciHoyErr} = await SB.from("cierres").select("id").eq("fecha",hoy).single();
         if (ciHoy&&!ciHoyErr) setCajaCerrada(true);
-      } catch(e) { console.error("Error carga:",e); }
+      } catch(e) { console.error("Error carga:",e); alert("Error cargando datos: "+e.message); }
       setCargando(false);
     }
     cargar();
