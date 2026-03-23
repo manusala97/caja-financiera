@@ -353,7 +353,79 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
   );
 }
 
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    if(!email||!pass) { setError("Completá email y contraseña"); return; }
+    setLoading(true); setError("");
+    const { error:err } = await SB.auth.signInWithPassword({ email, password:pass });
+    if (err) { setError("Email o contraseña incorrectos"); setLoading(false); }
+    else { onLogin(); }
+  }
+
+  return (
+    <div style={{minHeight:"100vh",background:"#07090f",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{width:"100%",maxWidth:380}}>
+        <div style={{textAlign:"center",marginBottom:36}}>
+          <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 8px 32px rgba(99,102,241,0.4)"}}>S</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>STS FINANCIERA</div>
+          <div style={{fontSize:12,color:"#475569",marginTop:4}}>Ingresá tus credenciales para continuar</div>
+        </div>
+        <form onSubmit={handleLogin} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,padding:28}}>
+          <div style={{marginBottom:16}}>
+            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Email</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+              placeholder="tu@email.com" autoComplete="email"
+              style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{marginBottom:20}}>
+            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contraseña</label>
+            <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
+              placeholder="••••••••" autoComplete="current-password"
+              style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          {error&&<div style={{background:"rgba(244,63,94,0.1)",border:"1px solid rgba(244,63,94,0.3)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#f87171",marginBottom:16}}>{error}</div>}
+          <button type="submit" disabled={loading} style={{width:"100%",padding:13,borderRadius:10,background:"linear-gradient(135deg,rgba(99,102,241,0.3),rgba(52,211,153,0.15))",border:"1px solid rgba(99,102,241,0.5)",color:"#a5b4fc",fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:loading?"not-allowed":"pointer",letterSpacing:1,transition:"all .2s",opacity:loading?0.6:1}}>
+            {loading?"INGRESANDO...":"INGRESAR"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function CajaFinanciera() {
+  const [usuario, setUsuario] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(()=>{
+    // Verificar si hay sesion activa
+    SB.auth.getSession().then(({data:{session}})=>{
+      setUsuario(session?.user||null);
+      setCheckingAuth(false);
+    });
+    // Escuchar cambios de auth
+    const {data:{subscription}} = SB.auth.onAuthStateChange((_,session)=>{
+      setUsuario(session?.user||null);
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
+
+  if (checkingAuth) return (
+    <div style={{minHeight:"100vh",background:"#07090f",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace"}}>S</div>
+        <div style={{color:"#334155",fontSize:12}}>Verificando sesión...</div>
+      </div>
+    </div>
+  );
+
+  if (!usuario) return <LoginScreen onLogin={()=>{}} />;
   const [pant, setPant] = useState("ape");
   const [toast, setToast] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -827,6 +899,11 @@ export default function CajaFinanciera() {
             <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",letterSpacing:.3,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>STS</div>
             <div style={{fontSize:9,color:"#475569",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
           </div>
+        </div>
+        <div style={{marginLeft:"auto",paddingRight:8}} className="hide-mobile">
+          <button onClick={async()=>{ await SB.auth.signOut(); }} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+            {usuario?.email?.split("@")[0]} · salir
+          </button>
         </div>
         <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
           {navItems.map(n=>(
@@ -1438,7 +1515,7 @@ export default function CajaFinanciera() {
 
             // Altura dinamica
             const sociosActivos=SOCIOS.filter(s=>COLS.some(m=>totSocio[s][m.id]!==0));
-            const H=420 + sociosActivos.length*70 + (difPend.length>0?80:0);
+            const H=380 + sociosActivos.length*70 + (difPend.length>0?80:0);
 
             const canvas=document.createElement("canvas");
             canvas.width=W*2; canvas.height=H*2;
@@ -1549,6 +1626,10 @@ export default function CajaFinanciera() {
               }
               y+=20;
             }
+
+            // Footer
+            hline(y,0.05); y+=14;
+            txt("Generado por STS Financiera  •  "+hoy,W/2,y,8,GRIS,"center");
 
             // Footer
             hline(y,0.05); y+=14;
