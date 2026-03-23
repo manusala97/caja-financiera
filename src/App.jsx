@@ -479,13 +479,14 @@ function AppInterna({ usuario }) {
           const po = ci._pos_ovr; if (po) setPosOvr(po);
         } else {
           // Dia nuevo: buscar ultimo cierre primero, si no hay buscar ultimo dia abierto
-          const {data:ultimoCierreData} = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single().catch(()=>({data:null}));
+          let ultimoCierreData = null;
+          try { const r = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single(); ultimoCierreData=r.data; } catch(e){}
           if (ultimoCierreData?.saldos_finales) {
             const sf = ultimoCierreData.saldos_finales;
             setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, sf[m.id]||""])));
           } else {
-            // Sin cierre previo: buscar ultimo dia y usar sus saldos finales
-            const {data:ultimoDia} = await SB.from("dias").select("*").order("id",{ascending:false}).limit(1).single().catch(()=>({data:null}));
+            let ultimoDia = null;
+            try { const r = await SB.from("dias").select("*").order("id",{ascending:false}).limit(1).single(); ultimoDia=r.data; } catch(e){}
             if (ultimoDia?.caja_ini?._saldos_finales) {
               const sf = ultimoDia.caja_ini._saldos_finales;
               setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, sf[m.id]||""])));
@@ -535,7 +536,7 @@ function AppInterna({ usuario }) {
         }
         const {data:ciHoy,error:ciHoyErr} = await SB.from("cierres").select("id").eq("fecha",hoy).single();
         if (ciHoy&&!ciHoyErr) setCajaCerrada(true);
-      } catch(e) { console.error("Error carga:",e); alert("Error cargando datos: "+e.message); }
+      } catch(e) { console.error("Error carga:",e); }
       setCargando(false);
     }
     cargar();
