@@ -1493,7 +1493,7 @@ function AppInterna({ usuario }) {
 
             // Altura dinamica
             const sociosActivos=SOCIOS.filter(s=>COLS.some(m=>totSocio[s][m.id]!==0));
-            const H=380 + sociosActivos.length*70 + (difPend.length>0?80:0);
+            const H=380 + sociosActivos.length*70 + (difPend.length>0?80:0) + (cierres.length>0?120:0);
 
             const canvas=document.createElement("canvas");
             canvas.width=W*2; canvas.height=H*2;
@@ -1605,9 +1605,59 @@ function AppInterna({ usuario }) {
               y+=20;
             }
 
+            // Evolucion historica
+            if(cierres.length>0){
+              hline(y,0.1); y+=20;
+              txt("EVOLUCION PATRIMONIAL",PAD,y,9,"#4ade80","left",true);
+              if(ultimoCierre?.total_usd){
+                txt("Ultimo cierre: "+fmtUSD(ultimoCierre.total_usd),W-PAD,y,10,"#4ade80","right",true);
+              }
+              if(varUSD!==null){
+                const varColor=varUSD>=0?VERDE:ROJO;
+                txt((varUSD>=0?"+":"")+fmtUSD(varUSD)+" vs anterior",W-PAD,y+14,9,varColor,"right",true);
+              }
+              y+=22;
+
+              // Ultimos 3 cierres como tabla
+              const ultCierres=[...cierres].reverse().slice(0,3);
+              ultCierres.forEach((ci,i)=>{
+                const bg=i%2===0?"rgba(255,255,255,0.02)":"rgba(255,255,255,0.04)";
+                rect(PAD,y-2,W-PAD*2,22,bg,4);
+                txt(fmtFecha(ci.fecha),PAD+8,y+12,9,DIM,"left");
+                txt(ci.total_usd?fmtUSD(ci.total_usd):"—",W-PAD-8,y+12,10,ci.total_usd?"#4ade80":GRIS,"right",true);
+                y+=24;
+              });
+              y+=6;
+            }
+
             // Footer
             hline(y,0.05); y+=14;
             txt("Generado por STS Financiera  •  "+hoy,W/2,y,8,GRIS,"center");
+
+            // Evolucion historica
+            if(cierres.length>0){
+              hline(y,0.1); y+=20;
+              txt("EVOLUCION PATRIMONIAL",PAD,y,9,"#4ade80","left",true);
+              if(ultimoCierre?.total_usd){
+                txt("Ultimo cierre: "+fmtUSD(ultimoCierre.total_usd),W-PAD,y,10,"#4ade80","right",true);
+              }
+              if(varUSD!==null){
+                const varColor=varUSD>=0?VERDE:ROJO;
+                txt((varUSD>=0?"+":"")+fmtUSD(varUSD)+" vs anterior",W-PAD,y+14,9,varColor,"right",true);
+              }
+              y+=22;
+
+              // Ultimos 3 cierres como tabla
+              const ultCierres=[...cierres].reverse().slice(0,3);
+              ultCierres.forEach((ci,i)=>{
+                const bg=i%2===0?"rgba(255,255,255,0.02)":"rgba(255,255,255,0.04)";
+                rect(PAD,y-2,W-PAD*2,22,bg,4);
+                txt(fmtFecha(ci.fecha),PAD+8,y+12,9,DIM,"left");
+                txt(ci.total_usd?fmtUSD(ci.total_usd):"—",W-PAD-8,y+12,10,ci.total_usd?"#4ade80":GRIS,"right",true);
+                y+=24;
+              });
+              y+=6;
+            }
 
             // Footer
             hline(y,0.05); y+=14;
