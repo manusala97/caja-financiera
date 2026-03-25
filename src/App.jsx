@@ -454,6 +454,7 @@ function AppInterna({ usuario }) {
   const [editandoCliente, setEditandoCliente] = useState(null);
   const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
   const [editandoMov, setEditandoMov] = useState(null);
+  const [filtroOps, setFiltroOps] = useState("todas"); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
@@ -1056,10 +1057,21 @@ function AppInterna({ usuario }) {
                   );
                 })}
               </div>
-              <div style={{fontSize:10,letterSpacing:3,color:"#4b5563",marginBottom:8}}>MOVIMIENTOS HOY ({opsHoy.length})</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <div style={{fontSize:10,letterSpacing:3,color:"#4b5563"}}>MOVIMIENTOS HOY ({opsHoy.length})</div>
+                <div style={{display:"flex",gap:4}}>
+                  {[["todas","Todas"],["ops","Operaciones"],["ajustes","Ajustes"]].map(([v,lbl])=>(
+                    <button key={v} onClick={()=>setFiltroOps(v)} style={{padding:"3px 8px",borderRadius:5,background:filtroOps===v?"rgba(255,255,255,0.08)":"transparent",border:"1px solid "+(filtroOps===v?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)"),color:filtroOps===v?"#e2e8f0":"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div style={{maxHeight:420,overflowY:"auto"}}>
                 {opsHoy.length===0&&<div style={{color:"#374151"}}>Sin operaciones</div>}
-                {[...opsHoy].reverse().map(op=>renderOpRow(op,false,!cajaCerrada))}
+                {[...opsHoy].reverse()
+                  .filter(op=>filtroOps==="todas"?true:filtroOps==="ajustes"?op.tipo==="ajuste":op.tipo!=="ajuste")
+                  .map(op=>renderOpRow(op,false,!cajaCerrada))}
               </div>
             </div>
             {!cajaCerrada?(
