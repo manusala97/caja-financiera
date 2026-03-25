@@ -175,7 +175,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
   const calcDif = useMemo(()=>{
     const n=parse(f.dn),tm=parse(f.dtm),tg=parse(f.dtg),dias=diasEntre(f.dfr,f.dfa);
     if (!n||!dias) return null;
-    const postG=n*(1-tg/100),tasaD=(tm/360)*dias,mFinal=postG*(1-tasaD);
+    const postG=n*(1-tg/100),tasaD=(tm/100/360)*dias,mFinal=postG*(1-tasaD);
     return {n,postG,tasaD:tasaD*100,mFinal,ganancia:n-mFinal,dias};
   },[f.dn,f.dtm,f.dtg,f.dfr,f.dfa]);
 
@@ -545,7 +545,7 @@ function AppInterna({ usuario }) {
   const calcDif = useMemo(()=>{
     const n=parse(form.dn),tm=parse(form.dtm),tg=parse(form.dtg),dias=diasEntre(form.dfr,form.dfa);
     if (!n||!dias) return null;
-    const postG=n*(1-tg/100),tasaD=(tm/360)*dias,mFinal=postG*(1-tasaD);
+    const postG=n*(1-tg/100),tasaD=(tm/100/360)*dias,mFinal=postG*(1-tasaD);
     return {n,tm,tg,dias,postG,tasaD:tasaD*100,mFinal,ganancia:n-mFinal};
   },[form.dn,form.dtm,form.dtg,form.dfr,form.dfa]);
 
