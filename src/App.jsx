@@ -509,10 +509,10 @@ function AppInterna({ usuario }) {
         const {data:cls} = await SB.from("clientes").select("*");
         const {data:movs} = await SB.from("movimientos_cc").select("*");
         if (cls) setClientes(cls.map(c=>({
-          id:c.id, nombre:c.nombre, apellido:c.apellido,
-          movimientos:(movs||[]).filter(m=>m.cliente_id===c.id).map(m=>({
+          id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
+          movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
-            moneda:m.moneda, monto:m.monto, nota:m.nota
+            moneda:m.moneda, monto:Number(m.monto), nota:m.nota
           }))
         })));
         // Facturacion
@@ -572,12 +572,15 @@ function AppInterna({ usuario }) {
   },[trade]);
 
   const saldoCC = useCallback((c)=>{
-    const s=Object.fromEntries(MONEDAS.map(m=>[m.id,0]));
-    // ingreso = el cliente me dio plata = me debe (positivo)
-    // retiro = yo le di plata al cliente = le debo (negativo)
+    const s={"USD":0,"ARS":0,"BRL":0,"GBP":0,"EUR":0,"USDT":0};
+    // ingreso = recibo plata del cliente = le debo (negativo)
+    // retiro = mando plata al cliente = me debe (positivo)
     (c?.movimientos||[]).forEach(mv=>{
+      if(!mv||!mv.moneda||!mv.monto) return;
+      const moneda=String(mv.moneda).trim().toUpperCase();
+      const monto=Number(mv.monto)||0;
       const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
-      s[mv.moneda]=(s[mv.moneda]||0)+(ing?-mv.monto:mv.monto);
+      if(s[moneda]!==undefined) s[moneda]+=(ing?-monto:monto);
     });
     return s;
   },[]);
@@ -1288,7 +1291,7 @@ function AppInterna({ usuario }) {
                         <button onClick={e=>{e.stopPropagation();eliminarCliente(c.id);}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
                       </div>
                     </div>
-                    <div style={{cursor:"pointer"}} onClick={()=>{setClienteActivo(c.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:""});}}>
+                    <div style={{cursor:"pointer"}} onClick={()=>{setClienteActivo(c.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:"",impactaCaja:true});}}>
                       <div style={{fontWeight:700,marginBottom:5}}>{c.nombre} {c.apellido}</div>
                       {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
                         return <div key={m.id} style={{fontSize:11,color:v>0?"#4ade80":"#f87171",marginBottom:2}}>{v>0?"Me debe":"Le debo"} {m.simbolo}{fmt(Math.abs(v))} {m.id}</div>;})}
