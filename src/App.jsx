@@ -454,7 +454,8 @@ function AppInterna({ usuario }) {
   const [editandoCliente, setEditandoCliente] = useState(null);
   const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
   const [editandoMov, setEditandoMov] = useState(null);
-  const [filtroOps, setFiltroOps] = useState("todas"); // "todas" | "ops" | "ajustes"
+  const [filtroOps, setFiltroOps] = useState("todas");
+  const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
@@ -1354,8 +1355,81 @@ function AppInterna({ usuario }) {
                     {labelBtn[formCC.tipo]}
                   </button>
                 </Card>
-                <Card sx={{maxHeight:500,overflowY:"auto"}}>
-                  <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>HISTORIAL ({c.movimientos.length})</div>
+                <Card sx={{maxHeight:600,overflowY:"auto"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={{fontSize:10,letterSpacing:3,color:"#6b7280"}}>HISTORIAL ({c.movimientos.length})</div>
+                    <button onClick={()=>setExportCC(e=>({...e,mostrando:!e.mostrando}))} style={{padding:"4px 10px",borderRadius:6,background:"rgba(99,102,241,0.1)",border:"1px solid rgba(99,102,241,0.3)",color:"#a5b4fc",fontFamily:"inherit",fontSize:10,fontWeight:600,cursor:"pointer"}}>
+                      ⬇ Exportar PDF
+                    </button>
+                  </div>
+                  {exportCC.mostrando&&(
+                    <div style={{background:"rgba(99,102,241,0.05)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:8,padding:12,marginBottom:12}}>
+                      <div style={{fontSize:9,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RANGO DE FECHAS</div>
+                      <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+                        <div style={{flex:1}}>
+                          <Lbl>Desde</Lbl>
+                          <Inp type="date" value={exportCC.desde} onChange={e=>setExportCC(x=>({...x,desde:e.target.value}))}/>
+                        </div>
+                        <div style={{flex:1}}>
+                          <Lbl>Hasta</Lbl>
+                          <Inp type="date" value={exportCC.hasta} onChange={e=>setExportCC(x=>({...x,hasta:e.target.value}))}/>
+                        </div>
+                        <button onClick={()=>{
+                          // Filtrar movimientos por rango
+                          const movsFiltrados=c.movimientos.filter(mv=>{
+                            if(!mv.fecha) return true;
+                            if(exportCC.desde&&mv.fecha<exportCC.desde) return false;
+                            if(exportCC.hasta&&mv.fecha>exportCC.hasta) return false;
+                            return true;
+                          });
+                          // Generar HTML para imprimir
+                          const monedas=[...new Set(movsFiltrados.map(mv=>mv.moneda))];
+                          let html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>CC ${c.nombre} ${c.apellido}</title><style>
+                            body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:30px;}
+                            h1{font-size:18px;margin-bottom:4px;}
+                            h2{font-size:13px;color:#555;margin-top:20px;margin-bottom:8px;border-bottom:1px solid #ddd;padding-bottom:4px;}
+                            .rango{font-size:11px;color:#888;margin-bottom:20px;}
+                            table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+                            th{background:#f5f5f5;text-align:left;padding:6px 8px;font-size:10px;border-bottom:2px solid #ddd;}
+                            td{padding:5px 8px;border-bottom:1px solid #eee;font-size:11px;}
+                            .debe{color:#16a34a;font-weight:700;}
+                            .haber{color:#dc2626;font-weight:700;}
+                            .saldo-pos{color:#16a34a;font-weight:700;}
+                            .saldo-neg{color:#dc2626;font-weight:700;}
+                            .saldo-final{margin-top:8px;text-align:right;font-size:13px;font-weight:700;}
+                            .footer{margin-top:30px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
+                          </style></head><body>`;
+                          html+=`<h1>Cuenta Corriente — ${c.nombre} ${c.apellido}</h1>`;
+                          html+=`<div class="rango">Período: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS Financiera</div>`;
+                          monedas.forEach(monId=>{
+                            const mon=MONEDAS.find(m=>m.id===monId);
+                            const movsMon=movsFiltrados.filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
+                            let saldo=0;
+                            html+=`<h2>${monId}</h2><table><thead><tr><th>FECHA</th><th>CONCEPTO</th><th>NOTA</th><th style="text-align:right">DEBE</th><th style="text-align:right">HABER</th><th style="text-align:right">SALDO</th></tr></thead><tbody>`;
+                            movsMon.forEach(mv=>{
+                              const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+                              saldo+=(ing?-mv.monto:mv.monto);
+                              const debe=!ing?`<span class="debe">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
+                              const haber=ing?`<span class="haber">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
+                              const sClass=saldo>=0?"saldo-pos":"saldo-neg";
+                              const labelMap={ingreso_transf:"Me transfirio",ingreso_dep:"Me deposito",retiro_transf:"Le transferi",retiro_efectivo:"Retire efectivo"};
+                              html+=`<tr><td>${mv.fecha||""}</td><td>${labelMap[mv.tipo]||mv.tipo}</td><td style="color:#888">${mv.nota||""}</td><td style="text-align:right">${debe}</td><td style="text-align:right">${haber}</td><td style="text-align:right" class="${sClass}">${saldo>=0?"+":""}${mon?.simbolo||""}${saldo.toLocaleString("es-AR")}</td></tr>`;
+                            });
+                            const sClass=saldo>=0?"saldo-pos":"saldo-neg";
+                            html+=`</tbody></table><div class="saldo-final ${sClass}">Saldo final: ${saldo>=0?"Me debe":"Le debo"} ${mon?.simbolo||""}${Math.abs(saldo).toLocaleString("es-AR")} ${monId}</div>`;
+                          });
+                          html+=`<div class="footer">Generado por STS Financiera · ${hoy}</div></body></html>`;
+                          const w=window.open("","_blank");
+                          w.document.write(html);
+                          w.document.close();
+                          setTimeout(()=>w.print(),500);
+                        }} style={{padding:"8px 14px",borderRadius:6,background:"rgba(99,102,241,0.2)",border:"1px solid #6366f1",color:"#a5b4fc",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          Generar PDF
+                        </button>
+                      </div>
+                      <div style={{fontSize:9,color:"#334155",marginTop:6}}>Dejá vacío para exportar todo el historial</div>
+                    </div>
+                  )}
                   {editandoMov&&(
                     <div style={{background:"#0a1a2e",border:"1px solid #38bdf833",borderRadius:8,padding:10,marginBottom:12}}>
                       <div style={{fontSize:9,color:"#38bdf8",letterSpacing:2,marginBottom:8}}>EDITAR MOVIMIENTO</div>
