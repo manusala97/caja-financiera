@@ -1875,30 +1875,31 @@ function AppInterna({ usuario }) {
                     {clientes.map((c,i)=>(
                       <tr key={c.id}
                         draggable
-                        onDragStart={()=>{ dragSrcId.current=c.id; }}
-                        onDragOver={e=>{ e.preventDefault(); setDragOverId(c.id); }}
-                        onDragLeave={()=>setDragOverId(null)}
-                        onDrop={async()=>{
+                        onDragStart={e=>{ e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain", String(c.id)); dragSrcId.current=c.id; }}
+                        onDragOver={e=>{ e.preventDefault(); e.dataTransfer.dropEffect="move"; setDragOverId(c.id); }}
+                        onDragLeave={e=>{ if(!e.currentTarget.contains(e.relatedTarget)) setDragOverId(null); }}
+                        onDragEnd={()=>{ setDragOverId(null); dragSrcId.current=null; }}
+                        onDrop={e=>{
+                          e.preventDefault();
+                          const srcId=Number(e.dataTransfer.getData("text/plain"));
                           setDragOverId(null);
-                          if(!dragSrcId.current||dragSrcId.current===c.id) return;
-                          // Reordenar en el estado
+                          if(!srcId||srcId===c.id) return;
                           setClientes(prev=>{
                             const arr=[...prev];
-                            const fromIdx=arr.findIndex(x=>x.id===dragSrcId.current);
+                            const fromIdx=arr.findIndex(x=>x.id===srcId);
                             const toIdx=arr.findIndex(x=>x.id===c.id);
+                            if(fromIdx<0||toIdx<0) return prev;
                             const [moved]=arr.splice(fromIdx,1);
                             arr.splice(toIdx,0,moved);
-                            // Guardar orden en Supabase
                             arr.forEach((cl,idx)=>{
                               SB.from("clientes").update({orden:idx}).eq("id",cl.id);
                             });
                             return arr;
                           });
-                          dragSrcId.current=null;
                         }}
-                        style={{background:dragOverId===c.id?"rgba(99,102,241,0.1)":i%2===0?"#0d0d0d":"#111",cursor:"grab",transition:"background 0.1s"}}>
+                        style={{background:dragOverId===c.id?"rgba(99,102,241,0.15)":i%2===0?"#0d0d0d":"#111",cursor:"grab",transition:"background 0.1s",outline:dragOverId===c.id?"1px solid rgba(99,102,241,0.5)":"none"}}>
                         <td style={{padding:"8px 10px",fontWeight:600}}>
-                          <span style={{color:"#334155",marginRight:8,fontSize:12}}>⠿</span>
+                          <span style={{color:"#334155",marginRight:8,fontSize:12,userSelect:"none"}}>⠿</span>
                           {c.nombre} {c.apellido}
                         </td>
                         {MONEDAS.map(m=>{ const key=c.id+"_"+m.id,val=getS(c.id,m.id),isEd=editCell?.cId===c.id&&editCell?.mId===m.id;
