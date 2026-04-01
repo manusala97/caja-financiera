@@ -278,7 +278,7 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
     if (!parse(cotiz.ARS)) return null;
     const tots=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
     const difPend=(diferidos||[]).filter(d=>!d.cobrado);
-    const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+    const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
     const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)]));
     return {
       totalUSD: calcTotalUSD(patrimonioSaldos, cotiz),
@@ -504,7 +504,8 @@ function AppInterna({ usuario }) {
           id:d.id, hora:d.hora, fecha:d.fecha, cliente:d.cliente,
           nominal:d.nominal, mFinal:d.m_final, ganancia:d.ganancia,
           fechaAcr:d.fecha_acr, tm:d.tm, dias:d.dias, cobrado:d.cobrado,
-          nota:d.nota||"", manual:d.manual||false
+          nota:d.nota||"", manual:d.manual||false,
+          fechaCobro:d.fecha_cobro||"", tasaEndoso:d.tasa_endoso||""
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
@@ -654,7 +655,7 @@ function AppInterna({ usuario }) {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
       ns.ARS-=calcDif.mFinal;
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
-      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,tm:dif.tm,dias:dif.dias,cobrado:false}).select().single();
+      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
       if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
@@ -929,7 +930,7 @@ function AppInterna({ usuario }) {
 
         {pant==="home"&&(()=>{
           const difPend=diferidos.filter(d=>!d.cobrado);
-          const totalCheques=difPend.reduce((s,d)=>s+d.nominal,0);
+          const totalCheques=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
           const vencHoy=difPend.filter(d=>diasEntre(hoy,d.fechaAcr)===0).length;
           const vencProx=difPend.filter(d=>{const dr=diasEntre(hoy,d.fechaAcr);return dr>0&&dr<=3;}).length;
           const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,cl)=>s+saldoCC(cl)[m.id],0)]));
@@ -1214,19 +1215,48 @@ function AppInterna({ usuario }) {
               const dr=diasEntre(hoy,d.fechaAcr),venc=dr===0,urg=dr<=3&&!venc;
               return (
                 <Card key={d.id} sx={{marginBottom:9,border:"1px solid "+(venc?"#f43f5e":urg?"#f59e0b":"#c084fc33")}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
                     <div style={{flex:1}}>
                       <div style={{display:"flex",gap:7,marginBottom:5,alignItems:"center",flexWrap:"wrap"}}>
                         {d.manual&&<span style={{fontSize:9,color:"#c084fc",background:"#c084fc11",padding:"1px 6px",borderRadius:4,border:"1px solid #c084fc33"}}>MANUAL</span>}
                         {venc&&<span style={{fontSize:10,color:"#f43f5e",fontWeight:700}}>VENCIDO</span>}
                         {urg&&<span style={{fontSize:10,color:"#f59e0b",fontWeight:700}}>VENCE EN {dr}d</span>}
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#6b7280"}}>Acredita {d.fechaAcr} - {dr}d</span>}
+                        {d.cliente&&<span style={{fontSize:10,color:"#9ca3af"}}>👤 {d.cliente}</span>}
                       </div>
-                      <div style={{fontSize:14,fontWeight:700}}>${fmt(d.nominal)} <span style={{fontSize:11,color:"#6b7280"}}>nominal</span></div>
-                      {d.manual
-                        ? <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>{d.cliente?" 👤 "+d.cliente:""}{d.nota?" - "+d.nota:""}</div>
-                        : <div style={{fontSize:11,color:"#6b7280",marginTop:2}}>Pagaste ${fmt(d.mFinal)} - Ganancia ${fmt(d.ganancia)} - {d.tm}%{d.cliente?" - 👤 "+d.cliente:""}</div>
-                      }
+                      <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap"}}>
+                        <div>
+                          <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>${fmt(d.mFinal||d.nominal)}</span>
+                          <span style={{fontSize:10,color:"#6b7280",marginLeft:4}}>a cobrar</span>
+                        </div>
+                        {!d.manual&&<div>
+                          <span style={{fontSize:11,color:"#6b7280"}}>${fmt(d.nominal)}</span>
+                          <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>nominal</span>
+                        </div>}
+                        {!d.manual&&d.ganancia>0&&<div>
+                          <span style={{fontSize:11,color:"#4ade80"}}>+${fmt(d.ganancia)}</span>
+                          <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>ganancia</span>
+                        </div>}
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap",alignItems:"center"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{fontSize:9,color:"#4b5563"}}>COBRO:</span>
+                          <input type="date" value={d.fechaCobro||""} onChange={async e=>{
+                            const val=e.target.value;
+                            await SB.from("diferidos").update({fecha_cobro:val}).eq("id",d.id);
+                            setDiferidos(p=>p.map(x=>x.id!==d.id?x:{...x,fechaCobro:val}));
+                          }} style={{background:"transparent",border:"1px solid #1f2937",borderRadius:4,padding:"2px 6px",color:"#9ca3af",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}/>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{fontSize:9,color:"#4b5563"}}>TASA ENDOSO:</span>
+                          <input type="number" placeholder="0" value={d.tasaEndoso||""} onChange={async e=>{
+                            const val=e.target.value;
+                            await SB.from("diferidos").update({tasa_endoso:val}).eq("id",d.id);
+                            setDiferidos(p=>p.map(x=>x.id!==d.id?x:{...x,tasaEndoso:val}));
+                          }} style={{background:"transparent",border:"1px solid #1f2937",borderRadius:4,padding:"2px 6px",color:"#9ca3af",fontFamily:"inherit",fontSize:10,width:50}}/>
+                          <span style={{fontSize:9,color:"#4b5563"}}>%</span>
+                        </div>
+                      </div>
                     </div>
                     <button onClick={()=>cobrarDif(d.id)} style={{padding:"7px 12px",borderRadius:6,background:"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Cobrar</button>
                   </div>
@@ -1616,7 +1646,7 @@ function AppInterna({ usuario }) {
 
           function generarImagen() {
             const difPend=diferidos.filter(d=>!d.cobrado);
-            const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+            const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
             const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
             const COLS=MONEDAS.filter(m=>patrimonioSaldos[m.id]!==0||saldos[m.id]!==0||tots[m.id]!==0);
             const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b","STS":"#e879f9"};
@@ -1854,7 +1884,7 @@ function AppInterna({ usuario }) {
                   <tfoot>
                     {(()=>{
                       const difPend=diferidos.filter(d=>!d.cobrado);
-                      const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+                      const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
                       // Patrimonio total = caja fisica + CCs + cheques a cobrar
                       const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
                       return (<>
@@ -2144,7 +2174,7 @@ function AppInterna({ usuario }) {
             <div style={{fontSize:10,letterSpacing:3,color:"#94a3b8",marginBottom:18}}>CIERRE - {fechaLarga}</div>
             {(()=>{
               const difPend=diferidos.filter(d=>!d.cobrado);
-              const totalDif=difPend.reduce((s,d)=>s+d.nominal,0);
+              const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
               const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+saldoCC(c)[m.id],0)]));
               const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
               return (
