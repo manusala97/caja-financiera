@@ -1255,6 +1255,10 @@ function AppInterna({ usuario }) {
                             setDiferidos(p=>p.map(x=>x.id!==d.id?x:{...x,tasaEndoso:val}));
                           }} style={{background:"transparent",border:"1px solid #1f2937",borderRadius:4,padding:"2px 6px",color:"#9ca3af",fontFamily:"inherit",fontSize:10,width:50}}/>
                           <span style={{fontSize:9,color:"#4b5563"}}>%</span>
+                          {d.tasaEndoso&&parse(d.tasaEndoso)>0&&(()=>{
+                            const neto=(d.mFinal||d.nominal)*(1-parse(d.tasaEndoso)/100);
+                            return <span style={{fontSize:10,color:"#4ade80",fontWeight:700,marginLeft:6}}>→ ${fmt(neto)} neto</span>;
+                          })()}
                         </div>
                       </div>
                     </div>
