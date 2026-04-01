@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SB = createClient(
@@ -455,6 +455,8 @@ function AppInterna({ usuario }) {
   const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
   const [editandoMov, setEditandoMov] = useState(null);
   const [filtroOps, setFiltroOps] = useState("todas");
+  const [dragOverId, setDragOverId] = useState(null);
+  const dragSrcId = useRef(null);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -510,7 +512,7 @@ function AppInterna({ usuario }) {
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
         const {data:movs} = await SB.from("movimientos_cc").select("*");
-        if (cls) setClientes(cls.map(c=>({
+        if (cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
           id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
@@ -1871,8 +1873,34 @@ function AppInterna({ usuario }) {
                   </tr></thead>
                   <tbody>
                     {clientes.map((c,i)=>(
-                      <tr key={c.id} style={{background:i%2===0?"#0d0d0d":"#111"}}>
-                        <td style={{padding:"8px 10px",fontWeight:600}}>{c.nombre} {c.apellido}</td>
+                      <tr key={c.id}
+                        draggable
+                        onDragStart={()=>{ dragSrcId.current=c.id; }}
+                        onDragOver={e=>{ e.preventDefault(); setDragOverId(c.id); }}
+                        onDragLeave={()=>setDragOverId(null)}
+                        onDrop={async()=>{
+                          setDragOverId(null);
+                          if(!dragSrcId.current||dragSrcId.current===c.id) return;
+                          // Reordenar en el estado
+                          setClientes(prev=>{
+                            const arr=[...prev];
+                            const fromIdx=arr.findIndex(x=>x.id===dragSrcId.current);
+                            const toIdx=arr.findIndex(x=>x.id===c.id);
+                            const [moved]=arr.splice(fromIdx,1);
+                            arr.splice(toIdx,0,moved);
+                            // Guardar orden en Supabase
+                            arr.forEach((cl,idx)=>{
+                              SB.from("clientes").update({orden:idx}).eq("id",cl.id);
+                            });
+                            return arr;
+                          });
+                          dragSrcId.current=null;
+                        }}
+                        style={{background:dragOverId===c.id?"rgba(99,102,241,0.1)":i%2===0?"#0d0d0d":"#111",cursor:"grab",transition:"background 0.1s"}}>
+                        <td style={{padding:"8px 10px",fontWeight:600}}>
+                          <span style={{color:"#334155",marginRight:8,fontSize:12}}>⠿</span>
+                          {c.nombre} {c.apellido}
+                        </td>
                         {MONEDAS.map(m=>{ const key=c.id+"_"+m.id,val=getS(c.id,m.id),isEd=editCell?.cId===c.id&&editCell?.mId===m.id;
                           return (<td key={m.id} style={{textAlign:"right",padding:"8px 10px",cursor:"pointer"}} onClick={()=>{if(!isEd){setEditCell({cId:c.id,mId:m.id});setEditCellV(String(val));}}}>
                             {isEd?(<input autoFocus type="number" value={editCellV} onChange={e=>setEditCellV(e.target.value)}
