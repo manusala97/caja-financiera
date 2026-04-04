@@ -678,6 +678,16 @@ function AppInterna({ usuario }) {
             if (d.impactaCaja) {
               tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
             }
+            // Acreditar moneda base en CC del cliente
+            if (d.acreditarBase) {
+              const montoBase=m; // monto en moneda base (ej: USD)
+              // En venta: le damos USD al cliente → retiro_transf de USD en su CC (nos debe USD → positivo para nosotros)
+              // En compra: recibimos USD del cliente → ingreso_transf de USD en su CC (le debemos USD → negativo para nosotros)  
+              const tipoMovBase=tipo==="venta"?"ingreso_transf":"retiro_transf";
+              const mvBase={id:Date.now()+cId+1,hora:horaCC,fecha:hoy,tipo:tipoMovBase,moneda:form.moneda,monto:montoBase,nota:"Op. vinculada - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(montoBase)+" "+form.moneda};
+              await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mvBase.hora,fecha:mvBase.fecha,tipo:mvBase.tipo,moneda:mvBase.moneda,monto:mvBase.monto,nota:mvBase.nota});
+              setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mvBase]}));
+            }
           }
         }
       } else {
@@ -1239,6 +1249,24 @@ function AppInterna({ usuario }) {
                                         ⇄ Comp.
                                       </button>
                                     </div>
+                                    {/* Acreditar moneda base en CC */}
+                                    {(()=>{
+                                      const salMonBase=salCC?salCC[form.moneda]:0;
+                                      return (
+                                        <div onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,acreditarBase:!x.acreditarBase}))}
+                                          style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"3px 7px",borderRadius:5,border:"1px solid "+(d.acreditarBase?"#f59e0b44":"#1f2937"),background:d.acreditarBase?"rgba(245,158,11,0.08)":"transparent"}}>
+                                          <div style={{width:10,height:10,borderRadius:2,border:"2px solid "+(d.acreditarBase?"#f59e0b":"#475569"),background:d.acreditarBase?"#f59e0b":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                            {d.acreditarBase&&<span style={{color:"#000",fontSize:7,fontWeight:900}}>✓</span>}
+                                          </div>
+                                          <span style={{fontSize:9,color:d.acreditarBase?"#f59e0b":"#475569",whiteSpace:"nowrap"}}>
+                                            +{form.moneda} CC
+                                          </span>
+                                          {salMonBase!==0&&<span style={{fontSize:8,color:salMonBase>0?"#4ade80":"#f87171"}}>
+                                            ({salMonBase>0?"me debe":"le debo"} {fmt(Math.abs(salMonBase))})
+                                          </span>}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 );
                               })()}
