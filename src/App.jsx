@@ -666,9 +666,9 @@ function AppInterna({ usuario }) {
             const cId=Number(d.tipo);
             const cliente=clientes.find(cl=>cl.id===cId);
             if(!cliente) continue;
-            // En venta: recibimos moneda2 de clientes → ingreso para nosotros de parte del cliente
-            // En compra: damos moneda2 a clientes → retiro para nosotros
-            const tipoMov=tipo==="venta"?"ingreso_transf":"retiro_transf";
+            // Venta de USD: cliente me transfiere ARS → él me debe (retiro_transf = yo le mandé, positivo para mí)
+            // Compra de USD: yo/tercero le manda ARS → le debo (ingreso_transf = recibí plata, negativo para mí)
+            const tipoMov=tipo==="venta"?"retiro_transf":"ingreso_transf";
             const horaCC=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
             const mv={id:Date.now()+cId,hora:horaCC,fecha:hoy,tipo:tipoMov,moneda:form.moneda2,monto:dm,nota:form.nota||""};
             await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota});
