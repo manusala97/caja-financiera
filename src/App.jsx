@@ -745,10 +745,7 @@ function AppInterna({ usuario }) {
     });
     // Confirm con detalle de qué se va a borrar
     const detalleCC=movsVinculados.length>0
-      ? "
-
-Tambien se van a borrar movimientos CC de:
-"+[...new Set(movsVinculados.map(x=>x.nombre))].join(", ")
+      ? "\n\nTambien se van a borrar movimientos CC de:\n"+[...new Set(movsVinculados.map(x=>x.nombre))].join(", ")
       : "";
     if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
 
