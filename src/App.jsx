@@ -734,7 +734,24 @@ function AppInterna({ usuario }) {
   }
 
   async function eliminarOpHoy(op) {
-    if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir.")) return;
+    // Buscar movimientos CC vinculados a esta operacion (por nota "Op. vinculada")
+    const movsVinculados=[];
+    clientes.forEach(cl=>{
+      cl.movimientos.forEach(mv=>{
+        if(mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora){
+          movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+cl.apellido});
+        }
+      });
+    });
+    // Confirm con detalle de qué se va a borrar
+    const detalleCC=movsVinculados.length>0
+      ? "
+
+Tambien se van a borrar movimientos CC de:
+"+[...new Set(movsVinculados.map(x=>x.nombre))].join(", ")
+      : "";
+    if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
+
     // Revertir el impacto en saldos
     const ns={...saldos};
     const t=op.tipo;
@@ -745,12 +762,18 @@ function AppInterna({ usuario }) {
     else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
     else if (t==="ajuste") { ns[op.moneda]-=op.delta; }
     else if (t==="cobro_dif") { ns[op.moneda]-=op.monto; }
-    // cc_ingreso/retiro no impactan saldo fisico
     setSaldos(ns);
     await SB.from("operaciones").delete().eq("id",op.id);
     setOps(p=>p.filter(o=>o.id!==op.id));
+
+    // Borrar movimientos CC vinculados
+    for(const mv of movsVinculados){
+      await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
+      setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
+    }
+
     await guardarDia(ns,null,null);
-    notify("Eliminada y saldo revertido");
+    notify("Eliminada"+(movsVinculados.length>0?" y movimientos CC revertidos":"")+" ✓");
   }
 
   async function cobrarDif(id) {
