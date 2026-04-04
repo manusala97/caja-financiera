@@ -693,7 +693,15 @@ function AppInterna({ usuario }) {
       } else {
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
-      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
+      // Calcular cuanto impacto real hubo en moneda2 (caja fisica)
+      let impactoReal2=m2; // por defecto todo
+      if(mostrarDesglose&&desglose.length>0){
+        impactoReal2=desglose.reduce((s,d)=>{
+          if(d.tipo==="efectivo") return s+parse(d.monto);
+          return s+(d.impactaCaja?parse(d.monto):0);
+        },0);
+      }
+      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,impactoReal2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
       setF("monto",""); setF("monto2",""); setF("cotizacion","");
       setDesglose([]); setMostrarDesglose(false);
     } else if (tipo==="cheque_dia") {
@@ -752,8 +760,9 @@ function AppInterna({ usuario }) {
     // Revertir el impacto en saldos
     const ns={...saldos};
     const t=op.tipo;
-    if (t==="compra")    { ns[op.moneda]-=op.monto; ns[op.moneda2]+=op.monto2; }
-    else if (t==="venta"){ ns[op.moneda]+=op.monto; ns[op.moneda2]-=op.monto2; }
+    const imp2=op.impactoReal2!==undefined?op.impactoReal2:op.monto2;
+    if (t==="compra")    { ns[op.moneda]-=op.monto; ns[op.moneda2]+=imp2; }
+    else if (t==="venta"){ ns[op.moneda]+=op.monto; ns[op.moneda2]-=imp2; }
     else if (t==="cheque_dia") { ns.ARS-=op.cn; }
     else if (t==="cheque_dif") { ns.ARS+=op.montoFinal||op.monto; }
     else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
