@@ -457,6 +457,8 @@ function AppInterna({ usuario }) {
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
+  const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", impactaCaja:true}]
+  const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -644,9 +646,44 @@ function AppInterna({ usuario }) {
     if (tipo==="compra"||tipo==="venta") {
       const m=parse(form.monto),m2=parse(form.monto2);
       if (!m||!m2) { notify("Ingresa montos validos",false); return; }
-      tipo==="compra"?(ns[form.moneda]+=m,ns[form.moneda2]-=m2):(ns[form.moneda]-=m,ns[form.moneda2]+=m2);
+      // Validar desglose si está activo
+      if (mostrarDesglose&&desglose.length>0) {
+        const asignado=desglose.reduce((s,d)=>s+parse(d.monto),0);
+        if (Math.abs(asignado-m2)>1) { notify("El desglose no cuadra con el total",false); return; }
+      }
+      // Impacto en caja base (moneda principal)
+      tipo==="compra"?(ns[form.moneda]+=m):(ns[form.moneda]-=m);
+      // Si hay desglose, procesar cada línea para la moneda2
+      // Si no hay desglose, impacto normal en caja
+      if (mostrarDesglose&&desglose.length>0) {
+        for (const d of desglose) {
+          const dm=parse(d.monto); if(!dm) continue;
+          if (d.tipo==="efectivo") {
+            // Efectivo siempre impacta caja
+            tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
+          } else {
+            // Cliente CC
+            const cId=Number(d.tipo);
+            const cliente=clientes.find(cl=>cl.id===cId);
+            if(!cliente) continue;
+            // En venta: recibimos moneda2 de clientes → ingreso para nosotros de parte del cliente
+            // En compra: damos moneda2 a clientes → retiro para nosotros
+            const tipoMov=tipo==="venta"?"ingreso_transf":"retiro_transf";
+            const horaCC=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+            const mv={id:Date.now()+cId,hora:horaCC,fecha:hoy,tipo:tipoMov,moneda:form.moneda2,monto:dm,nota:form.nota||""};
+            await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota});
+            setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+            if (d.impactaCaja) {
+              tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
+            }
+          }
+        }
+      } else {
+        tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
+      }
       opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
       setF("monto",""); setF("monto2",""); setF("cotizacion","");
+      setDesglose([]); setMostrarDesglose(false);
     } else if (tipo==="cheque_dia") {
       const cn=parse(form.cn),cpct=parse(form.cpct);
       if (!cn||!cpct) { notify("Ingresa nominal y %",false); return; }
@@ -1086,7 +1123,7 @@ function AppInterna({ usuario }) {
                 <div style={{fontSize:10,letterSpacing:3,color:"#f59e0b",marginBottom:12}}>NUEVA OPERACION</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
                   {Object.entries(TIPOS_OP).filter(([id])=>!id.startsWith("cc_")&&id!=="ajuste"&&id!=="cobro_dif").map(([id,t])=>(
-                    <button key={id} onClick={()=>setF("tipo",id)} style={S.btn(form.tipo===id,t.color)}>{t.label}</button>
+                    <button key={id} onClick={()=>{setF("tipo",id);setMostrarDesglose(false);setDesglose([]);}} style={S.btn(form.tipo===id,t.color)}>{t.label}</button>
                   ))}
                 </div>
                 {(form.tipo==="compra"||form.tipo==="venta")&&(
@@ -1099,6 +1136,60 @@ function AppInterna({ usuario }) {
                       <div><Lbl>Cantidad</Lbl><Inp type="number" placeholder="0" value={form.monto} onChange={e=>{setF("monto",e.target.value);const c=parse(form.cotizacion);if(c)setF("monto2",String(parse(e.target.value)*c));}}/></div>
                       <div><Lbl>Cotizacion</Lbl><Inp type="number" placeholder="0" value={form.cotizacion} onChange={e=>{setF("cotizacion",e.target.value);const m=parse(form.monto);if(m)setF("monto2",String(m*parse(e.target.value)));}}/></div>
                       <div><Lbl>Total</Lbl><Inp type="number" placeholder="0" value={form.monto2} onChange={e=>{setF("monto2",e.target.value);const m=parse(form.monto);if(m)setF("cotizacion",String(parse(e.target.value)/m));}}/></div>
+                    </div>
+                    {/* Desglose de pago */}
+                    <div style={{marginTop:10}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <button onClick={()=>{
+                          setMostrarDesglose(v=>!v);
+                          if(!mostrarDesglose&&desglose.length===0) setDesglose([{id:Date.now(),tipo:"efectivo",monto:"",impactaCaja:true}]);
+                        }} style={{padding:"5px 12px",borderRadius:6,background:mostrarDesglose?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.03)",border:"1px solid "+(mostrarDesglose?"#f59e0b44":"rgba(255,255,255,0.08)"),color:mostrarDesglose?"#f59e0b":"#475569",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                          {mostrarDesglose?"▾ Ocultar desglose":"+ Desglosar pago"}
+                        </button>
+                        {mostrarDesglose&&(()=>{
+                          const total=parse(form.monto2)||0;
+                          const asignado=desglose.reduce((s,d)=>s+parse(d.monto),0);
+                          const resta=total-asignado;
+                          return <span style={{fontSize:11,color:resta===0?"#4ade80":resta<0?"#f87171":"#f59e0b",fontWeight:700}}>
+                            {resta===0?"✓ Cuadra":resta>0?"Resta: $"+fmt(resta):"Excede: $"+fmt(Math.abs(resta))}
+                          </span>;
+                        })()}
+                      </div>
+                      {mostrarDesglose&&(
+                        <div style={{marginTop:8,background:"rgba(245,158,11,0.04)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:8,padding:10}}>
+                          <div style={{fontSize:9,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>DESGLOSE — {form.moneda2} {fmt(parse(form.monto2)||0)}</div>
+                          {desglose.map((d,i)=>(
+                            <div key={d.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+                              {/* Tipo: efectivo o cliente */}
+                              <select value={d.tipo} onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:e.target.value}))}
+                                style={{flex:2,minWidth:120,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11}}>
+                                <option value="efectivo">💵 Efectivo</option>
+                                {clientes.map(cl=><option key={cl.id} value={String(cl.id)}>{cl.nombre} {cl.apellido}</option>)}
+                              </select>
+                              {/* Monto */}
+                              <Inp type="number" placeholder="Monto" value={d.monto}
+                                onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monto:e.target.value}))}
+                                sx={{flex:2,minWidth:100}}/>
+                              {/* Impacta caja — solo para clientes */}
+                              {d.tipo!=="efectivo"&&(
+                                <div onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:!x.impactaCaja}))}
+                                  style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"4px 8px",borderRadius:5,border:"1px solid "+(d.impactaCaja?"#4ade8044":"#1f2937"),background:d.impactaCaja?"rgba(74,222,128,0.05)":"transparent",flexShrink:0}}>
+                                  <div style={{width:12,height:12,borderRadius:3,border:"2px solid "+(d.impactaCaja?"#4ade80":"#475569"),background:d.impactaCaja?"#4ade80":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                    {d.impactaCaja&&<span style={{color:"#000",fontSize:8,fontWeight:900,lineHeight:1}}>✓</span>}
+                                  </div>
+                                  <span style={{fontSize:9,color:d.impactaCaja?"#4ade80":"#475569",whiteSpace:"nowrap"}}>Caja</span>
+                                </div>
+                              )}
+                              {/* Borrar fila */}
+                              <button onClick={()=>setDesglose(p=>p.filter(x=>x.id!==d.id))} style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#f87171",fontFamily:"inherit",fontSize:11,cursor:"pointer",flexShrink:0}}>✕</button>
+                            </div>
+                          ))}
+                          <button onClick={()=>setDesglose(p=>[...p,{id:Date.now(),tipo:"efectivo",monto:"",impactaCaja:true}])}
+                            style={{marginTop:4,padding:"5px 12px",borderRadius:5,background:"transparent",border:"1px dashed #374151",color:"#6b7280",fontFamily:"inherit",fontSize:11,cursor:"pointer",width:"100%"}}>
+                            + Agregar línea
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
