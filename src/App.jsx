@@ -1162,47 +1162,53 @@ function AppInterna({ usuario }) {
                           <div style={{fontSize:9,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>DESGLOSE — {form.moneda2} {fmt(parse(form.monto2)||0)}</div>
                           {desglose.map((d,i)=>(
                             <div key={d.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
-                              {/* Tipo: efectivo o cliente con buscador */}
-                              <div style={{flex:2,minWidth:120,position:"relative"}}>
-                                {d.tipo==="efectivo"?(
-                                  <select value={d.tipo} onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:e.target.value}))}
-                                    style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11}}>
-                                    <option value="efectivo">💵 Efectivo</option>
-                                    {clientes.map(cl=><option key={cl.id} value={String(cl.id)}>{cl.nombre} {cl.apellido}</option>)}
-                                  </select>
-                                ):(()=>{
-                                  const cl=clientes.find(x=>x.id===Number(d.tipo));
+                              {/* Selector: efectivo o cliente con buscador */}
+                              <div style={{flex:2,minWidth:140,position:"relative"}}>
+                                {(()=>{
                                   const busq=buscarDesglose[d.id]||"";
+                                  const clSel=d.tipo!=="efectivo"?clientes.find(x=>x.id===Number(d.tipo)):null;
                                   const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(busq.toLowerCase()));
+                                  const mostrarDrop=busq.length>0;
                                   return (
                                     <div>
-                                      <div style={{display:"flex",gap:4}}>
-                                        <input value={busq} onChange={e=>setBuscarDesglose(b=>({...b,[d.id]:e.target.value}))}
-                                          placeholder={cl?cl.nombre+" "+cl.apellido:"Buscar cliente..."}
-                                          style={{flex:1,background:"#0a0a0a",border:"1px solid #6366f144",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
-                                        <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"efectivo"}))}
-                                          style={{padding:"4px 7px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>
+                                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                        {/* Chip efectivo o nombre cliente seleccionado */}
+                                        {!busq&&(
+                                          <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:5,background:d.tipo==="efectivo"?"rgba(74,222,128,0.08)":"rgba(99,102,241,0.08)",border:"1px solid "+(d.tipo==="efectivo"?"#4ade8033":"#6366f133"),flexShrink:0,cursor:"pointer"}}
+                                            onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:" "}))}>
+                                            <span style={{fontSize:10,color:d.tipo==="efectivo"?"#4ade80":"#a5b4fc",fontWeight:600}}>
+                                              {d.tipo==="efectivo"?"💵 Efectivo":clSel?clSel.nombre+" "+clSel.apellido:"?"}
+                                            </span>
+                                            <span style={{fontSize:9,color:"#475569"}}>▾</span>
+                                          </div>
+                                        )}
+                                        <input
+                                          value={busq.trim()===""&&busq.length>0?"":busq}
+                                          onChange={e=>setBuscarDesglose(b=>({...b,[d.id]:e.target.value}))}
+                                          onFocus={e=>{ if(!busq) setBuscarDesglose(b=>({...b,[d.id]:" "})); }}
+                                          placeholder={busq?" ":"Cambiar..."}
+                                          style={{flex:1,minWidth:0,background:"transparent",border:"none",borderBottom:busq?"1px solid #6366f1":"none",padding:"4px 0",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none",display:busq?"block":"none"}}/>
+                                        {busq&&<button onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:""}))}
+                                          style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10,flexShrink:0}}>✕</button>}
                                       </div>
-                                      {busq&&filtrados.length>0&&(
-                                        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:100,maxHeight:150,overflowY:"auto"}}>
+                                      {mostrarDrop&&(
+                                        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:160,overflowY:"auto",marginTop:2}}>
+                                          <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"efectivo"}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                            style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
+                                            💵 Efectivo
+                                          </div>
                                           {filtrados.map(cl=>(
                                             <div key={cl.id} onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
-                                              style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}
-                                              onMouseEnter={e=>e.target.style.background="#1a1a2e"}
-                                              onMouseLeave={e=>e.target.style.background="transparent"}>
+                                              style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
                                               {cl.nombre} {cl.apellido}
                                             </div>
                                           ))}
+                                          {filtrados.length===0&&busq.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados</div>}
                                         </div>
                                       )}
                                     </div>
                                   );
                                 })()}
-                                {d.tipo==="efectivo"&&(
-                                  <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,opacity:0,cursor:"pointer"}}
-                                    onClick={()=>{}}>
-                                  </div>
-                                )}
                               </div>
                               {/* Monto */}
                               <Inp type="number" placeholder="Monto" value={d.monto}
