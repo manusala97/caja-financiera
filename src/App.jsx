@@ -1215,15 +1215,33 @@ function AppInterna({ usuario }) {
                                 onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monto:e.target.value}))}
                                 sx={{flex:2,minWidth:100}}/>
                               {/* Impacta caja — solo para clientes */}
-                              {d.tipo!=="efectivo"&&(
-                                <div onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:!x.impactaCaja}))}
-                                  style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"4px 8px",borderRadius:5,border:"1px solid "+(d.impactaCaja?"#4ade8044":"#1f2937"),background:d.impactaCaja?"rgba(74,222,128,0.05)":"transparent",flexShrink:0}}>
-                                  <div style={{width:12,height:12,borderRadius:3,border:"2px solid "+(d.impactaCaja?"#4ade80":"#475569"),background:d.impactaCaja?"#4ade80":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                                    {d.impactaCaja&&<span style={{color:"#000",fontSize:8,fontWeight:900,lineHeight:1}}>✓</span>}
+                              {d.tipo!=="efectivo"&&(()=>{
+                                const clSel=clientes.find(x=>x.id===Number(d.tipo));
+                                const salCC=clSel?saldoCC(clSel):null;
+                                const monBase=form.moneda2;
+                                const salMon=salCC?salCC[monBase]:0;
+                                return (
+                                  <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                                    {/* Saldo CC del cliente en la moneda de la operacion */}
+                                    {salCC&&salMon!==0&&(
+                                      <div style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:salMon>0?"rgba(74,222,128,0.08)":"rgba(248,113,113,0.08)",border:"1px solid "+(salMon>0?"#4ade8033":"#f8717133"),color:salMon>0?"#4ade80":"#f87171",whiteSpace:"nowrap"}}>
+                                        CC: {salMon>0?"me debe":"le debo"} {MONEDAS.find(m=>m.id===monBase)?.simbolo}{fmt(Math.abs(salMon))}
+                                      </div>
+                                    )}
+                                    {/* Toggle retira billetes / compensacion */}
+                                    <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid #1f2937"}}>
+                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:true}))}
+                                        style={{padding:"3px 7px",background:d.impactaCaja?"#4ade8022":"transparent",color:d.impactaCaja?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
+                                        💵 Retira
+                                      </button>
+                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:false}))}
+                                        style={{padding:"3px 7px",background:!d.impactaCaja?"#6366f122":"transparent",color:!d.impactaCaja?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",whiteSpace:"nowrap"}}>
+                                        ⇄ Comp.
+                                      </button>
+                                    </div>
                                   </div>
-                                  <span style={{fontSize:9,color:d.impactaCaja?"#4ade80":"#475569",whiteSpace:"nowrap"}}>Caja</span>
-                                </div>
-                              )}
+                                );
+                              })()}
                               {/* Borrar fila */}
                               <button onClick={()=>setDesglose(p=>p.filter(x=>x.id!==d.id))} style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#f87171",fontFamily:"inherit",fontSize:11,cursor:"pointer",flexShrink:0}}>✕</button>
                             </div>
