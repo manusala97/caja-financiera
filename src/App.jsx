@@ -299,7 +299,11 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
     if (!parse(cotiz.ARS)) return null;
     const tots=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
     const difPend=(diferidos||[]).filter(d=>!d.cobrado);
-    const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+    const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
     const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)]));
     return {
       totalUSD: calcTotalUSD(patrimonioSaldos, cotiz),
@@ -1922,7 +1926,11 @@ function AppInterna({ usuario }) {
 
           function generarImagen() {
             const difPend=diferidos.filter(d=>!d.cobrado);
-            const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+            const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
             const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
             const COLS=MONEDAS.filter(m=>patrimonioSaldos[m.id]!==0||saldos[m.id]!==0||tots[m.id]!==0);
             const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b","STS":"#e879f9"};
@@ -2187,7 +2195,11 @@ function AppInterna({ usuario }) {
                   <tfoot>
                     {(()=>{
                       const difPend=diferidos.filter(d=>!d.cobrado);
-                      const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+                      const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
                       // Patrimonio total = caja fisica + CCs + cheques a cobrar
                       const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
                       return (<>
@@ -2477,7 +2489,11 @@ function AppInterna({ usuario }) {
             <div style={{fontSize:10,letterSpacing:3,color:"#94a3b8",marginBottom:18}}>CIERRE - {fechaLarga}</div>
             {(()=>{
               const difPend=diferidos.filter(d=>!d.cobrado);
-              const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+              const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
               const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+saldoCC(c)[m.id],0)]));
               const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
               return (
