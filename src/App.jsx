@@ -45,6 +45,17 @@ const fmt = (n) => {
 };
 const fmtUSD = (n) => "USD "+fmt(n);
 const diasEntre = (a,b) => { if(!a||!b) return 0; return Math.max(0,Math.round((new Date(b)-new Date(a))/86400000)); };
+const sumarDiasHabiles = (fechaStr, dias) => {
+  if(!fechaStr) return "";
+  let d = new Date(fechaStr+"T12:00:00");
+  let agregados = 0;
+  while(agregados < dias) {
+    d.setDate(d.getDate()+1);
+    const dow = d.getDay(); // 0=dom, 6=sab
+    if(dow !== 0 && dow !== 6) agregados++;
+  }
+  return d.toISOString().split("T")[0];
+};
 // Siempre usar horario Argentina (UTC-3)
 const ahoraAR = new Date(new Date().toLocaleString("en-US", {timeZone:"America/Argentina/Buenos_Aires"}));
 const hoy = ahoraAR.getFullYear()+"-"+String(ahoraAR.getMonth()+1).padStart(2,"0")+"-"+String(ahoraAR.getDate()).padStart(2,"0");
@@ -239,7 +250,17 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
             <div><Lbl>Tasa gestion %</Lbl><Inp type="number" value={f.dtg} onChange={e=>sf("dtg",e.target.value)}/></div>
             <div><Lbl>Nominal</Lbl><Inp type="number" value={f.dn} onChange={e=>sf("dn",e.target.value)}/></div>
             <div><Lbl>Fecha recepcion</Lbl><Inp type="date" value={f.dfr} onChange={e=>sf("dfr",e.target.value)}/></div>
-            <div><Lbl>Fecha acreditacion</Lbl><Inp type="date" value={f.dfa} onChange={e=>sf("dfa",e.target.value)}/></div>
+            <div>
+              <Lbl>F. vencimiento cheque</Lbl>
+              <Inp type="date" value={f.dfv||""} onChange={e=>{
+                sf("dfv",e.target.value);
+                if(e.target.value) sf("dfa", sumarDiasHabiles(e.target.value, 2));
+              }}/>
+            </div>
+            <div>
+              <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h hábiles</span></Lbl>
+              <Inp type="date" value={f.dfa} onChange={e=>sf("dfa",e.target.value)}/>
+            </div>
             <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
           </div>
           {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #c084fc33",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",8),fontSize:11}}>
@@ -425,7 +446,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfa:"", tn:"", tpct:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -693,15 +714,7 @@ function AppInterna({ usuario }) {
       } else {
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
-      // Calcular cuanto impacto real hubo en moneda2 (caja fisica)
-      let impactoReal2=m2; // por defecto todo
-      if(mostrarDesglose&&desglose.length>0){
-        impactoReal2=desglose.reduce((s,d)=>{
-          if(d.tipo==="efectivo") return s+parse(d.monto);
-          return s+(d.impactaCaja?parse(d.monto):0);
-        },0);
-      }
-      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,impactoReal2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
+      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
       setF("monto",""); setF("monto2",""); setF("cotizacion","");
       setDesglose([]); setMostrarDesglose(false);
     } else if (tipo==="cheque_dia") {
@@ -760,9 +773,8 @@ function AppInterna({ usuario }) {
     // Revertir el impacto en saldos
     const ns={...saldos};
     const t=op.tipo;
-    const imp2=op.impactoReal2!==undefined?op.impactoReal2:op.monto2;
-    if (t==="compra")    { ns[op.moneda]-=op.monto; ns[op.moneda2]+=imp2; }
-    else if (t==="venta"){ ns[op.moneda]+=op.monto; ns[op.moneda2]-=imp2; }
+    if (t==="compra")    { ns[op.moneda]-=op.monto; ns[op.moneda2]+=op.monto2; }
+    else if (t==="venta"){ ns[op.moneda]+=op.monto; ns[op.moneda2]-=op.monto2; }
     else if (t==="cheque_dia") { ns.ARS-=op.cn; }
     else if (t==="cheque_dif") { ns.ARS+=op.montoFinal||op.monto; }
     else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
@@ -1323,7 +1335,18 @@ function AppInterna({ usuario }) {
                     <div><Lbl>Tasa gestion %</Lbl><Inp type="number" value={form.dtg} onChange={e=>setF("dtg",e.target.value)}/></div>
                     <div><Lbl>Nominal</Lbl><Inp type="number" value={form.dn} onChange={e=>setF("dn",e.target.value)}/></div>
                     <div><Lbl>F. recepcion</Lbl><Inp type="date" value={form.dfr} onChange={e=>setF("dfr",e.target.value)}/></div>
-                    <div><Lbl>F. acreditacion</Lbl><Inp type="date" value={form.dfa} onChange={e=>setF("dfa",e.target.value)}/></div>
+                    <div>
+                      <Lbl>F. vencimiento cheque</Lbl>
+                      <Inp type="date" value={form.dfv||""} onChange={e=>{
+                        setF("dfv",e.target.value);
+                        // Auto-calcular acreditacion = vencimiento + 2 dias habiles
+                        if(e.target.value) setF("dfa", sumarDiasHabiles(e.target.value, 2));
+                      }}/>
+                    </div>
+                    <div>
+                      <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h hábiles</span></Lbl>
+                      <Inp type="date" value={form.dfa} onChange={e=>setF("dfa",e.target.value)}/>
+                    </div>
                     <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
                   </div>
                   {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",6),fontSize:11}}>
