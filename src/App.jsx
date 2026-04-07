@@ -531,7 +531,7 @@ function AppInterna({ usuario }) {
           nominal:d.nominal, mFinal:d.m_final, ganancia:d.ganancia,
           fechaAcr:d.fecha_acr, tm:d.tm, dias:d.dias, cobrado:d.cobrado,
           nota:d.nota||"", manual:d.manual||false,
-          fechaCobro:d.fecha_cobro||"", tasaEndoso:d.tasa_endoso||""
+          fechaCobro:d.fecha_cobro||"", tasaEndoso:d.tasa_endoso||"", fechaVenc:d.fecha_venc||""
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
@@ -727,7 +727,7 @@ function AppInterna({ usuario }) {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
       ns.ARS-=calcDif.mFinal;
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
-      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
+      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,fecha_venc:form.dfv||"",tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
       if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
@@ -1459,20 +1459,57 @@ function AppInterna({ usuario }) {
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#6b7280"}}>Acredita {d.fechaAcr} - {dr}d</span>}
                         {d.cliente&&<span style={{fontSize:10,color:"#9ca3af"}}>👤 {d.cliente}</span>}
                       </div>
-                      <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap"}}>
-                        <div>
-                          <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>${fmt(d.mFinal||d.nominal)}</span>
-                          <span style={{fontSize:10,color:"#6b7280",marginLeft:4}}>a cobrar</span>
+                      <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
+                        {/* Fila nominal */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#6b7280"}}>Nominal</span>
+                          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>${fmt(d.nominal)}</span>
                         </div>
-                        {!d.manual&&<div>
-                          <span style={{fontSize:11,color:"#6b7280"}}>${fmt(d.nominal)}</span>
-                          <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>nominal</span>
+                        {/* Fila pagaste al cliente */}
+                        {!d.manual&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#6b7280"}}>Pagaste al cliente</span>
+                          <span style={{fontSize:12,fontWeight:600,color:"#f87171"}}>-${fmt(d.mFinal||d.nominal)}</span>
                         </div>}
-                        {!d.manual&&d.ganancia>0&&<div>
-                          <span style={{fontSize:11,color:"#4ade80"}}>+${fmt(d.ganancia)}</span>
-                          <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>ganancia</span>
-                        </div>}
+                        {/* Fila empresa te paga - solo si tiene tasa endoso */}
+                        {d.tasaEndoso&&parse(d.tasaEndoso)>0&&(()=>{
+                          const empresaPaga=d.nominal*(1-parse(d.tasaEndoso)/100);
+                          const gananciaNeta=empresaPaga-(d.mFinal||d.nominal);
+                          return (<>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Empresa te paga ({d.tasaEndoso}%)</span>
+                              <span style={{fontSize:12,fontWeight:600,color:"#c084fc"}}>${fmt(empresaPaga)}</span>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #1f2937",paddingTop:4}}>
+                              <span style={{fontSize:10,color:"#4ade80",fontWeight:600}}>Ganancia neta</span>
+                              <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>=0?"#4ade80":"#f87171"}}>{gananciaNeta>=0?"+":"-"}${fmt(Math.abs(gananciaNeta))}</span>
+                            </div>
+                          </>);
+                        })()}
+                        {/* Si no tiene tasa endoso, mostrar ganancia basica */}
+                        {(!d.tasaEndoso||parse(d.tasaEndoso)===0)&&!d.manual&&d.ganancia>0&&(
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #1f2937",paddingTop:4}}>
+                            <span style={{fontSize:10,color:"#4ade80",fontWeight:600}}>Ganancia estimada</span>
+                            <span style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>+${fmt(d.ganancia)}</span>
+                          </div>
+                        )}
                       </div>
+                      {/* Alertas de fechas */}
+                      {(d.fechaVenc||d.fechaAcr)&&(()=>{
+                        const drVenc=d.fechaVenc?diasEntre(hoy,d.fechaVenc):null;
+                        const drAcr=d.fechaAcr?diasEntre(hoy,d.fechaAcr):null;
+                        return (
+                          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                            {d.fechaVenc&&<div style={{padding:"3px 8px",borderRadius:5,background:drVenc===0?"rgba(244,63,94,0.15)":drVenc<=2?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drVenc===0?"#f43f5e44":drVenc<=2?"#f59e0b44":"#1f2937")}}>
+                              <span style={{fontSize:9,color:"#6b7280"}}>📋 Depositar: </span>
+                              <span style={{fontSize:10,fontWeight:600,color:drVenc===0?"#f43f5e":drVenc<=2?"#f59e0b":"#9ca3af"}}>{d.fechaVenc}{drVenc!==null&&<span> ({drVenc===0?"HOY":drVenc+"d"})</span>}</span>
+                            </div>}
+                            {d.fechaAcr&&<div style={{padding:"3px 8px",borderRadius:5,background:drAcr===0?"rgba(99,102,241,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drAcr===0?"#6366f144":"#1f2937")}}>
+                              <span style={{fontSize:9,color:"#6b7280"}}>💰 Acreditación: </span>
+                              <span style={{fontSize:10,fontWeight:600,color:drAcr===0?"#a5b4fc":"#9ca3af"}}>{d.fechaAcr}{drAcr!==null&&<span> ({drAcr===0?"HOY":drAcr+"d"})</span>}</span>
+                            </div>}
+                          </div>
+                        );
+                      })()}
                       <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap",alignItems:"center"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4}}>
                           <span style={{fontSize:9,color:"#4b5563"}}>COBRO:</span>
