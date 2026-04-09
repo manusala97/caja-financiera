@@ -485,6 +485,7 @@ function AppInterna({ usuario }) {
   const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", impactaCaja:true}]
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [buscarDesglose, setBuscarDesglose] = useState({});
+  const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -1643,10 +1644,99 @@ function AppInterna({ usuario }) {
                     <div style={{fontSize:9,letterSpacing:2,color:"#f97316",marginBottom:5}}>MANDAS PLATA</div>
                     <div style={{display:"flex",gap:5}}>
                       {[{id:"retiro_transf",label:"Transferencia",c:"#38bdf8"},{id:"retiro_efectivo",label:"Efectivo",c:"#f97316"}].map(t=>(
-                        <button key={t.id} onClick={()=>setFormCC(f=>({...f,tipo:t.id}))} style={{...S.btn(formCC.tipo===t.id,t.c),flex:1}}>{t.label}</button>
+                        <button key={t.id} onClick={()=>{setFormCC(f=>({...f,tipo:t.id}));setTransCC(t=>({...t,activo:false}));}} style={{...S.btn(formCC.tipo===t.id&&!transCC.activo,t.c),flex:1}}>{t.label}</button>
                       ))}
                     </div>
                   </div>
+                  {/* Transferencia entre CCs */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,letterSpacing:2,color:"#a78bfa",marginBottom:5}}>ENTRE CUENTAS</div>
+                    <button onClick={()=>setTransCC(t=>({...t,activo:!t.activo}))}
+                      style={{...S.btn(transCC.activo,"#a78bfa"),width:"100%"}}>
+                      ⇄ Transferencia entre CCs
+                    </button>
+                  </div>
+                  {transCC.activo?(
+                    <div style={{background:"rgba(167,139,250,0.05)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:8,padding:10,marginBottom:10}}>
+                      <div style={{fontSize:9,color:"#a78bfa",letterSpacing:2,marginBottom:8}}>ENVIAR A OTRA CC</div>
+                      {/* Buscador CC destino */}
+                      <div style={{position:"relative",marginBottom:8}}>
+                        <Lbl>CC Destino</Lbl>
+                        {(()=>{
+                          const clDest=clientes.find(x=>x.id===Number(transCC.destino));
+                          const filtrados=clientes.filter(x=>x.id!==c.id&&(x.nombre+" "+x.apellido).toLowerCase().includes(transCC.buscar.toLowerCase()));
+                          return (
+                            <div>
+                              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                {clDest&&!transCC.buscar&&(
+                                  <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa44",fontSize:11,color:"#a78bfa",fontWeight:600}}>
+                                    {clDest.nombre} {clDest.apellido}
+                                  </div>
+                                )}
+                                <input value={transCC.buscar} onChange={e=>setTransCC(t=>({...t,buscar:e.target.value}))}
+                                  placeholder={clDest&&!transCC.buscar?"Cambiar...":"Buscar cliente..."}
+                                  style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                              </div>
+                              {transCC.buscar&&filtrados.length>0&&(
+                                <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                                  {filtrados.map(cl=>(
+                                    <div key={cl.id} onClick={()=>setTransCC(t=>({...t,destino:String(cl.id),buscar:""}))}
+                                      style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                      {cl.nombre} {cl.apellido}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div style={S.grid("80px 1fr",8)}>
+                        <div><Lbl>Moneda</Lbl><MonedasSel value={transCC.moneda} onChange={v=>setTransCC(t=>({...t,moneda:v}))}/></div>
+                        <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={transCC.monto} onChange={e=>setTransCC(t=>({...t,monto:e.target.value}))}/></div>
+                      </div>
+                      {/* Mostrar saldos de ambas CCs */}
+                      {transCC.destino&&(()=>{
+                        const clDest=clientes.find(x=>x.id===Number(transCC.destino));
+                        const salOrigen=saldoCC(c)[transCC.moneda]||0;
+                        const salDestino=clDest?saldoCC(clDest)[transCC.moneda]||0:0;
+                        const mon=MONEDAS.find(m=>m.id===transCC.moneda);
+                        return (
+                          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                            <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                              <span style={{color:"#6b7280"}}>{c.nombre}: </span>
+                              <span style={{color:salOrigen>0?"#4ade80":"#f87171",fontWeight:600}}>{mon?.simbolo}{fmt(salOrigen)}</span>
+                            </div>
+                            <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                              <span style={{color:"#6b7280"}}>{clDest?.nombre}: </span>
+                              <span style={{color:salDestino>0?"#4ade80":"#f87171",fontWeight:600}}>{mon?.simbolo}{fmt(salDestino)}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <button onClick={async()=>{
+                        const monto=parse(transCC.monto); if(!monto){notify("Ingresá un monto",false);return;}
+                        if(!transCC.destino){notify("Elegí una CC destino",false);return;}
+                        const cDestId=Number(transCC.destino);
+                        const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                        const nota="Transf. entre CCs → "+(clientes.find(x=>x.id===cDestId)?.nombre||"");
+                        const notaDest="Transf. entre CCs ← "+c.nombre+" "+c.apellido;
+                        // Movimiento en CC origen: retiro (positivo para origen = le mandé, me debe)
+                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota};
+                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota});
+                        setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
+                        // Movimiento en CC destino: ingreso (negativo para destino = recibió, le debo)
+                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota:notaDest};
+                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota:notaDest});
+                        setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+                        setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS"});
+                        notify("Transferencia entre CCs registrada ✓");
+                      }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        ⇄ Confirmar transferencia
+                      </button>
+                    </div>
+                  ):(
+                    <>
                   <div style={S.grid("80px 1fr",8)}>
                     <div><Lbl>Moneda</Lbl><MonedasSel value={formCC.moneda} onChange={v=>setFormCC(f=>({...f,moneda:v}))}/></div>
                     <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={formCC.monto} onChange={e=>setFormCC(f=>({...f,monto:e.target.value}))}/></div>
@@ -1664,6 +1754,8 @@ function AppInterna({ usuario }) {
                   <button onClick={()=>regMovCC(c.id)} style={{width:"100%",padding:10,borderRadius:7,background:esIngCC?"#052e16":formCC.tipo==="retiro_transf"?"#0a1e2e":"#1c0a0a",border:"1px solid "+colorCC[formCC.tipo],color:colorCC[formCC.tipo],fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                     {labelBtn[formCC.tipo]}
                   </button>
+                    </>
+                  )}
                 </Card>
                 <Card sx={{maxHeight:600,overflowY:"auto"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
