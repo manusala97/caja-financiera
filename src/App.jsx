@@ -1721,13 +1721,13 @@ function AppInterna({ usuario }) {
                         const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                         const nota="Transf. entre CCs → "+(clientes.find(x=>x.id===cDestId)?.nombre||"");
                         const notaDest="Transf. entre CCs ← "+c.nombre+" "+c.apellido;
-                        // Movimiento en CC origen: retiro (positivo para origen = le mandé, me debe)
-                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota};
-                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota});
+                        // CC origen (ej: Guido): ingreso = él nos pagó = baja su deuda
+                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota};
+                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota});
                         setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
-                        // Movimiento en CC destino: ingreso (negativo para destino = recibió, le debo)
-                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota:notaDest};
-                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota:notaDest});
+                        // CC destino (ej: TRESOR): retiro = nosotros le pagamos = sube lo que nos debe o baja lo que le debemos
+                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota:notaDest};
+                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota:notaDest});
                         setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
                         setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS"});
                         notify("Transferencia entre CCs registrada ✓");
