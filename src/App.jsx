@@ -487,6 +487,9 @@ function AppInterna({ usuario }) {
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
+  const [liquidacion, setLiquidacion] = useState({
+    sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false
+  });
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -2951,6 +2954,117 @@ function AppInterna({ usuario }) {
                   )}
                 </Card>
               </div>
+              {/* Liquidacion mensual */}
+              {socios.length>0&&ultimoCierre?.total_usd&&(()=>{
+                const patrimonioFinal=ultimoCierre.total_usd;
+                const inversionTotal=total;
+                const gananciaBruta=patrimonioFinal-inversionTotal;
+                const sueldoFijoUSD=parse(liquidacion.cotizSueldo)>0?parse(liquidacion.sueldoFijo)/parse(liquidacion.cotizSueldo):0;
+                const sueldoVar=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctVariable)/100):0;
+                const totalEmpleado=sueldoFijoUSD+sueldoVar;
+                const reserva=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctReserva)/100):0;
+                const gananciaNeta=gananciaBruta-totalEmpleado-reserva;
+                return (
+                  <div style={{marginTop:18}}>
+                    <button onClick={()=>setLiquidacion(l=>({...l,mostrando:!l.mostrando}))}
+                      style={{width:"100%",padding:"10px",borderRadius:8,background:liquidacion.mostrando?"rgba(99,102,241,0.1)":"rgba(255,255,255,0.02)",border:"1px solid "+(liquidacion.mostrando?"#6366f1":"rgba(255,255,255,0.08)"),color:liquidacion.mostrando?"#a5b4fc":"#475569",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+                      {liquidacion.mostrando?"▾ LIQUIDACION MENSUAL":"📊 LIQUIDACION MENSUAL"}
+                    </button>
+                    {liquidacion.mostrando&&(
+                      <Card sx={{marginTop:10,border:"1px solid #6366f133"}}>
+                        {/* Resumen patrimonial */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RESUMEN PATRIMONIAL</div>
+                          {[
+                            ["Patrimonio final",fmtUSD(patrimonioFinal),"#4ade80"],
+                            ["Inversión socios",fmtUSD(inversionTotal),"#9ca3af"],
+                            ["Ganancia bruta",fmtUSD(gananciaBruta),gananciaBruta>=0?"#4ade80":"#f87171"],
+                          ].map(([k,v,col])=>(
+                            <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
+                              <span style={{fontSize:12,color:"#6b7280"}}>{k}</span>
+                              <span style={{fontSize:12,fontWeight:700,color:col}}>{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Sueldo empleado */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>SUELDO EMPLEADO</div>
+                          <div style={S.grid("1fr 1fr",8)}>
+                            <div><Lbl>Fijo ARS</Lbl><Inp type="number" placeholder="0" value={liquidacion.sueldoFijo} onChange={e=>setLiquidacion(l=>({...l,sueldoFijo:e.target.value}))}/></div>
+                            <div><Lbl>Cotización</Lbl><Inp type="number" placeholder="1400" value={liquidacion.cotizSueldo} onChange={e=>setLiquidacion(l=>({...l,cotizSueldo:e.target.value}))}/></div>
+                            <div><Lbl>Variable % ganancia</Lbl><Inp type="number" placeholder="5" value={liquidacion.pctVariable} onChange={e=>setLiquidacion(l=>({...l,pctVariable:e.target.value}))}/></div>
+                            <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Total empleado</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>{fmtUSD(totalEmpleado)}</span>
+                              {sueldoFijoUSD>0&&<span style={{fontSize:10,color:"#4b5563"}}>Fijo: {fmtUSD(sueldoFijoUSD)} + Var: {fmtUSD(sueldoVar)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Fondo de reserva */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#c084fc",marginBottom:8}}>FONDO DE RESERVA STS</div>
+                          <div style={S.grid("1fr 1fr",8)}>
+                            <div><Lbl>% sobre ganancia</Lbl><Inp type="number" placeholder="10" value={liquidacion.pctReserva} onChange={e=>setLiquidacion(l=>({...l,pctReserva:e.target.value}))}/></div>
+                            <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Reserva</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmtUSD(reserva)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Distribucion socios */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",marginBottom:8}}>DISTRIBUCIÓN SOCIOS</div>
+                          <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1f2937",marginBottom:8}}>
+                            <span style={{fontSize:12,color:"#6b7280"}}>Ganancia neta a distribuir</span>
+                            <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>=0?"#4ade80":"#f87171"}}>{fmtUSD(gananciaNeta)}</span>
+                          </div>
+                          {socios.map((s,i)=>{
+                            const pct=total?parse(s.monto)/total:0;
+                            const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                            return (
+                              <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                  <div style={{width:8,height:8,borderRadius:"50%",background:COLORES[i%COLORES.length]}}/>
+                                  <span style={{fontSize:12,color:"#9ca3af"}}>{s.nombre}</span>
+                                  <span style={{fontSize:10,color:"#4b5563"}}>({(pct*100).toFixed(1)}%)</span>
+                                </div>
+                                <span style={{fontSize:12,fontWeight:700,color:COLORES[i%COLORES.length]}}>{fmtUSD(parte)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Boton confirmar */}
+                        <button onClick={async()=>{
+                          if(!window.confirm("Confirmar liquidación? Se registrarán los gastos y se actualizará el capital de cada socio.")) return;
+                          const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          // 1. Registrar sueldo empleado como gasto
+                          if(totalEmpleado>0){
+                            const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
+                            const {data:ins}=await SB.from("gastos").insert(g).select().single();
+                            if(ins) setGastos(p=>[ins,...p]);
+                            // Sale de caja
+                            const ns={...saldos,USD:saldos.USD-totalEmpleado};
+                            setSaldos(ns); await guardarDia(ns,null,null);
+                          }
+                          // 2. Actualizar capital de cada socio sumando su parte
+                          for(const s of socios){
+                            const pct=total?parse(s.monto)/total:0;
+                            const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                            const nuevoMonto=parse(s.monto)+parte;
+                            await SB.from("socios").update({monto:nuevoMonto}).eq("id",s.id);
+                            setSocios(p=>p.map(x=>x.id!==s.id?x:{...x,monto:nuevoMonto}));
+                          }
+                          notify("Liquidación confirmada ✓");
+                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:""}));
+                        }} disabled={gananciaBruta<=0}
+                          style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
+                          CONFIRMAR LIQUIDACIÓN
+                        </button>
+                      </Card>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
