@@ -456,7 +456,7 @@ function AppInterna({ usuario }) {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
-  const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
+  const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy,usaCC:false});
   const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Otros"];
   const [socios, setSocios] = useState([]);
   const [nuevoSocio, setNuevoSocio] = useState({nombre:"",monto:""});
@@ -486,6 +486,7 @@ function AppInterna({ usuario }) {
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
+  const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -2726,12 +2727,80 @@ function AppInterna({ usuario }) {
                 </div>
                 <div style={{marginTop:8}}><Lbl>Fecha</Lbl><Inp type="date" value={formGasto.fecha} onChange={e=>setFormGasto(f=>({...f,fecha:e.target.value}))}/></div>
                 <div style={{marginTop:8}}><Lbl>Nota</Lbl><Inp placeholder="Descripcion..." value={formGasto.nota} onChange={e=>setFormGasto(f=>({...f,nota:e.target.value}))}/></div>
+                {/* Origen del pago */}
+                <div style={{marginTop:10,marginBottom:10}}>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#6b7280",marginBottom:6}}>SALE DE</div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setFormGasto(f=>({...f,usaCC:false}))}
+                      style={{...S.btn(!formGasto.usaCC,"#f43f5e"),flex:1}}>💵 Caja física</button>
+                    <button onClick={()=>setFormGasto(f=>({...f,usaCC:true}))}
+                      style={{...S.btn(formGasto.usaCC,"#a78bfa"),flex:1}}>👤 Cuenta corriente</button>
+                  </div>
+                </div>
+                {formGasto.usaCC&&(
+                  <div style={{background:"rgba(167,139,250,0.05)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:8,padding:10,marginBottom:10,position:"relative"}}>
+                    <Lbl>Quién pagó</Lbl>
+                    {(()=>{
+                      const clSel=clientes.find(x=>x.id===Number(gastoCC.clienteId));
+                      const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(gastoCC.buscar.toLowerCase()));
+                      return (
+                        <div>
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                            {clSel&&!gastoCC.buscar&&(
+                              <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa44",fontSize:11,color:"#a78bfa",fontWeight:600}}>
+                                {clSel.nombre} {clSel.apellido}
+                              </div>
+                            )}
+                            <input value={gastoCC.buscar} onChange={e=>setGastoCC(g=>({...g,buscar:e.target.value}))}
+                              placeholder={clSel&&!gastoCC.buscar?"Cambiar...":"Buscar cliente..."}
+                              style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                          </div>
+                          {gastoCC.buscar&&filtrados.length>0&&(
+                            <div style={{position:"absolute",left:10,right:10,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                              {filtrados.map(cl=>(
+                                <div key={cl.id} onClick={()=>setGastoCC(g=>({...g,clienteId:String(cl.id),buscar:""}))}
+                                  style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                  {cl.nombre} {cl.apellido}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {clSel&&(()=>{
+                            const sal=saldoCC(clSel)[formGasto.moneda]||0;
+                            const mon=MONEDAS.find(m=>m.id===formGasto.moneda);
+                            return sal!==0&&(
+                              <div style={{marginTop:6,fontSize:10,color:sal>0?"#4ade80":"#f87171"}}>
+                                Saldo actual: {sal>0?"me debe":"le debo"} {mon?.simbolo}{fmt(Math.abs(sal))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
                 <button onClick={async()=>{
                   const monto=parse(formGasto.monto); if(!monto){notify("Ingresa un monto",false);return;}
+                  if(formGasto.usaCC&&!gastoCC.clienteId){notify("Elegí un cliente",false);return;}
                   const g={categoria:formGasto.categoria,monto,moneda:formGasto.moneda,nota:formGasto.nota,fecha:formGasto.fecha};
                   const {data:ins}=await SB.from("gastos").insert(g).select().single();
                   if(ins) setGastos(p=>[ins,...p]);
+                  if(formGasto.usaCC){
+                    // El cliente pagó el gasto por nosotros → ingreso_transf en su CC (HABER = le debemos)
+                    const cId=Number(gastoCC.clienteId);
+                    const cl=clientes.find(x=>x.id===cId);
+                    const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                    const nota="Gasto: "+formGasto.categoria+(formGasto.nota?" - "+formGasto.nota:"");
+                    const mv={id:Date.now(),hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota};
+                    await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota});
+                    setClientes(p=>p.map(x=>x.id!==cId?x:{...x,movimientos:[...x.movimientos,mv]}));
+                  } else {
+                    // Sale de caja física
+                    const ns={...saldos,[formGasto.moneda]:saldos[formGasto.moneda]-monto};
+                    setSaldos(ns); await guardarDia(ns,null,null);
+                  }
                   setFormGasto(f=>({...f,monto:"",nota:""}));
+                  setGastoCC({activo:false,clienteId:"",buscar:""});
                   notify("Gasto registrado");
                 }} style={{marginTop:12,width:"100%",padding:10,borderRadius:7,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f87171",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                   REGISTRAR GASTO
