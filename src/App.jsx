@@ -3010,6 +3010,40 @@ function AppInterna({ usuario }) {
                             </div>
                           </div>
                         </div>
+                        {/* CC del empleado */}
+                        <div style={{marginBottom:16,position:"relative"}}>
+                          <Lbl>CC del empleado <span style={{color:"#4b5563",fontSize:9}}>(acredita sueldo en su CC)</span></Lbl>
+                          {(()=>{
+                            const clEmp=clientes.find(x=>x.id===Number(liquidacion.empleadoCCId));
+                            const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((liquidacion.empleadoBuscar||"").toLowerCase()));
+                            return (
+                              <div>
+                                <div style={{display:"flex",gap:4}}>
+                                  {clEmp&&!liquidacion.empleadoBuscar&&(
+                                    <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",fontSize:11,color:"#f59e0b",fontWeight:600}}>
+                                      {clEmp.nombre} {clEmp.apellido}
+                                    </div>
+                                  )}
+                                  <input value={liquidacion.empleadoBuscar||""} onChange={e=>setLiquidacion(l=>({...l,empleadoBuscar:e.target.value}))}
+                                    placeholder={clEmp&&!liquidacion.empleadoBuscar?"Cambiar...":"Buscar empleado..."}
+                                    style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                                  {liquidacion.empleadoCCId&&<button onClick={()=>setLiquidacion(l=>({...l,empleadoCCId:"",empleadoBuscar:""}))}
+                                    style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>}
+                                </div>
+                                {liquidacion.empleadoBuscar&&filtrados.length>0&&(
+                                  <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                                    {filtrados.map(cl=>(
+                                      <div key={cl.id} onClick={()=>setLiquidacion(l=>({...l,empleadoCCId:String(cl.id),empleadoBuscar:""}))}
+                                        style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                        {cl.nombre} {cl.apellido}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
                         {/* Fondo de reserva */}
                         <div style={{marginBottom:16}}>
                           <div style={{fontSize:10,letterSpacing:2,color:"#c084fc",marginBottom:8}}>FONDO DE RESERVA STS</div>
