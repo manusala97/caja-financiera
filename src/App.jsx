@@ -3091,7 +3091,7 @@ function AppInterna({ usuario }) {
                             const ns={...saldos,USD:saldos.USD-totalEmpleado};
                             setSaldos(ns); await guardarDia(ns,null,null);
                           }
-                          // 2. Actualizar capital de cada socio
+                          // 2. Acreditar ganancia en CC de cada socio
                           const detalle=socios.map(s=>{
                             const pct=total?parse(s.monto)/total:0;
                             const parte=gananciaNeta>0?gananciaNeta*pct:0;
@@ -3100,9 +3100,18 @@ function AppInterna({ usuario }) {
                           for(const s of socios){
                             const pct=total?parse(s.monto)/total:0;
                             const parte=gananciaNeta>0?gananciaNeta*pct:0;
-                            const nuevoMonto=parse(s.monto)+parte;
-                            await SB.from("socios").update({monto:nuevoMonto}).eq("id",s.id);
-                            setSocios(p=>p.map(x=>x.id!==s.id?x:{...x,monto:nuevoMonto}));
+                            if(parte<=0) continue;
+                            // Buscar cliente con mismo nombre
+                            const clSocio=clientes.find(cl=>cl.nombre.toLowerCase()===s.nombre.toLowerCase()||
+                              (cl.nombre+" "+cl.apellido).toLowerCase()===s.nombre.toLowerCase());
+                            if(clSocio){
+                              // retiro_transf = nosotros le mandamos = nos debe (positivo en DEBE)
+                              const nota="Liquidación mensual "+hoy+" - Ganancia "+fmtUSD(parte);
+                              const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                              const mv={id:Date.now()+clSocio.id,hora:mvHora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:parte,nota};
+                              await SB.from("movimientos_cc").insert({cliente_id:clSocio.id,hora:mvHora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:parte,nota});
+                              setClientes(p=>p.map(cl=>cl.id!==clSocio.id?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+                            }
                           }
                           // 3. Guardar historial de liquidacion
                           const liq={fecha:hoy,patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle};
