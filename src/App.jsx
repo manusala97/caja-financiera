@@ -2512,7 +2512,28 @@ function AppInterna({ usuario }) {
           );
         })()}
 
-        {pant==="evolucion"&&(
+        {pant==="evolucion"&&(()=>{
+          const inversionBase=socios.reduce((s,x)=>s+parse(x.monto),0);
+          const patrimonioActual=ultimoCierre?.total_usd||0;
+          const gananciaVsBase=patrimonioActual-inversionBase;
+          const pctVsBase=inversionBase>0?((gananciaVsBase/inversionBase)*100):0;
+
+          // Agrupar cierres por mes
+          const porMes={};
+          [...cierres].forEach(c=>{
+            const mes=c.fecha?.slice(0,7); // YYYY-MM
+            if(!mes) return;
+            if(!porMes[mes]) porMes[mes]={mes,cierres:[],liq:null};
+            porMes[mes].cierres.push(c);
+          });
+          // Agregar liquidaciones al mes correspondiente
+          liquidaciones.forEach(l=>{
+            const mes=l.fecha?.slice(0,7);
+            if(mes&&porMes[mes]) porMes[mes].liq=l;
+          });
+          const meses=Object.values(porMes).sort((a,b)=>b.mes.localeCompare(a.mes));
+
+          return (
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#4ade80",marginBottom:4}}>EVOLUCION DE LA CAJA</div>
             <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>Patrimonio total valuado en USD al cierre de cada dia</div>
@@ -2524,31 +2545,88 @@ function AppInterna({ usuario }) {
               </div>
             ):(
               <div>
+                {/* KPIs principales */}
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
                   {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>ULTIMO CIERRE</div>
-                    <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(ultimoCierre.total_usd)}</div>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
+                    <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioActual)}</div>
                     <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
                   </Card>}
+                  <Card sx={{flex:"1 1 160px",border:"1px solid #a78bfa33",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSIÓN SOCIOS</div>
+                    <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
+                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
+                  </Card>
+                  <Card sx={{flex:"1 1 160px",border:"1px solid "+(gananciaVsBase>=0?"#4ade8033":"#f4433633"),textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
+                    <div style={{fontSize:22,fontWeight:700,color:gananciaVsBase>=0?"#4ade80":"#f87171"}}>{gananciaVsBase>=0?"+":""}{fmtUSD(gananciaVsBase)}</div>
+                    <div style={{fontSize:10,color:gananciaVsBase>=0?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>=0?"+":""}{pctVsBase.toFixed(1)}%</div>
+                  </Card>
                   {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(varUSD>=0?"#4ade8033":"#f4433633"),textAlign:"center"}}>
                     <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
                     <div style={{fontSize:22,fontWeight:700,color:varUSD>=0?"#4ade80":"#f87171"}}>{varUSD>=0?"+":""}{fmtUSD(varUSD)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{varUSD>=0?"Subio":"Bajo"}</div>
-                  </Card>}
-                  {cierres.length>=2&&<Card sx={{flex:"1 1 160px",border:"1px solid #38bdf833",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>DESDE EL INICIO</div>
-                    <div style={{fontSize:22,fontWeight:700,color:"#38bdf8"}}>{((cierres[cierres.length-1].total_usd/cierres[0].total_usd-1)*100).toFixed(1)}%</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{cierres.length} cierres</div>
-                  </Card>}
+                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{varUSD>=0?"Subió":"Bajó"}</div>
+                  </Card>
                 </div>
+
+                {/* Grafico */}
                 {grafData.length>=2&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
-                  <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRAFICO USD</div>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRÁFICO USD</div>
                   <LineChart data={grafData} color="#4ade80" height={120}/>
+                  {/* Línea de inversión base */}
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
                     <span>{fmtFecha(grafData[0].x)}</span>
+                    <span style={{color:"#a78bfa"}}>━ Base: {fmtUSD(inversionBase)}</span>
                     <span>{fmtFecha(grafData[grafData.length-1].x)}</span>
                   </div>
                 </Card>}
+
+                {/* Resumen mensual */}
+                <Card sx={{marginBottom:18,border:"1px solid #6366f133"}}>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#6366f1",marginBottom:12}}>RESUMEN MENSUAL</div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
+                      <thead><tr>
+                        <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>MES</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>APERTURA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>CIERRE</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>GANANCIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#f59e0b",fontSize:9}}>SUELDO</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#c084fc",fontSize:9}}>RESERVA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#38bdf8",fontSize:9}}>NETO SOCIOS</th>
+                      </tr></thead>
+                      <tbody>
+                        {meses.map(({mes,cierres:mc,liq})=>{
+                          const sorted=[...mc].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+                          const apertura=sorted[0]?.total_usd||0;
+                          const cierre=sorted[sorted.length-1]?.total_usd||0;
+                          const ganancia=cierre-apertura;
+                          const sueldo=liq?.sueldo_empleado||0;
+                          const reserva=liq?.reserva||0;
+                          const neto=liq?.ganancia_neta||ganancia;
+                          const [y,m]=mes.split("-");
+                          const nombreMes=new Date(Number(y),Number(m)-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+                          return (
+                            <tr key={mes} style={{borderBottom:"1px solid #1a1a1a"}}>
+                              <td style={{padding:"8px 8px",color:"#9ca3af",fontWeight:600,whiteSpace:"nowrap"}}>
+                                {nombreMes}
+                                {liq&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liquidado</span>}
+                              </td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:"#6b7280",fontSize:11}}>{fmtUSD(apertura)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:"#e2e8f0",fontWeight:600}}>{fmtUSD(cierre)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:ganancia>=0?"#4ade80":"#f87171"}}>{ganancia>=0?"+":""}{fmtUSD(ganancia)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:sueldo>0?"#f59e0b":"#374151",fontSize:11}}>{sueldo>0?"-"+fmtUSD(sueldo):"—"}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:reserva>0?"#c084fc":"#374151",fontSize:11}}>{reserva>0?"-"+fmtUSD(reserva):"—"}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:neto>=0?"#38bdf8":"#f87171"}}>{neto>=0?"+":""}{fmtUSD(neto)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                {/* Historial detallado */}
                 <Card>
                   <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:12}}>HISTORIAL DE CIERRES</div>
                   <div style={{overflowX:"auto"}}>
@@ -2557,21 +2635,30 @@ function AppInterna({ usuario }) {
                         <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>FECHA</th>
                         {MONEDAS.map(m=><th key={m.id} style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:m.color,fontSize:9}}>{m.id}</th>)}
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>TOTAL USD</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#a78bfa",fontSize:9}}>VS BASE</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR DÍA</th>
                       </tr></thead>
                       <tbody>
                         {[...cierres].reverse().map((c,i,arr)=>{
                           const prev=arr[i+1];
-                          const variacion=prev&&c.total_usd&&prev.total_usd?c.total_usd-prev.total_usd:null;
+                          const varDia=prev&&c.total_usd&&prev.total_usd?c.total_usd-prev.total_usd:null;
+                          const vsBase=c.total_usd?c.total_usd-inversionBase:null;
+                          const esLiqFecha=liquidaciones.some(l=>l.fecha===c.fecha);
                           return (
-                            <tr key={c.fecha} style={{borderBottom:"1px solid #1a1a1a"}}>
-                              <td style={{padding:"7px 8px",color:"#9ca3af"}}>{fmtFecha(c.fecha)}</td>
+                            <tr key={c.fecha} style={{borderBottom:"1px solid #1a1a1a",background:esLiqFecha?"rgba(99,102,241,0.05)":"transparent"}}>
+                              <td style={{padding:"7px 8px",color:"#9ca3af"}}>
+                                {fmtFecha(c.fecha)}
+                                {esLiqFecha&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liq</span>}
+                              </td>
                               {MONEDAS.map(m=>{ const v=c.saldos_finales?.[m.id]||0;
                                 return <td key={m.id} style={{textAlign:"right",padding:"7px 8px",color:v!==0?"#fff":"#374151",fontSize:11}}>{v!==0?fmt(v):"—"}</td>;
                               })}
                               <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:"#4ade80"}}>{c.total_usd?fmtUSD(c.total_usd):"—"}</td>
-                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:variacion===null?"#374151":variacion>=0?"#4ade80":"#f87171",fontSize:11}}>
-                                {variacion===null?"—":(variacion>=0?"+":"")+fmtUSD(variacion)}
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:600,color:vsBase===null?"#374151":vsBase>=0?"#a78bfa":"#f87171",fontSize:11}}>
+                                {vsBase===null?"—":(vsBase>=0?"+":"")+fmtUSD(vsBase)}
+                              </td>
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:varDia===null?"#374151":varDia>=0?"#4ade80":"#f87171",fontSize:11}}>
+                                {varDia===null?"—":(varDia>=0?"+":"")+fmtUSD(varDia)}
                               </td>
                             </tr>
                           );
@@ -2583,7 +2670,8 @@ function AppInterna({ usuario }) {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {pant==="cierre"&&(
           <div>
