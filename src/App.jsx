@@ -258,7 +258,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
               }}/>
             </div>
             <div>
-              <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h hábiles</span></Lbl>
+              <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h habiles</span></Lbl>
               <Inp type="date" value={f.dfa} onChange={e=>sf("dfa",e.target.value)}/>
             </div>
             <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
@@ -356,7 +356,7 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
             </div>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1,background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:10,textAlign:"center"}}>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CAJA FÍSICA</div>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CAJA FISICA</div>
                 <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioTotal.cajaUSD)}</div>
               </div>
               <div style={{flex:1,background:"#0a0a1a",border:"1px solid #c084fc33",borderRadius:8,padding:10,textAlign:"center"}}>
@@ -386,10 +386,10 @@ function LoginScreen({ onLogin }) {
 
   async function handleLogin(e) {
     e.preventDefault();
-    if(!email||!pass) { setError("Completá email y contraseña"); return; }
+    if(!email||!pass) { setError("Completa email y contrasena"); return; }
     setLoading(true); setError("");
     const { error:err } = await SB.auth.signInWithPassword({ email, password:pass });
-    if (err) { setError("Email o contraseña incorrectos"); setLoading(false); }
+    if (err) { setError("Email o contrasena incorrectos"); setLoading(false); }
     else { onLogin(); }
   }
 
@@ -399,7 +399,7 @@ function LoginScreen({ onLogin }) {
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 8px 32px rgba(99,102,241,0.4)"}}>S</div>
           <div style={{fontSize:20,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>STS FINANCIERA</div>
-          <div style={{fontSize:12,color:"#475569",marginTop:4}}>Ingresá tus credenciales para continuar</div>
+          <div style={{fontSize:12,color:"#475569",marginTop:4}}>Ingresa tus credenciales para continuar</div>
         </div>
         <form onSubmit={handleLogin} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,padding:28}}>
           <div style={{marginBottom:16}}>
@@ -409,7 +409,7 @@ function LoginScreen({ onLogin }) {
               style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           </div>
           <div style={{marginBottom:20}}>
-            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contraseña</label>
+            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contrasena</label>
             <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
               placeholder="••••••••" autoComplete="current-password"
               style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
@@ -992,7 +992,7 @@ function AppInterna({ usuario }) {
         </div>
         <div style={{marginLeft:"auto",paddingRight:8}} className="hide-mobile">
           <button onClick={async()=>{ await SB.auth.signOut(); }} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
-            {usuario?.email?.split("@")[0]} · salir
+            {usuario?.email?.split("@")[0]} - salir
           </button>
         </div>
         <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
@@ -1358,7 +1358,7 @@ function AppInterna({ usuario }) {
                       }}/>
                     </div>
                     <div>
-                      <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h hábiles</span></Lbl>
+                      <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h habiles</span></Lbl>
                       <Inp type="date" value={form.dfa} onChange={e=>setF("dfa",e.target.value)}/>
                     </div>
                     <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
@@ -1518,7 +1518,7 @@ function AppInterna({ usuario }) {
                               <span style={{fontSize:10,fontWeight:600,color:drVenc===0?"#f43f5e":drVenc<=2?"#f59e0b":"#9ca3af"}}>{d.fechaVenc}{drVenc!==null&&<span> ({drVenc===0?"HOY":drVenc+"d"})</span>}</span>
                             </div>}
                             {d.fechaAcr&&<div style={{padding:"3px 8px",borderRadius:5,background:drAcr===0?"rgba(99,102,241,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drAcr===0?"#6366f144":"#1f2937")}}>
-                              <span style={{fontSize:9,color:"#6b7280"}}>💰 Acreditación: </span>
+                              <span style={{fontSize:9,color:"#6b7280"}}>💰 Acreditacion: </span>
                               <span style={{fontSize:10,fontWeight:600,color:drAcr===0?"#a5b4fc":"#9ca3af"}}>{d.fechaAcr}{drAcr!==null&&<span> ({drAcr===0?"HOY":drAcr+"d"})</span>}</span>
                             </div>}
                           </div>
@@ -1724,12 +1724,12 @@ function AppInterna({ usuario }) {
                         );
                       })()}
                       <button onClick={async()=>{
-                        const monto=parse(transCC.monto); if(!monto){notify("Ingresá un monto",false);return;}
-                        if(!transCC.destino){notify("Elegí una CC destino",false);return;}
+                        const monto=parse(transCC.monto); if(!monto){notify("Ingresa un monto",false);return;}
+                        if(!transCC.destino){notify("Elegi una CC destino",false);return;}
                         const cDestId=Number(transCC.destino);
                         const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                         const nota="Transf. entre CCs → "+(clientes.find(x=>x.id===cDestId)?.nombre||"");
-                        const notaDest="Transf. entre CCs ← "+c.nombre+" "+c.apellido;
+                        const notaDest="Transf. entre CCs <- "+c.nombre+" "+c.apellido;
                         // CC origen (ej: SALA): ingreso_transf = nos pagó (HABER = le debemos)
                         const mv1={id:Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota};
                         await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota});
@@ -1756,7 +1756,7 @@ function AppInterna({ usuario }) {
                       {formCC.impactaCaja&&<span style={{color:"#000",fontSize:11,fontWeight:900}}>✓</span>}
                     </div>
                     <div>
-                      <div style={{fontSize:11,fontWeight:600,color:formCC.impactaCaja?"#f59e0b":"#475569"}}>Impacta caja física</div>
+                      <div style={{fontSize:11,fontWeight:600,color:formCC.impactaCaja?"#f59e0b":"#475569"}}>Impacta caja fisica</div>
                       <div style={{fontSize:10,color:"#334155"}}>{formCC.impactaCaja?"Se suma/resta de tu caja":"Solo registro contable"}</div>
                     </div>
                   </div>
@@ -1811,7 +1811,7 @@ function AppInterna({ usuario }) {
                             .footer{margin-top:30px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
                           </style></head><body>`;
                           html+=`<h1>Cuenta Corriente — ${c.nombre} ${c.apellido}</h1>`;
-                          html+=`<div class="rango">Período: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS Financiera</div>`;
+                          html+=`<div class="rango">Periodo: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS Financiera</div>`;
                           monedas.forEach(monId=>{
                             const mon=MONEDAS.find(m=>m.id===monId);
                             const movsMon=movsFiltrados.filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
@@ -1838,7 +1838,7 @@ function AppInterna({ usuario }) {
                           Generar PDF
                         </button>
                       </div>
-                      <div style={{fontSize:9,color:"#334155",marginTop:6}}>Dejá vacío para exportar todo el historial</div>
+                      <div style={{fontSize:9,color:"#334155",marginTop:6}}>Deja vacío para exportar todo el historial</div>
                     </div>
                   )}
                   {editandoMov&&(
@@ -2372,7 +2372,7 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#fb923c",marginBottom:4}}>HISTORIAL</div>
-              <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Analizá, editá o agregá operaciones de cualquier período</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Analiza, editá o agregá operaciones de cualquier periodo</div>
 
               {/* Filtros */}
               <Card sx={{marginBottom:16,border:"1px solid #fb923c22"}}>
@@ -2449,7 +2449,7 @@ function AppInterna({ usuario }) {
                     )}
                   </Card>
 
-                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el período seleccionado</div>}
+                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el periodo seleccionado</div>}
                   {Object.entries(porFecha).map(([fecha,fops])=>(
                     <div key={fecha} style={{marginBottom:20}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -2505,7 +2505,7 @@ function AppInterna({ usuario }) {
                       </Card>
                     );
                   })}
-                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el período</div>}
+                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el periodo</div>}
                 </div>
               )}
             </div>
@@ -2553,7 +2553,7 @@ function AppInterna({ usuario }) {
                     <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
                   </Card>}
                   <Card sx={{flex:"1 1 160px",border:"1px solid #a78bfa33",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSIÓN SOCIOS</div>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSION SOCIOS</div>
                     <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
                     <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
                   </Card>
@@ -2571,12 +2571,12 @@ function AppInterna({ usuario }) {
 
                 {/* Grafico */}
                 {grafData.length>=2&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
-                  <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRÁFICO USD</div>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRAFICO USD</div>
                   <LineChart data={grafData} color="#4ade80" height={120}/>
-                  {/* Línea de inversión base */}
+                  {/* Linea de inversion base */}
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
                     <span>{fmtFecha(grafData[0].x)}</span>
-                    <span style={{color:"#a78bfa"}}>━ Base: {fmtUSD(inversionBase)}</span>
+                    <span style={{color:"#a78bfa"}}>— Base: {fmtUSD(inversionBase)}</span>
                     <span>{fmtFecha(grafData[grafData.length-1].x)}</span>
                   </div>
                 </Card>}
@@ -2636,7 +2636,7 @@ function AppInterna({ usuario }) {
                         {MONEDAS.map(m=><th key={m.id} style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:m.color,fontSize:9}}>{m.id}</th>)}
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>TOTAL USD</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#a78bfa",fontSize:9}}>VS BASE</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR DÍA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR DIA</th>
                       </tr></thead>
                       <tbody>
                         {[...cierres].reverse().map((c,i,arr)=>{
@@ -2690,7 +2690,7 @@ function AppInterna({ usuario }) {
                   {MONEDAS.map(m=>{ const vFis=saldos[m.id]||0,vTot=patrimonioSaldos[m.id]; if(!vFis&&!vTot) return null;
                     return <div key={m.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba("+hexToRgb(m.color)+",0.2)",borderRadius:10,padding:"10px 14px",minWidth:110}}>
                       <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
-                      <div style={{fontSize:11,color:"#4b5563",marginBottom:2}}>Física: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
+                      <div style={{fontSize:11,color:"#4b5563",marginBottom:2}}>Fisica: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
                       <div style={{fontSize:12,fontWeight:700,color:"#818cf8"}}>Total: {m.simbolo}{fmt(vTot)}</div>
                     </div>;
                   })}
@@ -2828,7 +2828,7 @@ function AppInterna({ usuario }) {
                   <div style={{fontSize:9,letterSpacing:2,color:"#6b7280",marginBottom:6}}>SALE DE</div>
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>setFormGasto(f=>({...f,usaCC:false}))}
-                      style={{...S.btn(!formGasto.usaCC,"#f43f5e"),flex:1}}>💵 Caja física</button>
+                      style={{...S.btn(!formGasto.usaCC,"#f43f5e"),flex:1}}>💵 Caja fisica</button>
                     <button onClick={()=>setFormGasto(f=>({...f,usaCC:true}))}
                       style={{...S.btn(formGasto.usaCC,"#a78bfa"),flex:1}}>👤 Cuenta corriente</button>
                   </div>
@@ -2877,7 +2877,7 @@ function AppInterna({ usuario }) {
                 )}
                 <button onClick={async()=>{
                   const monto=parse(formGasto.monto); if(!monto){notify("Ingresa un monto",false);return;}
-                  if(formGasto.usaCC&&!gastoCC.clienteId){notify("Elegí un cliente",false);return;}
+                  if(formGasto.usaCC&&!gastoCC.clienteId){notify("Elegi un cliente",false);return;}
                   const g={categoria:formGasto.categoria,monto,moneda:formGasto.moneda,nota:formGasto.nota,fecha:formGasto.fecha};
                   const {data:ins}=await SB.from("gastos").insert(g).select().single();
                   if(ins) setGastos(p=>[ins,...p]);
@@ -2891,7 +2891,7 @@ function AppInterna({ usuario }) {
                     await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota});
                     setClientes(p=>p.map(x=>x.id!==cId?x:{...x,movimientos:[...x.movimientos,mv]}));
                   } else {
-                    // Sale de caja física
+                    // Sale de caja fisica
                     const ns={...saldos,[formGasto.moneda]:saldos[formGasto.moneda]-monto};
                     setSaldos(ns); await guardarDia(ns,null,null);
                   }
@@ -3069,13 +3069,13 @@ function AppInterna({ usuario }) {
                         <div style={{marginBottom:16}}>
                           <div style={{fontSize:10,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RESUMEN PATRIMONIAL</div>
                           <div style={{marginBottom:10}}>
-                            <Lbl>Monto de cierre USD <span style={{color:"#4b5563",fontSize:9}}>(por defecto último cierre)</span></Lbl>
-                            <Inp type="number" placeholder={fmtUSD(ultimoCierre.total_usd)+" (último cierre)"} value={liquidacion.patrimonioManual}
+                            <Lbl>Monto de cierre USD <span style={{color:"#4b5563",fontSize:9}}>(por defecto ultimo cierre)</span></Lbl>
+                            <Inp type="number" placeholder={fmtUSD(ultimoCierre.total_usd)+" (ultimo cierre)"} value={liquidacion.patrimonioManual}
                               onChange={e=>setLiquidacion(l=>({...l,patrimonioManual:e.target.value}))}/>
                           </div>
                           {[
                             ["Patrimonio final",fmtUSD(patrimonioFinal),"#4ade80"],
-                            ["Inversión socios",fmtUSD(inversionTotal),"#9ca3af"],
+                            ["Inversion socios",fmtUSD(inversionTotal),"#9ca3af"],
                             ["Ganancia bruta",fmtUSD(gananciaBruta),gananciaBruta>=0?"#4ade80":"#f87171"],
                           ].map(([k,v,col])=>(
                             <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
@@ -3089,7 +3089,7 @@ function AppInterna({ usuario }) {
                           <div style={{fontSize:10,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>SUELDO EMPLEADO</div>
                           <div style={S.grid("1fr 1fr",8)}>
                             <div><Lbl>Fijo ARS</Lbl><Inp type="number" placeholder="0" value={liquidacion.sueldoFijo} onChange={e=>setLiquidacion(l=>({...l,sueldoFijo:e.target.value}))}/></div>
-                            <div><Lbl>Cotización</Lbl><Inp type="number" placeholder="1400" value={liquidacion.cotizSueldo} onChange={e=>setLiquidacion(l=>({...l,cotizSueldo:e.target.value}))}/></div>
+                            <div><Lbl>Cotizacion</Lbl><Inp type="number" placeholder="1400" value={liquidacion.cotizSueldo} onChange={e=>setLiquidacion(l=>({...l,cotizSueldo:e.target.value}))}/></div>
                             <div><Lbl>Variable % ganancia</Lbl><Inp type="number" placeholder="5" value={liquidacion.pctVariable} onChange={e=>setLiquidacion(l=>({...l,pctVariable:e.target.value}))}/></div>
                             <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
                               <span style={{fontSize:10,color:"#6b7280"}}>Total empleado</span>
@@ -3145,7 +3145,7 @@ function AppInterna({ usuario }) {
                         </div>
                         {/* Distribucion socios */}
                         <div style={{marginBottom:16}}>
-                          <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",marginBottom:8}}>DISTRIBUCIÓN SOCIOS</div>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",marginBottom:8}}>DISTRIBUCION SOCIOS</div>
                           <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1f2937",marginBottom:8}}>
                             <span style={{fontSize:12,color:"#6b7280"}}>Ganancia neta a distribuir</span>
                             <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>=0?"#4ade80":"#f87171"}}>{fmtUSD(gananciaNeta)}</span>
@@ -3204,7 +3204,7 @@ function AppInterna({ usuario }) {
                               const parte=gananciaNeta>0?gananciaNeta*pct:0;
                               return `<tr><td>${s.nombre}</td><td style="text-align:right">${(pct*100).toFixed(1)}%</td><td style="text-align:right;color:#16a34a;font-weight:700">${fmtUSD(parte)}</td></tr>`;
                             }).join("");
-                            const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Liquidación ${hoy}</title><style>
+                            const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Liquidacion ${hoy}</title><style>
                               body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:40px;max-width:600px;}
                               h1{font-size:20px;margin-bottom:4px;}h2{font-size:13px;color:#555;margin-top:24px;margin-bottom:8px;border-bottom:2px solid #eee;padding-bottom:4px;}
                               table{width:100%;border-collapse:collapse;margin-bottom:12px;}
@@ -3213,13 +3213,13 @@ function AppInterna({ usuario }) {
                               .total{font-weight:700;font-size:14px;}.green{color:#16a34a;font-weight:700;}.red{color:#dc2626;font-weight:700;}
                               .footer{margin-top:40px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
                             </style></head><body>
-                            <h1>Liquidación Mensual — STS Financiera</h1>
+                            <h1>Liquidacion Mensual — STS Financiera</h1>
                             <p style="color:#666;font-size:12px">${fechaLarga}</p>
                             <h2>RESUMEN PATRIMONIAL</h2>
                             <table><tr><td>Patrimonio final</td><td style="text-align:right" class="green">${fmtUSD(patrimonioFinal)}</td></tr>
-                            <tr><td>Inversión socios</td><td style="text-align:right">${fmtUSD(inversionTotal)}</td></tr>
+                            <tr><td>Inversion socios</td><td style="text-align:right">${fmtUSD(inversionTotal)}</td></tr>
                             <tr><td class="total">Ganancia bruta</td><td style="text-align:right" class="${gananciaBruta>=0?"green":"red"} total">${fmtUSD(gananciaBruta)}</td></tr></table>
-                            <h2>DISTRIBUCIÓN</h2>
+                            <h2>DISTRIBUCION</h2>
                             <table><tr><td>Sueldo empleado</td><td style="text-align:right">Fijo: ${fmtUSD(sueldoFijoUSD)} + Variable ${liquidacion.pctVariable}%: ${fmtUSD(sueldoVar)}</td><td style="text-align:right;font-weight:700">${fmtUSD(totalEmpleado)}</td></tr>
                             <tr><td>Fondo reserva STS (${liquidacion.pctReserva}%)</td><td></td><td style="text-align:right;font-weight:700">${fmtUSD(reserva)}</td></tr>
                             <tr><td class="total">Ganancia neta socios</td><td></td><td style="text-align:right" class="${gananciaNeta>=0?"green":"red"} total">${fmtUSD(gananciaNeta)}</td></tr></table>
@@ -3233,7 +3233,7 @@ function AppInterna({ usuario }) {
                           </button>
                         </div>
                         <button onClick={async()=>{
-                          if(!window.confirm("Confirmar liquidación? Se registrarán los gastos y se actualizará el capital de cada socio.")) return;
+                          if(!window.confirm("Confirmar liquidacion? Se registrarán los gastos y se actualizará el capital de cada socio.")) return;
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                           const movimientosIds=[];
                           // 1. Sueldo empleado
@@ -3241,7 +3241,7 @@ function AppInterna({ usuario }) {
                             if(liquidacion.empleadoCCId){
                               // Va a CC del empleado (ingreso_transf = la financiera le debe = HABER)
                               const cEmpId=Number(liquidacion.empleadoCCId);
-                              const notaEmp="Liquidación mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado)+" (Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar)+")";
+                              const notaEmp="Liquidacion mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado)+" (Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar)+")";
                               const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
                               const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
                               movimientosIds.push({tipo:"cc",id:mvEmpIns?.id,clienteId:cEmpId});
@@ -3267,7 +3267,7 @@ function AppInterna({ usuario }) {
                             if(parte<=0) continue;
                             const ccId=Number(liquidacion.sociosCCMap[s.id]);
                             if(!ccId) continue; // si no eligio CC, no acreditar
-                            const nota="Liquidación mensual "+hoy+" - Ganancia "+fmtUSD(parte);
+                            const nota="Liquidacion mensual "+hoy+" - Ganancia "+fmtUSD(parte);
                             const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                             const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:ccId,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
                             const mv={id:mvIns?.id||Date.now()+ccId,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
@@ -3278,11 +3278,11 @@ function AppInterna({ usuario }) {
                           const liq={fecha:hoy,patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
-                          notify("Liquidación confirmada ✓");
+                          notify("Liquidacion confirmada ✓");
                           setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:""}));
                         }} disabled={gananciaBruta<=0}
                           style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
-                          CONFIRMAR LIQUIDACIÓN
+                          CONFIRMAR LIQUIDACION
                         </button>
                       </Card>
                     )}
@@ -3312,7 +3312,7 @@ function AppInterna({ usuario }) {
                               </div>
                             )}
                             <button onClick={async()=>{
-                              if(!window.confirm("Revertir esta liquidación? Se borrarán los movimientos de CC y gastos generados.")) return;
+                              if(!window.confirm("Revertir esta liquidacion? Se borrarán los movimientos de CC y gastos generados.")) return;
                               // Borrar movimientos CC y gastos
                               const ids=liq.movimientos_ids||[];
                               for(const m of ids){
@@ -3326,7 +3326,7 @@ function AppInterna({ usuario }) {
                               }
                               await SB.from("liquidaciones").delete().eq("id",liq.id);
                               setLiquidaciones(p=>p.filter(x=>x.id!==liq.id));
-                              notify("Liquidación revertida ✓");
+                              notify("Liquidacion revertida ✓");
                             }} style={{marginTop:8,padding:"4px 10px",borderRadius:5,background:"rgba(244,63,94,0.08)",border:"1px solid #f43f5e44",color:"#f87171",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
                               Revertir
                             </button>
@@ -3365,7 +3365,7 @@ export default function CajaFinanciera() {
     <div style={{minHeight:"100vh",background:"#07090f",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
         <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace"}}>S</div>
-        <div style={{color:"#334155",fontSize:12}}>Verificando sesión...</div>
+        <div style={{color:"#334155",fontSize:12}}>Verificando sesion...</div>
       </div>
     </div>
   );
