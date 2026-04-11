@@ -2565,7 +2565,7 @@ function AppInterna({ usuario }) {
                   {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(varUSD>=0?"#4ade8033":"#f4433633"),textAlign:"center"}}>
                     <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
                     <div style={{fontSize:22,fontWeight:700,color:varUSD>=0?"#4ade80":"#f87171"}}>{varUSD>=0?"+":""}{fmtUSD(varUSD)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{varUSD>=0?"Subió":"Bajó"}</div>
+                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{varUSD>=0?"Subio":"Bajo"}</div>
                   </Card>
                 </div>
 
