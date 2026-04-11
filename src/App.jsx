@@ -489,7 +489,7 @@ function AppInterna({ usuario }) {
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
-    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:""
+    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{}
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
@@ -3031,14 +3031,44 @@ function AppInterna({ usuario }) {
                           {socios.map((s,i)=>{
                             const pct=total?parse(s.monto)/total:0;
                             const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                            const ccId=liquidacion.sociosCCMap[s.id]||"";
+                            const busq=liquidacion.sociosBuscar[s.id]||"";
+                            const clSel=clientes.find(x=>x.id===Number(ccId));
+                            const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(busq.toLowerCase()));
                             return (
-                              <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
-                                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                  <div style={{width:8,height:8,borderRadius:"50%",background:COLORES[i%COLORES.length]}}/>
-                                  <span style={{fontSize:12,color:"#9ca3af"}}>{s.nombre}</span>
-                                  <span style={{fontSize:10,color:"#4b5563"}}>({(pct*100).toFixed(1)}%)</span>
+                              <div key={s.id} style={{padding:"8px 0",borderBottom:"1px solid #0f0f0f"}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                    <div style={{width:8,height:8,borderRadius:"50%",background:COLORES[i%COLORES.length]}}/>
+                                    <span style={{fontSize:12,color:"#9ca3af"}}>{s.nombre}</span>
+                                    <span style={{fontSize:10,color:"#4b5563"}}>({(pct*100).toFixed(1)}%)</span>
+                                  </div>
+                                  <span style={{fontSize:12,fontWeight:700,color:COLORES[i%COLORES.length]}}>{fmtUSD(parte)}</span>
                                 </div>
-                                <span style={{fontSize:12,fontWeight:700,color:COLORES[i%COLORES.length]}}>{fmtUSD(parte)}</span>
+                                <div style={{position:"relative"}}>
+                                  <div style={{display:"flex",gap:4}}>
+                                    {clSel&&!busq&&(
+                                      <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f133",fontSize:10,color:"#a5b4fc",fontWeight:600}}>
+                                        {clSel.nombre} {clSel.apellido}
+                                      </div>
+                                    )}
+                                    <input value={busq} onChange={e=>setLiquidacion(l=>({...l,sociosBuscar:{...l.sociosBuscar,[s.id]:e.target.value}}))}
+                                      placeholder={clSel&&!busq?"Cambiar CC...":"Buscar CC del socio..."}
+                                      style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                    {ccId&&<button onClick={()=>setLiquidacion(l=>({...l,sociosCCMap:{...l.sociosCCMap,[s.id]:""},sociosBuscar:{...l.sociosBuscar,[s.id]:""}}))}
+                                      style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                  </div>
+                                  {busq&&filtrados.length>0&&(
+                                    <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                                      {filtrados.map(cl=>(
+                                        <div key={cl.id} onClick={()=>setLiquidacion(l=>({...l,sociosCCMap:{...l.sociosCCMap,[s.id]:String(cl.id)},sociosBuscar:{...l.sociosBuscar,[s.id]:""}}))}
+                                          style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                          {cl.nombre} {cl.apellido}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
@@ -3103,7 +3133,7 @@ function AppInterna({ usuario }) {
                               setSaldos(ns); await guardarDia(ns,null,null);
                             }
                           }
-                          // 2. Acreditar ganancia en CC de cada socio
+                          // 2. Acreditar ganancia en CC de cada socio (usando el mapa CC seleccionado)
                           const detalle=socios.map(s=>{
                             const pct=total?parse(s.monto)/total:0;
                             const parte=gananciaNeta>0?gananciaNeta*pct:0;
@@ -3113,25 +3143,21 @@ function AppInterna({ usuario }) {
                             const pct=total?parse(s.monto)/total:0;
                             const parte=gananciaNeta>0?gananciaNeta*pct:0;
                             if(parte<=0) continue;
-                            // Buscar cliente con mismo nombre
-                            const clSocio=clientes.find(cl=>cl.nombre.toLowerCase()===s.nombre.toLowerCase()||
-                              (cl.nombre+" "+cl.apellido).toLowerCase()===s.nombre.toLowerCase());
-                            if(clSocio){
-                              // ingreso_transf = la financiera les debe (HABER)
-                              const nota="Liquidación mensual "+hoy+" - Ganancia "+fmtUSD(parte);
-                              const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                              const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:clSocio.id,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
-                              const mv={id:mvIns?.id||Date.now()+clSocio.id,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
-                              movimientosIds.push({tipo:"cc",id:mv.id,clienteId:clSocio.id});
-                              setClientes(p=>p.map(cl=>cl.id!==clSocio.id?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
-                            }
+                            const ccId=Number(liquidacion.sociosCCMap[s.id]);
+                            if(!ccId) continue; // si no eligio CC, no acreditar
+                            const nota="Liquidación mensual "+hoy+" - Ganancia "+fmtUSD(parte);
+                            const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                            const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:ccId,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
+                            const mv={id:mvIns?.id||Date.now()+ccId,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
+                            movimientosIds.push({tipo:"cc",id:mvIns?.id,clienteId:ccId});
+                            setClientes(p=>p.map(cl=>cl.id!==ccId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
                           }
                           // 3. Guardar historial de liquidacion
                           const liq={fecha:hoy,patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
                           notify("Liquidación confirmada ✓");
-                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:""}));
+                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:""}));
                         }} disabled={gananciaBruta<=0}
                           style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
                           CONFIRMAR LIQUIDACIÓN
