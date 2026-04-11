@@ -489,7 +489,7 @@ function AppInterna({ usuario }) {
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
-    patrimonioManual:""
+    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:""
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
@@ -3083,13 +3083,25 @@ function AppInterna({ usuario }) {
                         <button onClick={async()=>{
                           if(!window.confirm("Confirmar liquidación? Se registrarán los gastos y se actualizará el capital de cada socio.")) return;
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          const movimientosIds=[];
                           // 1. Registrar sueldo empleado como gasto
                           if(totalEmpleado>0){
                             const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
                             const {data:ins}=await SB.from("gastos").insert(g).select().single();
-                            if(ins) setGastos(p=>[ins,...p]);
-                            const ns={...saldos,USD:saldos.USD-totalEmpleado};
-                            setSaldos(ns); await guardarDia(ns,null,null);
+                            if(ins){ setGastos(p=>[ins,...p]); movimientosIds.push({tipo:"gasto",id:ins.id}); }
+                            // Si hay CC del empleado, acreditar ahí también
+                            if(liquidacion.empleadoCCId){
+                              const cEmpId=Number(liquidacion.empleadoCCId);
+                              const notaEmp="Liquidación mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado);
+                              const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
+                              const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
+                              movimientosIds.push({tipo:"cc",id:mvEmp.id,clienteId:cEmpId});
+                              setClientes(p=>p.map(cl=>cl.id!==cEmpId?cl:{...cl,movimientos:[...cl.movimientos,mvEmp]}));
+                            } else {
+                              // Sale de caja
+                              const ns={...saldos,USD:saldos.USD-totalEmpleado};
+                              setSaldos(ns); await guardarDia(ns,null,null);
+                            }
                           }
                           // 2. Acreditar ganancia en CC de cada socio
                           const detalle=socios.map(s=>{
@@ -3105,16 +3117,17 @@ function AppInterna({ usuario }) {
                             const clSocio=clientes.find(cl=>cl.nombre.toLowerCase()===s.nombre.toLowerCase()||
                               (cl.nombre+" "+cl.apellido).toLowerCase()===s.nombre.toLowerCase());
                             if(clSocio){
-                              // retiro_transf = nosotros le mandamos = nos debe (positivo en DEBE)
+                              // ingreso_transf = la financiera les debe (HABER)
                               const nota="Liquidación mensual "+hoy+" - Ganancia "+fmtUSD(parte);
                               const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                              const mv={id:Date.now()+clSocio.id,hora:mvHora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:parte,nota};
-                              await SB.from("movimientos_cc").insert({cliente_id:clSocio.id,hora:mvHora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:parte,nota});
+                              const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:clSocio.id,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
+                              const mv={id:mvIns?.id||Date.now()+clSocio.id,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
+                              movimientosIds.push({tipo:"cc",id:mv.id,clienteId:clSocio.id});
                               setClientes(p=>p.map(cl=>cl.id!==clSocio.id?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
                             }
                           }
                           // 3. Guardar historial de liquidacion
-                          const liq={fecha:hoy,patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle};
+                          const liq={fecha:hoy,patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
                           notify("Liquidación confirmada ✓");
@@ -3150,6 +3163,25 @@ function AppInterna({ usuario }) {
                                 ))}
                               </div>
                             )}
+                            <button onClick={async()=>{
+                              if(!window.confirm("Revertir esta liquidación? Se borrarán los movimientos de CC y gastos generados.")) return;
+                              // Borrar movimientos CC y gastos
+                              const ids=liq.movimientos_ids||[];
+                              for(const m of ids){
+                                if(m.tipo==="cc"){
+                                  await SB.from("movimientos_cc").delete().eq("id",m.id);
+                                  setClientes(p=>p.map(cl=>cl.id!==m.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(mv=>mv.id!==m.id)}));
+                                } else if(m.tipo==="gasto"){
+                                  await SB.from("gastos").delete().eq("id",m.id);
+                                  setGastos(p=>p.filter(g=>g.id!==m.id));
+                                }
+                              }
+                              await SB.from("liquidaciones").delete().eq("id",liq.id);
+                              setLiquidaciones(p=>p.filter(x=>x.id!==liq.id));
+                              notify("Liquidación revertida ✓");
+                            }} style={{marginTop:8,padding:"4px 10px",borderRadius:5,background:"rgba(244,63,94,0.08)",border:"1px solid #f43f5e44",color:"#f87171",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+                              Revertir
+                            </button>
                           </div>
                         ))}
                       </Card>
