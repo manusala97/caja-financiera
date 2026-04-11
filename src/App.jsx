@@ -3114,21 +3114,21 @@ function AppInterna({ usuario }) {
                           if(!window.confirm("Confirmar liquidación? Se registrarán los gastos y se actualizará el capital de cada socio.")) return;
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                           const movimientosIds=[];
-                          // 1. Registrar sueldo empleado como gasto
+                          // 1. Sueldo empleado
                           if(totalEmpleado>0){
-                            const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
-                            const {data:ins}=await SB.from("gastos").insert(g).select().single();
-                            if(ins){ setGastos(p=>[ins,...p]); movimientosIds.push({tipo:"gasto",id:ins.id}); }
-                            // Si hay CC del empleado, acreditar ahí también
                             if(liquidacion.empleadoCCId){
+                              // Va a CC del empleado (ingreso_transf = la financiera le debe = HABER)
                               const cEmpId=Number(liquidacion.empleadoCCId);
-                              const notaEmp="Liquidación mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado);
+                              const notaEmp="Liquidación mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado)+" (Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar)+")";
                               const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
                               const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
-                              movimientosIds.push({tipo:"cc",id:mvEmp.id,clienteId:cEmpId});
+                              movimientosIds.push({tipo:"cc",id:mvEmpIns?.id,clienteId:cEmpId});
                               setClientes(p=>p.map(cl=>cl.id!==cEmpId?cl:{...cl,movimientos:[...cl.movimientos,mvEmp]}));
                             } else {
-                              // Sale de caja
+                              // Sin CC: va a gastos y sale de caja
+                              const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
+                              const {data:ins}=await SB.from("gastos").insert(g).select().single();
+                              if(ins){ setGastos(p=>[ins,...p]); movimientosIds.push({tipo:"gasto",id:ins.id}); }
                               const ns={...saldos,USD:saldos.USD-totalEmpleado};
                               setSaldos(ns); await guardarDia(ns,null,null);
                             }
