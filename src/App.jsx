@@ -490,7 +490,7 @@ function AppInterna({ usuario }) {
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
     patrimonioManual:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{},
-    periodo:""
+    periodo:"", fechaImpacto:""
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
@@ -3086,6 +3086,10 @@ function AppInterna({ usuario }) {
                             {new Date(liquidacion.periodo+"-01").toLocaleDateString("es-AR",{month:"long",year:"numeric"}).toUpperCase()}
                           </div>}
                         </div>
+                        <div style={{marginBottom:14}}>
+                          <Lbl>Fecha de impacto <span style={{color:"#4b5563",fontSize:9}}>(por defecto hoy)</span></Lbl>
+                          <Inp type="date" value={liquidacion.fechaImpacto} onChange={e=>setLiquidacion(l=>({...l,fechaImpacto:e.target.value}))}/>
+                        </div>
                         {/* Resumen patrimonial */}
                         <div style={{marginBottom:16}}>
                           <div style={{fontSize:10,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RESUMEN PATRIMONIAL</div>
@@ -3263,8 +3267,8 @@ function AppInterna({ usuario }) {
                               // Va a CC del empleado (ingreso_transf = la financiera le debe = HABER)
                               const cEmpId=Number(liquidacion.empleadoCCId);
                               const notaEmp="Liquidacion mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado)+" (Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar)+")";
-                              const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
-                              const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
+                              const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
+                              const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
                               movimientosIds.push({tipo:"cc",id:mvEmpIns?.id,clienteId:cEmpId});
                               setClientes(p=>p.map(cl=>cl.id!==cEmpId?cl:{...cl,movimientos:[...cl.movimientos,mvEmp]}));
                             } else {
@@ -3290,17 +3294,18 @@ function AppInterna({ usuario }) {
                             if(!ccId) continue; // si no eligio CC, no acreditar
                             const nota="Liquidacion mensual "+hoy+" - Ganancia "+fmtUSD(parte);
                             const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                            const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:ccId,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
-                            const mv={id:mvIns?.id||Date.now()+ccId,hora:mvHora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
+                            const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:ccId,hora:mvHora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
+                            const mv={id:mvIns?.id||Date.now()+ccId,hora:mvHora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
                             movimientosIds.push({tipo:"cc",id:mvIns?.id,clienteId:ccId});
                             setClientes(p=>p.map(cl=>cl.id!==ccId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
                           }
                           // 3. Guardar historial de liquidacion
-                          const liq={fecha:hoy,periodo:liquidacion.periodo||hoy.slice(0,7),patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
+                          const fechaLiq=liquidacion.fechaImpacto||hoy;
+const liq={fecha:fechaLiq,periodo:liquidacion.periodo||fechaLiq.slice(0,7),patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
                           notify("Liquidacion confirmada ✓");
-                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:"",periodo:""}));
+                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:"",periodo:"",fechaImpacto:""}));
                         }} disabled={gananciaBruta<=0}
                           style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
                           CONFIRMAR LIQUIDACION
