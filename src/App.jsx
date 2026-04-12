@@ -293,7 +293,8 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
 
 function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancelar, ultimaCotiz={}, ultimaBlue="" }) {
   const [cotiz, setCotiz] = useState({ ARS:ultimaCotiz.ARS||"", BRL:ultimaCotiz.BRL||"", GBP:ultimaCotiz.GBP||"", EUR:ultimaCotiz.EUR||"", USDT:"1" });
-  const [cotizBlue, setCotizBlue] = useState(ultimaBlue||"");
+  const [cotizCompra, setCotizCompra] = useState(ultimaBlue?.compra||"");
+  const [cotizVenta, setCotizVenta] = useState(ultimaBlue?.venta||"");
   const sc = (k,v) => setCotiz(c=>({...c,[k]:v}));
   // Calcular patrimonio total = caja fisica + CCs + cheques a cobrar
   const patrimonioTotal = useMemo(()=>{
@@ -347,11 +348,21 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
             ))}
           </div>
           <div style={{marginTop:8,fontSize:10,color:"#374151"}}>* ARS: pesos por USD (ej: 1400) | EUR/GBP/BRL: valor en USD (ej: EUR=1.2, BRL=0.19)</div>
-          <div style={{marginTop:10}}>
-            <Lbl><span style={{color:"#4ade80"}}>USD Blue</span> — cotizacion del dia</Lbl>
-            <Inp type="number" placeholder="ej: 1420" value={cotizBlue} onChange={e=>setCotizBlue(e.target.value)}
-              sx={{borderColor:"#4ade8044"}}/>
+          <div style={{marginTop:10,display:"flex",gap:8}}>
+            <div style={{flex:1}}>
+              <Lbl><span style={{color:"#f59e0b"}}>Cotizacion Compra</span></Lbl>
+              <Inp type="number" placeholder="ej: 1380" value={cotizCompra} onChange={e=>setCotizCompra(e.target.value)}
+                sx={{borderColor:"#f59e0b44"}}/>
+            </div>
+            <div style={{flex:1}}>
+              <Lbl><span style={{color:"#4ade80"}}>Cotizacion Venta</span></Lbl>
+              <Inp type="number" placeholder="ej: 1400" value={cotizVenta} onChange={e=>setCotizVenta(e.target.value)}
+                sx={{borderColor:"#4ade8044"}}/>
+            </div>
           </div>
+          {cotizCompra&&cotizVenta&&<div style={{marginTop:6,fontSize:10,color:"#a5b4fc"}}>
+            Spread: ${fmt(parse(cotizVenta)-parse(cotizCompra))} ({(((parse(cotizVenta)-parse(cotizCompra))/parse(cotizCompra))*100).toFixed(2)}%)
+          </div>}
         </div>
         {totalUSD!==null&&patrimonioTotal&&(
           <div style={{marginBottom:16}}>
@@ -373,7 +384,7 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
           </div>
         )}
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>onCerrar(cotiz,totalUSD,parse(cotizBlue)||0)} disabled={!parse(cotiz.ARS)}
+          <button onClick={()=>onCerrar(cotiz,totalUSD,{compra:parse(cotizCompra)||0,venta:parse(cotizVenta)||0})} disabled={!parse(cotiz.ARS)}
             style={{flex:1,padding:12,borderRadius:7,background:parse(cotiz.ARS)?"#052e16":"#0a0a0a",border:"1px solid "+(parse(cotiz.ARS)?"#4ade80":"#1f2937"),color:parse(cotiz.ARS)?"#4ade80":"#374151",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:parse(cotiz.ARS)?"pointer":"not-allowed"}}>
             CERRAR CAJA
           </button>
@@ -446,7 +457,7 @@ function AppInterna({ usuario }) {
   const [diaId, setDiaId] = useState(null);
   const [cajaCerrada, setCajaCerrada] = useState(false);
   const [showModalCierre, setShowModalCierre] = useState(false);
-  const [ultimaBlue, setUltimaBlue] = useState(0);
+  const [ultimaBlue, setUltimaBlue] = useState({compra:0,venta:0});
   const [cierres, setCierres] = useState([]);
   const [editandoOp, setEditandoOp] = useState(null);
   const [histFecha, setHistFecha] = useState("");
@@ -665,7 +676,7 @@ function AppInterna({ usuario }) {
     await SB.from("dias").upsert({id:hoy, caja_ini:cajaData, abierta:true},{onConflict:"id"});
   }
 
-  async function ejecutarCierre(cotiz, totalUSD, cotizBlue=0) {
+  async function ejecutarCierre(cotiz, totalUSD, cotizBlue={compra:0,venta:0}) {
     const opsHoy=ops.filter(o=>o.fecha===hoy);
     const resumen=Object.fromEntries(Object.entries(TIPOS_OP).map(([id])=>[id,opsHoy.filter(o=>o.tipo===id).length]));
     const cierre={fecha:hoy,saldos_finales:saldos,saldos_iniciales:cajaIni,cotizaciones:cotiz,total_usd:totalUSD,ops_resumen:resumen,cotiz_blue:cotizBlue};
