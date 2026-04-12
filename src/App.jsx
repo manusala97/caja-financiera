@@ -3259,6 +3259,7 @@ function AppInterna({ usuario }) {
                         </div>
                         <button onClick={async()=>{
                           if(!window.confirm("Confirmar liquidacion? Se registraran los movimientos en las CCs de socios y empleado.")) return;
+                          const fechaLiq=liquidacion.fechaImpacto||hoy;
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                           const movimientosIds=[];
                           // 1. Sueldo empleado
@@ -3300,8 +3301,7 @@ function AppInterna({ usuario }) {
                             setClientes(p=>p.map(cl=>cl.id!==ccId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
                           }
                           // 3. Guardar historial de liquidacion
-                          const fechaLiq=liquidacion.fechaImpacto||hoy;
-const liq={fecha:fechaLiq,periodo:liquidacion.periodo||fechaLiq.slice(0,7),patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
+                          const liq={fecha:fechaLiq,periodo:liquidacion.periodo||fechaLiq.slice(0,7),patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
                           notify("Liquidacion confirmada ✓");
