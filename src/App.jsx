@@ -825,7 +825,7 @@ function AppInterna({ usuario }) {
     const nv=parse(editSaldoV),delta=nv-saldos[mon];
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const ns={...saldos,[mon]:nv}; setSaldos(ns);
-    const opData={tipo:"ajuste",hora,moneda:mon,monto:Math.abs(delta),delta,nota:"Ajuste "+(delta>=0?"+":"")+fmt(delta)+" "+mon};
+    const opData={tipo:"ajuste",hora,moneda:mon,monto:Math.abs(delta),delta,nota:"Ajuste "+(delta>-1?"+":"")+fmt(delta)+" "+mon};
     const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"ajuste",datos:opData}).select().single();
     if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
     await guardarDia(ns,null,null); setEditSaldo(null); notify("Ajustado");
@@ -1075,7 +1075,7 @@ function AppInterna({ usuario }) {
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #34d39933",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("posicion")}>
                   <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>POSICION CC</div>
-                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>=0?"#34d399":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{tots.ARS>=0?"+":""}{fmt(tots.ARS)}</div>
+                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>-1?"#34d399":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{tots.ARS>-1?"+":""}{fmt(tots.ARS)}</div>
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>ARS neto en CCs</div>
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #f59e0b33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("clientes")}>
@@ -1495,7 +1495,7 @@ function AppInterna({ usuario }) {
                             </div>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #1f2937",paddingTop:4}}>
                               <span style={{fontSize:10,color:"#4ade80",fontWeight:600}}>Ganancia neta</span>
-                              <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>=0?"#4ade80":"#f87171"}}>{gananciaNeta>=0?"+":"-"}${fmt(Math.abs(gananciaNeta))}</span>
+                              <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>-1?"#4ade80":"#f87171"}}>{gananciaNeta>-1?"+":"-"}${fmt(Math.abs(gananciaNeta))}</span>
                             </div>
                           </>);
                         })()}
@@ -1822,12 +1822,12 @@ function AppInterna({ usuario }) {
                               saldo+=(ing?-mv.monto:mv.monto);
                               const debe=!ing?`<span class="debe">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
                               const haber=ing?`<span class="haber">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
-                              const sClass=saldo>=0?"saldo-pos":"saldo-neg";
+                              const sClass=saldo>-1?"saldo-pos":"saldo-neg";
                               const labelMap={ingreso_transf:"Me transfirio",ingreso_dep:"Me deposito",retiro_transf:"Le transferi",retiro_efectivo:"Retire efectivo"};
-                              html+=`<tr><td>${mv.fecha||""}</td><td>${labelMap[mv.tipo]||mv.tipo}</td><td style="color:#888">${mv.nota||""}</td><td style="text-align:right">${debe}</td><td style="text-align:right">${haber}</td><td style="text-align:right" class="${sClass}">${saldo>=0?"+":""}${mon?.simbolo||""}${saldo.toLocaleString("es-AR")}</td></tr>`;
+                              html+=`<tr><td>${mv.fecha||""}</td><td>${labelMap[mv.tipo]||mv.tipo}</td><td style="color:#888">${mv.nota||""}</td><td style="text-align:right">${debe}</td><td style="text-align:right">${haber}</td><td style="text-align:right" class="${sClass}">${saldo>-1?"+":""}${mon?.simbolo||""}${saldo.toLocaleString("es-AR")}</td></tr>`;
                             });
-                            const sClass=saldo>=0?"saldo-pos":"saldo-neg";
-                            html+=`</tbody></table><div class="saldo-final ${sClass}">Saldo final: ${saldo>=0?"Me debe":"Le debo"} ${mon?.simbolo||""}${Math.abs(saldo).toLocaleString("es-AR")} ${monId}</div>`;
+                            const sClass=saldo>-1?"saldo-pos":"saldo-neg";
+                            html+=`</tbody></table><div class="saldo-final ${sClass}">Saldo final: ${saldo>-1?"Me debe":"Le debo"} ${mon?.simbolo||""}${Math.abs(saldo).toLocaleString("es-AR")} ${monId}</div>`;
                           });
                           html+=`<div class="footer">Generado por STS Financiera · ${hoy}</div></body></html>`;
                           const w=window.open("","_blank");
@@ -2167,11 +2167,11 @@ function AppInterna({ usuario }) {
             // Evolucion vs dia anterior
             if(ultimoCierre?.total_usd&&varUSD!==null){
               hline(y,0.1); y+=16;
-              const varColor=varUSD>=0?VERDE:ROJO;
+              const varColor=varUSD>-1?VERDE:ROJO;
               rect(PAD,y-2,W-PAD*2,42,"rgba(255,255,255,0.02)",6);
               txt("PATRIMONIO HOY",PAD+12,y+12,9,DIM,"left",true);
               txt(fmtUSD(ultimoCierre.total_usd),W/2,y+12,13,"#4ade80","center",true);
-              txt((varUSD>=0?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
+              txt((varUSD>-1?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
               txt(penultimoCierre?.total_usd?"Ayer: "+fmtUSD(penultimoCierre.total_usd):"",W-PAD-12,y+26,8,GRIS,"right");
               y+=50;
             }
@@ -2183,11 +2183,11 @@ function AppInterna({ usuario }) {
             // Evolucion vs dia anterior
             if(ultimoCierre?.total_usd&&varUSD!==null){
               hline(y,0.1); y+=16;
-              const varColor=varUSD>=0?VERDE:ROJO;
+              const varColor=varUSD>-1?VERDE:ROJO;
               rect(PAD,y-2,W-PAD*2,42,"rgba(255,255,255,0.02)",6);
               txt("PATRIMONIO HOY",PAD+12,y+12,9,DIM,"left",true);
               txt(fmtUSD(ultimoCierre.total_usd),W/2,y+12,13,"#4ade80","center",true);
-              txt((varUSD>=0?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
+              txt((varUSD>-1?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
               txt(penultimoCierre?.total_usd?"Ayer: "+fmtUSD(penultimoCierre.total_usd):"",W-PAD-12,y+26,8,GRIS,"right");
               y+=50;
             }
@@ -2231,7 +2231,7 @@ function AppInterna({ usuario }) {
                     <button onClick={()=>{if(!nuevoMes.trim())return;const nf={...fact,meses:{...fact.meses,[nuevoMes.trim()]:"0"}};setFact(nf);guardarDia(null,nf,null);setNuevoMes("");}} style={{padding:"3px 7px",borderRadius:4,background:"#0a0a0a",border:"1px solid #1f2937",color:"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>+</button>
                   </div>
                   <div style={{borderTop:"1px solid #1f2937",marginTop:7,paddingTop:7}}>
-                    {[["Ganancia acum.",fmt(ganAcum),ganAcum>=0?"#4ade80":"#f87171"],["Objetivo",obj?fmt(obj):"clic","#9ca3af","__obj__"],["Resta",fmt(obj-ganAcum),obj-ganAcum<=0?"#4ade80":"#f87171"]].map(([k,v,c,ek])=>(
+                    {[["Ganancia acum.",fmt(ganAcum),ganAcum>-1?"#4ade80":"#f87171"],["Objetivo",obj?fmt(obj):"clic","#9ca3af","__obj__"],["Resta",fmt(obj-ganAcum),obj-ganAcum<=0?"#4ade80":"#f87171"]].map(([k,v,c,ek])=>(
                       <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}>
                         <span style={{fontSize:11,color:"#6b7280"}}>{k}</span>
                         {editFact==="__obj__"&&ek?(<input autoFocus type="number" value={editFactV} onChange={e=>setEditFactV(e.target.value)}
@@ -2557,10 +2557,10 @@ function AppInterna({ usuario }) {
                     <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
                     <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
                   </Card>
-                  <Card sx={{flex:"1 1 160px",border:"1px solid "+(gananciaVsBase>=0?"#4ade8033":"#f4433633"),textAlign:"center"}}>
+                  <Card sx={{flex:"1 1 160px",border:"1px solid "+(gananciaVsBase>-1?"#4ade8033":"#f4433633"),textAlign:"center"}}>
                     <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
-                    <div style={{fontSize:22,fontWeight:700,color:gananciaVsBase>=0?"#4ade80":"#f87171"}}>{gananciaVsBase>=0?"+":""}{fmtUSD(gananciaVsBase)}</div>
-                    <div style={{fontSize:10,color:gananciaVsBase>=0?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>=0?"+":""}{pctVsBase.toFixed(1)}%</div>
+                    <div style={{fontSize:22,fontWeight:700,color:gananciaVsBase>-1?"#4ade80":"#f87171"}}>{gananciaVsBase>-1?"+":""}{fmtUSD(gananciaVsBase)}</div>
+                    <div style={{fontSize:10,color:gananciaVsBase>-1?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>-1?"+":""}{pctVsBase.toFixed(1)}%</div>
                   </Card>
                   {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(varUSD>-1?"#4ade8033":"#f4433633"),textAlign:"center"}}>
                     <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
@@ -2570,7 +2570,7 @@ function AppInterna({ usuario }) {
                 </div>
 
                 {/* Grafico */}
-                {grafData.length>=2&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
+                {grafData.length>1&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
                   <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRAFICO USD</div>
                   <LineChart data={grafData} color="#4ade80" height={120}/>
                   {/* Linea de inversion base */}
@@ -2614,10 +2614,10 @@ function AppInterna({ usuario }) {
                               </td>
                               <td style={{textAlign:"right",padding:"8px 8px",color:"#6b7280",fontSize:11}}>{fmtUSD(apertura)}</td>
                               <td style={{textAlign:"right",padding:"8px 8px",color:"#e2e8f0",fontWeight:600}}>{fmtUSD(cierre)}</td>
-                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:ganancia>=0?"#4ade80":"#f87171"}}>{ganancia>=0?"+":""}{fmtUSD(ganancia)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:ganancia>-1?"#4ade80":"#f87171"}}>{ganancia>-1?"+":""}{fmtUSD(ganancia)}</td>
                               <td style={{textAlign:"right",padding:"8px 8px",color:sueldo>0?"#f59e0b":"#374151",fontSize:11}}>{sueldo>0?"-"+fmtUSD(sueldo):"—"}</td>
                               <td style={{textAlign:"right",padding:"8px 8px",color:reserva>0?"#c084fc":"#374151",fontSize:11}}>{reserva>0?"-"+fmtUSD(reserva):"—"}</td>
-                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:neto>=0?"#38bdf8":"#f87171"}}>{neto>=0?"+":""}{fmtUSD(neto)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:neto>-1?"#38bdf8":"#f87171"}}>{neto>-1?"+":""}{fmtUSD(neto)}</td>
                             </tr>
                           );
                         })}
@@ -2654,11 +2654,11 @@ function AppInterna({ usuario }) {
                                 return <td key={m.id} style={{textAlign:"right",padding:"7px 8px",color:v!==0?"#fff":"#374151",fontSize:11}}>{v!==0?fmt(v):"—"}</td>;
                               })}
                               <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:"#4ade80"}}>{c.total_usd?fmtUSD(c.total_usd):"—"}</td>
-                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:600,color:vsBase===null?"#374151":vsBase>=0?"#a78bfa":"#f87171",fontSize:11}}>
-                                {vsBase===null?"—":(vsBase>=0?"+":"")+fmtUSD(vsBase)}
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:600,color:vsBase===null?"#374151":vsBase>-1?"#a78bfa":"#f87171",fontSize:11}}>
+                                {vsBase===null?"—":(vsBase>-1?"+":"")+fmtUSD(vsBase)}
                               </td>
-                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:varDia===null?"#374151":varDia>=0?"#4ade80":"#f87171",fontSize:11}}>
-                                {varDia===null?"—":(varDia>=0?"+":"")+fmtUSD(varDia)}
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:varDia===null?"#374151":varDia>-1?"#4ade80":"#f87171",fontSize:11}}>
+                                {varDia===null?"—":(varDia>-1?"+":"")+fmtUSD(varDia)}
                               </td>
                             </tr>
                           );
@@ -3076,7 +3076,7 @@ function AppInterna({ usuario }) {
                           {[
                             ["Patrimonio final",fmtUSD(patrimonioFinal),"#4ade80"],
                             ["Inversion socios",fmtUSD(inversionTotal),"#9ca3af"],
-                            ["Ganancia bruta",fmtUSD(gananciaBruta),gananciaBruta>=0?"#4ade80":"#f87171"],
+                            ["Ganancia bruta",fmtUSD(gananciaBruta),gananciaBruta>-1?"#4ade80":"#f87171"],
                           ].map(([k,v,col])=>(
                             <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
                               <span style={{fontSize:12,color:"#6b7280"}}>{k}</span>
@@ -3148,7 +3148,7 @@ function AppInterna({ usuario }) {
                           <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",marginBottom:8}}>DISTRIBUCION SOCIOS</div>
                           <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1f2937",marginBottom:8}}>
                             <span style={{fontSize:12,color:"#6b7280"}}>Ganancia neta a distribuir</span>
-                            <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>=0?"#4ade80":"#f87171"}}>{fmtUSD(gananciaNeta)}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>-1?"#4ade80":"#f87171"}}>{fmtUSD(gananciaNeta)}</span>
                           </div>
                           {socios.map((s,i)=>{
                             const pct=total?parse(s.monto)/total:0;
@@ -3218,11 +3218,11 @@ function AppInterna({ usuario }) {
                             <h2>RESUMEN PATRIMONIAL</h2>
                             <table><tr><td>Patrimonio final</td><td style="text-align:right" class="green">${fmtUSD(patrimonioFinal)}</td></tr>
                             <tr><td>Inversion socios</td><td style="text-align:right">${fmtUSD(inversionTotal)}</td></tr>
-                            <tr><td class="total">Ganancia bruta</td><td style="text-align:right" class="${gananciaBruta>=0?"green":"red"} total">${fmtUSD(gananciaBruta)}</td></tr></table>
+                            <tr><td class="total">Ganancia bruta</td><td style="text-align:right" class="${gananciaBruta>-1?"green":"red"} total">${fmtUSD(gananciaBruta)}</td></tr></table>
                             <h2>DISTRIBUCION</h2>
                             <table><tr><td>Sueldo empleado</td><td style="text-align:right">Fijo: ${fmtUSD(sueldoFijoUSD)} + Variable ${liquidacion.pctVariable}%: ${fmtUSD(sueldoVar)}</td><td style="text-align:right;font-weight:700">${fmtUSD(totalEmpleado)}</td></tr>
                             <tr><td>Fondo reserva STS (${liquidacion.pctReserva}%)</td><td></td><td style="text-align:right;font-weight:700">${fmtUSD(reserva)}</td></tr>
-                            <tr><td class="total">Ganancia neta socios</td><td></td><td style="text-align:right" class="${gananciaNeta>=0?"green":"red"} total">${fmtUSD(gananciaNeta)}</td></tr></table>
+                            <tr><td class="total">Ganancia neta socios</td><td></td><td style="text-align:right" class="${gananciaNeta>-1?"green":"red"} total">${fmtUSD(gananciaNeta)}</td></tr></table>
                             <h2>POR SOCIO</h2>
                             <table><thead><tr><th>Socio</th><th style="text-align:right">%</th><th style="text-align:right">Corresponde</th></tr></thead><tbody>${distribRows}</tbody></table>
                             <div class="footer">Generado por STS Financiera · ${hoy}</div>
@@ -3294,7 +3294,7 @@ function AppInterna({ usuario }) {
                           <div key={liq.id} style={{borderBottom:"1px solid #1a1a1a",padding:"10px 0"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                               <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>{fmtFecha(liq.fecha)}</span>
-                              <span style={{fontSize:12,fontWeight:700,color:liq.ganancia_neta>=0?"#4ade80":"#f87171"}}>Neto: {fmtUSD(liq.ganancia_neta)}</span>
+                              <span style={{fontSize:12,fontWeight:700,color:liq.ganancia_neta>-1?"#4ade80":"#f87171"}}>Neto: {fmtUSD(liq.ganancia_neta)}</span>
                             </div>
                             <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#6b7280"}}>
                               <span>Patrimonio: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.patrimonio_final)}</strong></span>
