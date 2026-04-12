@@ -489,7 +489,8 @@ function AppInterna({ usuario }) {
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
-    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{}
+    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{},
+    periodo:""
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
@@ -2526,10 +2527,13 @@ function AppInterna({ usuario }) {
             if(!porMes[mes]) porMes[mes]={mes,cierres:[],liq:null};
             porMes[mes].cierres.push(c);
           });
-          // Agregar liquidaciones al mes correspondiente
+          // Agregar liquidaciones al mes correspondiente (usar periodo si está definido)
           liquidaciones.forEach(l=>{
-            const mes=l.fecha?.slice(0,7);
-            if(mes&&porMes[mes]) porMes[mes].liq=l;
+            const mes=l.periodo||l.fecha?.slice(0,7);
+            if(mes){
+              if(!porMes[mes]) porMes[mes]={mes,cierres:[],liq:null};
+              porMes[mes].liq=l;
+            }
           });
           const meses=Object.values(porMes).sort((a,b)=>b.mes.localeCompare(a.mes));
 
@@ -2639,32 +2643,34 @@ function AppInterna({ usuario }) {
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
                       <thead><tr>
                         <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>FECHA</th>
-                        {MONEDAS.map(m=><th key={m.id} style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:m.color,fontSize:9}}>{m.id}</th>)}
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>TOTAL USD</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#a78bfa",fontSize:9}}>VS BASE</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR DIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#f59e0b",fontSize:9}}>TOMA GANANCIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#38bdf8",fontSize:9}}>FACTURACION NETA</th>
                       </tr></thead>
                       <tbody>
                         {[...cierres].reverse().map((c,i,arr)=>{
                           const prev=arr[i+1];
                           const varDia=prev&&c.total_usd&&prev.total_usd?c.total_usd-prev.total_usd:null;
-                          const vsBase=c.total_usd?c.total_usd-inversionBase:null;
-                          const esLiqFecha=liquidaciones.some(l=>l.fecha===c.fecha);
+                          const liqDelDia=liquidaciones.find(l=>l.fecha===c.fecha);
+                          const tomaGanancia=liqDelDia?(liqDelDia.sueldo_empleado||0)+(liqDelDia.ganancia_neta||0):null;
+                          const factNeta=tomaGanancia!==null&&c.total_usd?c.total_usd-tomaGanancia:null;
+                          const vPos=varDia!==null&&varDia>-1;
                           return (
-                            <tr key={c.fecha} style={{borderBottom:"1px solid #1a1a1a",background:esLiqFecha?"rgba(99,102,241,0.05)":"transparent"}}>
+                            <tr key={c.fecha} style={{borderBottom:"1px solid #1a1a1a",background:liqDelDia?"rgba(99,102,241,0.05)":"transparent"}}>
                               <td style={{padding:"7px 8px",color:"#9ca3af"}}>
                                 {fmtFecha(c.fecha)}
-                                {esLiqFecha&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liq</span>}
+                                {liqDelDia&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liq</span>}
                               </td>
-                              {MONEDAS.map(m=>{ const v=c.saldos_finales?.[m.id]||0;
-                                return <td key={m.id} style={{textAlign:"right",padding:"7px 8px",color:v!==0?"#fff":"#374151",fontSize:11}}>{v!==0?fmt(v):"—"}</td>;
-                              })}
                               <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:"#4ade80"}}>{c.total_usd?fmtUSD(c.total_usd):"—"}</td>
-                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:600,color:vsBase===null?"#374151":vsBase>-1?"#a78bfa":"#f87171",fontSize:11}}>
-                                {vsBase===null?"—":(vsBase>-1?"+":"")+fmtUSD(vsBase)}
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:varDia===null?"#374151":vPos?"#4ade80":"#f87171",fontSize:11}}>
+                                {varDia===null?"—":(vPos?"+":"")+fmtUSD(varDia)}
                               </td>
-                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:varDia===null?"#374151":varDia>-1?"#4ade80":"#f87171",fontSize:11}}>
-                                {varDia===null?"—":(varDia>-1?"+":"")+fmtUSD(varDia)}
+                              <td style={{textAlign:"right",padding:"7px 8px",color:tomaGanancia?"#f59e0b":"#374151",fontSize:11}}>
+                                {tomaGanancia?"-"+fmtUSD(tomaGanancia):"—"}
+                              </td>
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:600,color:factNeta?"#38bdf8":"#374151",fontSize:11}}>
+                                {factNeta?fmtUSD(factNeta):"—"}
                               </td>
                             </tr>
                           );
@@ -3071,6 +3077,15 @@ function AppInterna({ usuario }) {
                     </button>
                     {liquidacion.mostrando&&(
                       <Card sx={{marginTop:10,border:"1px solid #6366f133"}}>
+                        {/* Periodo */}
+                        <div style={{marginBottom:14}}>
+                          <Lbl>Periodo al que corresponde</Lbl>
+                          <Inp type="month" value={liquidacion.periodo} onChange={e=>setLiquidacion(l=>({...l,periodo:e.target.value}))}
+                            placeholder="2026-03"/>
+                          {liquidacion.periodo&&<div style={{fontSize:10,color:"#6366f1",marginTop:4}}>
+                            {new Date(liquidacion.periodo+"-01").toLocaleDateString("es-AR",{month:"long",year:"numeric"}).toUpperCase()}
+                          </div>}
+                        </div>
                         {/* Resumen patrimonial */}
                         <div style={{marginBottom:16}}>
                           <div style={{fontSize:10,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RESUMEN PATRIMONIAL</div>
@@ -3281,11 +3296,11 @@ function AppInterna({ usuario }) {
                             setClientes(p=>p.map(cl=>cl.id!==ccId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
                           }
                           // 3. Guardar historial de liquidacion
-                          const liq={fecha:hoy,patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
+                          const liq={fecha:hoy,periodo:liquidacion.periodo||hoy.slice(0,7),patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
                           notify("Liquidacion confirmada ✓");
-                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:""}));
+                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:"",periodo:""}));
                         }} disabled={gananciaBruta<=0}
                           style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
                           CONFIRMAR LIQUIDACION
@@ -3299,7 +3314,14 @@ function AppInterna({ usuario }) {
                         {liquidaciones.map(liq=>(
                           <div key={liq.id} style={{borderBottom:"1px solid #1a1a1a",padding:"10px 0"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                              <div>
                               <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>{fmtFecha(liq.fecha)}</span>
+                              {liq.periodo&&liq.periodo!==liq.fecha?.slice(0,7)&&(
+                                <span style={{marginLeft:8,fontSize:10,padding:"1px 6px",borderRadius:4,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>
+                                  periodo: {new Date(liq.periodo+"-01").toLocaleDateString("es-AR",{month:"long",year:"numeric"})}
+                                </span>
+                              )}
+                            </div>
                               <span style={{fontSize:12,fontWeight:700,color:liq.ganancia_neta>-1?"#4ade80":"#f87171"}}>Neto: {fmtUSD(liq.ganancia_neta)}</span>
                             </div>
                             <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#6b7280"}}>
