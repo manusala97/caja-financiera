@@ -2546,28 +2546,34 @@ function AppInterna({ usuario }) {
             ):(
               <div>
                 {/* KPIs principales */}
-                <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
-                  {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
-                    <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioActual)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
-                  </Card>}
-                  <Card sx={{flex:"1 1 160px",border:"1px solid #a78bfa33",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSION SOCIOS</div>
-                    <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
-                  </Card>
-                  <Card sx={{flex:"1 1 160px",border:"1px solid "+(gananciaVsBase>-1?"#4ade8033":"#f4433633"),textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
-                    <div style={{fontSize:22,fontWeight:700,color:gananciaVsBase>-1?"#4ade80":"#f87171"}}>{gananciaVsBase>-1?"+":""}{fmtUSD(gananciaVsBase)}</div>
-                    <div style={{fontSize:10,color:gananciaVsBase>-1?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>-1?"+":""}{pctVsBase.toFixed(1)}%</div>
-                  </Card>
-                  {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(varUSD>-1?"#4ade8033":"#f4433633"),textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
-                    <div style={{fontSize:22,fontWeight:700,color:varUSD>-1?"#4ade80":"#f87171"}}>{varUSD>-1?"+":""}{fmtUSD(varUSD)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{varUSD>-1?"Subio":"Bajo"}</div>
-                  </Card>
-                </div>
+                {(()=>{
+                  const gPos=gananciaVsBase>-1;
+                  const vPos=varUSD!==null&&varUSD>-1;
+                  return (
+                  <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
+                    {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
+                      <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioActual)}</div>
+                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
+                    </Card>}
+                    <Card sx={{flex:"1 1 160px",border:"1px solid #a78bfa33",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSION SOCIOS</div>
+                      <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
+                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
+                    </Card>
+                    <Card sx={{flex:"1 1 160px",border:"1px solid "+(gPos?"#4ade8033":"#f4433633"),textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
+                      <div style={{fontSize:22,fontWeight:700,color:gPos?"#4ade80":"#f87171"}}>{gPos?"+":""}{fmtUSD(gananciaVsBase)}</div>
+                      <div style={{fontSize:10,color:gPos?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>-1?"+":""}{pctVsBase.toFixed(1)}%</div>
+                    </Card>
+                    {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(vPos?"#4ade8033":"#f4433633"),textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
+                      <div style={{fontSize:22,fontWeight:700,color:vPos?"#4ade80":"#f87171"}}>{vPos?"+":""}{fmtUSD(varUSD)}</div>
+                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{vPos?"Subio":"Bajo"}</div>
+                    </Card>}
+                  </div>
+                  );
+                })()}
 
                 {/* Grafico */}
                 {grafData.length>1&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
