@@ -3258,7 +3258,7 @@ function AppInterna({ usuario }) {
                           </button>
                         </div>
                         <button onClick={async()=>{
-                          if(!window.confirm("Confirmar liquidacion? Se registrarán los gastos y se actualizará el capital de cada socio.")) return;
+                          if(!window.confirm("Confirmar liquidacion? Se registraran los movimientos en las CCs de socios y empleado.")) return;
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                           const movimientosIds=[];
                           // 1. Sueldo empleado
@@ -3345,7 +3345,7 @@ const liq={fecha:fechaLiq,periodo:liquidacion.periodo||fechaLiq.slice(0,7),patri
                               </div>
                             )}
                             <button onClick={async()=>{
-                              if(!window.confirm("Revertir esta liquidacion? Se borrarán los movimientos de CC y gastos generados.")) return;
+                              if(!window.confirm("Revertir esta liquidacion? Se borraran los movimientos de CC y gastos generados.")) return;
                               // Borrar movimientos CC y gastos
                               const ids=liq.movimientos_ids||[];
                               for(const m of ids){
