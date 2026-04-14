@@ -458,6 +458,8 @@ function AppInterna({ usuario }) {
   const [cajaCerrada, setCajaCerrada] = useState(false);
   const [showModalCierre, setShowModalCierre] = useState(false);
   const [ultimaBlue, setUltimaBlue] = useState({compra:0,venta:0});
+  const [ultimoRefresh, setUltimoRefresh] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
   const [cierres, setCierres] = useState([]);
   const [editandoOp, setEditandoOp] = useState(null);
   const [histFecha, setHistFecha] = useState("");
@@ -519,7 +521,8 @@ function AppInterna({ usuario }) {
   const setF = useCallback((k,v)=>setForm(f=>({...f,[k]:v})),[]);
 
   useEffect(()=>{
-    async function cargar() {
+    async function cargar(silencioso=false) {
+      if(!silencioso) setCargando(true);
       try {
         // Asegurar sesion activa antes de cargar datos
         const {data:{session}} = await SB.auth.getSession();
@@ -603,6 +606,9 @@ function AppInterna({ usuario }) {
       setCargando(false);
     }
     cargar();
+    // Auto-refresh cada 30 segundos (silencioso, sin spinner)
+    const interval = setInterval(()=>{cargar(true);setUltimoRefresh(new Date());}, 30000);
+    return ()=>clearInterval(interval);
   },[]);
 
   const calcDif = useMemo(()=>{
@@ -1012,6 +1018,25 @@ function AppInterna({ usuario }) {
         </div>
         <div style={{marginLeft:"auto",paddingRight:8}} className="hide-mobile">
           <button onClick={async()=>{ await SB.auth.signOut(); }} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+            <span onClick={async()=>{
+              setRefreshing(true);
+              // Re-cargar datos manualmente
+              const {data:cls}=await SB.from("clientes").select("*");
+              const {data:movs}=await SB.from("movimientos_cc").select("*");
+              if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+                id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
+                movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
+                  id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
+                }))
+              })));
+              const {data:opsData}=await SB.from("operaciones").select("*").order("hora",{ascending:true});
+              if(opsData) setOps(opsData.map(o=>({...(o.datos||{}),id:o.id,fecha:o.fecha||o.datos?.fecha,hora:o.hora||o.datos?.hora,tipo:o.tipo})));
+              setUltimoRefresh(new Date());
+              setRefreshing(false);
+              notify("Datos actualizados");
+            }} style={{cursor:"pointer",fontSize:10,color:refreshing?"#4ade80":"#374151",marginRight:8,padding:"2px 6px",borderRadius:4,border:"1px solid #1f2937"}}>
+              {refreshing?"↻ ...":"↻"}
+            </span>
             {usuario?.email?.split("@")[0]} - salir
           </button>
         </div>
