@@ -568,14 +568,26 @@ function AppInterna({ usuario }) {
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
-        const {data:movs} = await SB.from("movimientos_cc").select("*");
-        if (cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
+        const {data:movs} = await SB.from("movimientos_cc").select("*").limit(5000);
+        if (cls) {
+          const tresor=cls.find(x=>x.nombre==="TRESOR"||x.nombre==="Tresor");
+          if(tresor) {
+            const movsTresor=(movs||[]).filter(m=>Number(m.cliente_id)===Number(tresor.id));
+            console.log("TRESOR id:",tresor.id,"movimientos cargados:",movsTresor.length,"de",movs?.length,"total");
+            const salARS=movsTresor.reduce((s,m)=>{
+              if(m.moneda!=="ARS") return s;
+              const ing=m.tipo==="ingreso_transf"||m.tipo==="ingreso_dep";
+              return s+(ing?-Number(m.monto):Number(m.monto));
+            },0);
+            console.log("TRESOR saldo ARS calculado:",salARS);
+          }
+          setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
           id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
             moneda:m.moneda, monto:Number(m.monto), nota:m.nota
           }))
-        })));
+        })));}
         // Facturacion
         const {data:factData} = await SB.from("facturacion").select("*").eq("id","config").single();
         if (factData) setFact({objetivo:String(factData.objetivo||""), meses:factData.meses||{}});
@@ -610,7 +622,7 @@ function AppInterna({ usuario }) {
     const interval = setInterval(async()=>{
       try {
         const {data:cls}=await SB.from("clientes").select("*");
-        const {data:movs}=await SB.from("movimientos_cc").select("*");
+        const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
         if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
           id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
@@ -1034,7 +1046,7 @@ function AppInterna({ usuario }) {
           <button onClick={async()=>{
             setRefreshing(true);
             const {data:cls}=await SB.from("clientes").select("*");
-            const {data:movs}=await SB.from("movimientos_cc").select("*");
+            const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
             if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
               id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
               movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
