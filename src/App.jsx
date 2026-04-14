@@ -504,6 +504,7 @@ function AppInterna({ usuario }) {
   const dragSrcId = useRef(null);
   const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", impactaCaja:true}]
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
@@ -781,6 +782,18 @@ function AppInterna({ usuario }) {
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
       opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
+      // Procesar USD pendiente de entrega
+      if(usdPendiente.activo&&usdPendiente.clienteId&&(parse(usdPendiente.monto)||parse(form.monto))){
+        const cPendId=Number(usdPendiente.clienteId);
+        const montoPend=parse(usdPendiente.monto)||parse(form.monto);
+        const monPend=tipo==="venta"?form.moneda:form.moneda2;
+        const horaPend=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+        const notaPend="Entrega diferida - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(montoPend)+" "+monPend;
+        const mvPend={id:Date.now()+999,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:monPend,monto:montoPend,nota:notaPend};
+        await SB.from("movimientos_cc").insert({cliente_id:cPendId,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:monPend,monto:montoPend,nota:notaPend});
+        setClientes(p=>p.map(cl=>cl.id!==cPendId?cl:{...cl,movimientos:[...cl.movimientos,mvPend]}));
+        setUsdPendiente({clienteId:"",buscar:"",monto:"",activo:false});
+      }
       setF("monto",""); setF("monto2",""); setF("cotizacion","");
       setDesglose([]); setMostrarDesglose(false);
     } else if (tipo==="cheque_dia") {
@@ -1401,8 +1414,66 @@ function AppInterna({ usuario }) {
                           ))}
                           <button onClick={()=>setDesglose(p=>[...p,{id:Date.now(),tipo:"efectivo",monto:"",impactaCaja:true}])}
                             style={{marginTop:4,padding:"5px 12px",borderRadius:5,background:"transparent",border:"1px dashed #374151",color:"#6b7280",fontFamily:"inherit",fontSize:11,cursor:"pointer",width:"100%"}}>
-                            + Agregar línea
+                            + Agregar linea
                           </button>
+                          {/* USD pendiente de entrega */}
+                          {(form.tipo==="compra"||form.tipo==="venta")&&(
+                            <div style={{marginTop:10,borderTop:"1px solid #1f2937",paddingTop:10}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                <span style={{fontSize:9,letterSpacing:2,color:"#6366f1"}}>
+                                  {form.tipo==="venta"?"USD A RECIBIR (entrega diferida)":"ARS A RECIBIR (entrega diferida)"}
+                                </span>
+                                <button onClick={()=>setUsdPendiente(u=>({...u,activo:!u.activo}))}
+                                  style={{fontSize:9,padding:"2px 7px",borderRadius:4,background:usdPendiente.activo?"rgba(99,102,241,0.15)":"transparent",border:"1px solid "+(usdPendiente.activo?"#6366f1":"#374151"),color:usdPendiente.activo?"#a5b4fc":"#475569",cursor:"pointer",fontFamily:"inherit"}}>
+                                  {usdPendiente.activo?"- Quitar":"+ Agregar"}
+                                </button>
+                              </div>
+                              {usdPendiente.activo&&(()=>{
+                                const clSel=clientes.find(x=>x.id===Number(usdPendiente.clienteId));
+                                const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((usdPendiente.buscar||"").toLowerCase()));
+                                const monBase=form.tipo==="venta"?form.moneda:form.moneda2;
+                                return (
+                                  <div style={{background:"rgba(99,102,241,0.05)",border:"1px solid #6366f122",borderRadius:7,padding:8,position:"relative"}}>
+                                    <div style={S.grid("1fr 100px",6)}>
+                                      <div>
+                                        <Lbl>Quien nos debe entregar</Lbl>
+                                        <div style={{display:"flex",gap:4}}>
+                                          {clSel&&!usdPendiente.buscar&&(
+                                            <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(99,102,241,0.1)",border:"1px solid #6366f133",fontSize:10,color:"#a5b4fc",fontWeight:600}}>
+                                              {clSel.nombre} {clSel.apellido}
+                                            </div>
+                                          )}
+                                          <input value={usdPendiente.buscar||""} onChange={e=>setUsdPendiente(u=>({...u,buscar:e.target.value}))}
+                                            placeholder={clSel&&!usdPendiente.buscar?"Cambiar...":"Buscar cliente..."}
+                                            style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                          {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
+                                            style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                        </div>
+                                        {usdPendiente.buscar&&filtrados.length>0&&(
+                                          <div style={{position:"absolute",left:8,right:8,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                                            {filtrados.map(cl=>(
+                                              <div key={cl.id} onClick={()=>setUsdPendiente(u=>({...u,clienteId:String(cl.id),buscar:""}))}
+                                                style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                                {cl.nombre} {cl.apellido}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <Lbl>Monto {monBase}</Lbl>
+                                        <Inp type="number" placeholder={form.monto||"0"} value={usdPendiente.monto}
+                                          onChange={e=>setUsdPendiente(u=>({...u,monto:e.target.value}))}/>
+                                      </div>
+                                    </div>
+                                    {clSel&&<div style={{fontSize:9,color:"#6366f1",marginTop:4}}>
+                                      Al registrar: {form.tipo==="venta"?"nos debe entregar":"nos debe pagar"} {usdPendiente.monto||form.monto} {monBase} → retiro_transf en su CC (nos debe)
+                                    </div>}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
