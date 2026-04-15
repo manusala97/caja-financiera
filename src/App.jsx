@@ -470,7 +470,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", baseImpactaCaja:"si" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -782,7 +782,19 @@ function AppInterna({ usuario }) {
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
       opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
-      // Procesar USD pendiente de entrega
+      // Procesar base pendiente (no impacta caja)
+      if(form.baseImpactaCaja==="no"&&usdPendiente.clienteId){
+        const cPendId2=Number(usdPendiente.clienteId);
+        const montoPend2=parse(form.monto);
+        const horaPend2=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+        const notaPend2=(tipo==="compra"?"Compra":"Venta")+" "+fmt(montoPend2)+" "+form.moneda+" - pendiente entrega";
+        // compra: cliente nos debe los USD → retiro_transf (nos debe)
+        // venta: cliente nos debe los ARS → retiro_transf (nos debe)  
+        const mvPend2={id:Date.now()+998,hora:horaPend2,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend2,nota:notaPend2};
+        await SB.from("movimientos_cc").insert({cliente_id:cPendId2,hora:horaPend2,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend2,nota:notaPend2});
+        setClientes(p=>p.map(cl=>cl.id!==cPendId2?cl:{...cl,movimientos:[...cl.movimientos,mvPend2]}));
+      }
+      // Procesar USD pendiente de entrega (desglose)
       if(usdPendiente.activo&&usdPendiente.clienteId&&(parse(usdPendiente.monto)||parse(form.monto))){
         const cPendId=Number(usdPendiente.clienteId);
         const montoPend=parse(usdPendiente.monto)||parse(form.monto);
@@ -795,7 +807,7 @@ function AppInterna({ usuario }) {
         setUsdPendiente({clienteId:"",buscar:"",monto:"",activo:false});
       }
       setF("monto",""); setF("monto2",""); setF("cotizacion","");
-      setDesglose([]); setMostrarDesglose(false);
+      setDesglose([]); setMostrarDesglose(false); setF("baseImpactaCaja","si");
     } else if (tipo==="cheque_dia") {
       const cn=parse(form.cn),cpct=parse(form.cpct);
       if (!cn||!cpct) { notify("Ingresa nominal y %",false); return; }
@@ -1286,6 +1298,54 @@ function AppInterna({ usuario }) {
                       <div><Lbl>Cantidad</Lbl><Inp type="number" placeholder="0" value={form.monto} onChange={e=>{setF("monto",e.target.value);const c=parse(form.cotizacion);if(c)setF("monto2",String(parse(e.target.value)*c));}}/></div>
                       <div><Lbl>Cotizacion</Lbl><Inp type="number" placeholder="0" value={form.cotizacion} onChange={e=>{setF("cotizacion",e.target.value);const m=parse(form.monto);if(m)setF("monto2",String(m*parse(e.target.value)));}}/></div>
                       <div><Lbl>Total</Lbl><Inp type="number" placeholder="0" value={form.monto2} onChange={e=>{setF("monto2",e.target.value);const m=parse(form.monto);if(m)setF("cotizacion",String(parse(e.target.value)/m));}}/></div>
+                    </div>
+                    {/* Toggle impacto en caja de moneda base */}
+                    <div style={{marginTop:10,marginBottom:4}}>
+                      <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:6}}>
+                        {form.tipo==="compra"?"USD ENTRAN A CAJA":"USD SALEN DE CAJA"}
+                      </div>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                        <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid #1f2937"}}>
+                          <button onClick={()=>{setF("baseImpactaCaja","si");setUsdPendiente(u=>({...u,activo:false,clienteId:"",buscar:"",monto:""}));}}
+                            style={{padding:"5px 12px",background:form.baseImpactaCaja!=="no"?"rgba(74,222,128,0.12)":"transparent",color:form.baseImpactaCaja!=="no"?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:11,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
+                            ✓ Impacta caja
+                          </button>
+                          <button onClick={()=>{setF("baseImpactaCaja","no");setUsdPendiente(u=>({...u,activo:true}));}}
+                            style={{padding:"5px 12px",background:form.baseImpactaCaja==="no"?"rgba(99,102,241,0.12)":"transparent",color:form.baseImpactaCaja==="no"?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                            ⏳ Pendiente — CC
+                          </button>
+                        </div>
+                        {form.baseImpactaCaja==="no"&&(()=>{
+                          const clSel=clientes.find(x=>x.id===Number(usdPendiente.clienteId));
+                          const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((usdPendiente.buscar||"").toLowerCase()));
+                          return (
+                            <div style={{flex:1,minWidth:180,position:"relative"}}>
+                              <div style={{display:"flex",gap:4}}>
+                                {clSel&&!usdPendiente.buscar&&(
+                                  <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f133",fontSize:10,color:"#a5b4fc",fontWeight:600}}>
+                                    {clSel.nombre} {clSel.apellido}
+                                  </div>
+                                )}
+                                <input value={usdPendiente.buscar||""} onChange={e=>setUsdPendiente(u=>({...u,buscar:e.target.value}))}
+                                  placeholder={clSel?"Cambiar...":"¿Quien nos debe los "+form.moneda+"?"}
+                                  style={{flex:1,background:"#0a0a0a",border:"1px solid #6366f133",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
+                                  style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                              </div>
+                              {usdPendiente.buscar&&filtrados.length>0&&(
+                                <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                                  {filtrados.map(cl=>(
+                                    <div key={cl.id} onClick={()=>setUsdPendiente(u=>({...u,clienteId:String(cl.id),buscar:""}))}
+                                      style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                      {cl.nombre} {cl.apellido}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                     {/* Desglose de pago */}
                     <div style={{marginTop:10}}>
