@@ -507,6 +507,7 @@ function AppInterna({ usuario }) {
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
+  const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
@@ -1858,6 +1859,87 @@ function AppInterna({ usuario }) {
                       ))}
                     </div>
                   </div>
+                  {/* Convertir saldo */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,letterSpacing:2,color:"#2dd4bf",marginBottom:5}}>CONVERTIR SALDO</div>
+                    <button onClick={()=>{setConvertirCC(cv=>({...cv,activo:!cv.activo}));setTransCC(t=>({...t,activo:false}));}}
+                      style={{...S.btn(convertirCC.activo,"#2dd4bf"),width:"100%"}}>
+                      ⇌ Convertir moneda en CC
+                    </button>
+                  </div>
+                  {convertirCC.activo&&(()=>{
+                    const salOrigen=saldoCC(c)[convertirCC.monedaOrigen]||0;
+                    const monO=MONEDAS.find(m=>m.id===convertirCC.monedaOrigen);
+                    const monD=MONEDAS.find(m=>m.id===convertirCC.monedaDestino);
+                    const montoOrigen=parse(convertirCC.monto)||Math.abs(salOrigen);
+                    const cotiz=parse(convertirCC.cotiz)||1;
+                    const montoDestino=convertirCC.monedaOrigen==="USD"&&convertirCC.monedaDestino==="ARS"
+                      ? montoOrigen*cotiz
+                      : convertirCC.monedaOrigen==="ARS"&&convertirCC.monedaDestino==="USD"
+                      ? montoOrigen/cotiz
+                      : montoOrigen*cotiz;
+                    return (
+                      <div style={{background:"rgba(45,212,191,0.05)",border:"1px solid rgba(45,212,191,0.2)",borderRadius:8,padding:10,marginBottom:12}}>
+                        <div style={{fontSize:9,color:"#2dd4bf",letterSpacing:2,marginBottom:8}}>CONVERTIR EN CC DE {c.nombre}</div>
+                        {/* Saldo actual */}
+                        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                          {MONEDAS.filter(m=>saldoCC(c)[m.id]!==0).map(m=>{
+                            const sal=saldoCC(c)[m.id];
+                            return <div key={m.id} style={{padding:"3px 8px",borderRadius:4,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                              <span style={{color:"#6b7280"}}>{m.id}: </span>
+                              <span style={{color:sal>0?"#4ade80":"#f87171",fontWeight:600}}>{m.simbolo}{fmt(Math.abs(sal))}</span>
+                            </div>;
+                          })}
+                        </div>
+                        <div style={S.grid("1fr 1fr",8)}>
+                          <div>
+                            <Lbl>De</Lbl>
+                            <MonedasSel value={convertirCC.monedaOrigen} onChange={v=>setConvertirCC(cv=>({...cv,monedaOrigen:v}))}/>
+                          </div>
+                          <div>
+                            <Lbl>A</Lbl>
+                            <MonedasSel value={convertirCC.monedaDestino} onChange={v=>setConvertirCC(cv=>({...cv,monedaDestino:v}))} exclude={convertirCC.monedaOrigen}/>
+                          </div>
+                          <div>
+                            <Lbl>Monto {convertirCC.monedaOrigen} <span style={{fontSize:9,color:"#4b5563"}}>(saldo: {fmt(Math.abs(salOrigen))})</span></Lbl>
+                            <Inp type="number" placeholder={fmt(Math.abs(salOrigen))} value={convertirCC.monto}
+                              onChange={e=>setConvertirCC(cv=>({...cv,monto:e.target.value}))}/>
+                          </div>
+                          <div>
+                            <Lbl>Cotizacion</Lbl>
+                            <Inp type="number" placeholder="1400" value={convertirCC.cotiz}
+                              onChange={e=>setConvertirCC(cv=>({...cv,cotiz:e.target.value}))}/>
+                          </div>
+                        </div>
+                        {convertirCC.cotiz&&(
+                          <div style={{marginTop:6,fontSize:10,color:"#2dd4bf",padding:"4px 8px",background:"rgba(45,212,191,0.08)",borderRadius:5}}>
+                            {fmt(montoOrigen)} {convertirCC.monedaOrigen} → {fmt(montoDestino)} {convertirCC.monedaDestino}
+                          </div>
+                        )}
+                        <button onClick={async()=>{
+                          if(!montoOrigen||!cotiz){notify("Completa monto y cotizacion",false);return;}
+                          const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          const nota="Conversion "+fmt(montoOrigen)+" "+convertirCC.monedaOrigen+" a "+fmt(montoDestino)+" "+convertirCC.monedaDestino+" (x"+fmt(cotiz)+")";
+                          // Cancelar deuda en moneda origen
+                          // Si le debemos (saldo negativo) → retiro_transf para cancelar
+                          // Si nos debe (saldo positivo) → ingreso_transf para cancelar
+                          const tipoOrigen=salOrigen<0?"retiro_transf":"ingreso_transf";
+                          const mv1={id:Date.now(),hora,fecha:hoy,tipo:tipoOrigen,moneda:convertirCC.monedaOrigen,monto:montoOrigen,nota};
+                          await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoOrigen,moneda:convertirCC.monedaOrigen,monto:montoOrigen,nota});
+                          setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
+                          // Crear deuda equivalente en moneda destino (mismo signo)
+                          const tipoDestino=salOrigen<0?"ingreso_transf":"retiro_transf";
+                          const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota};
+                          await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota});
+                          setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+                          setConvertirCC({activo:false,monedaOrigen:"USD",monedaDestino:"ARS",monto:"",cotiz:""});
+                          notify("Conversion registrada ✓");
+                        }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(45,212,191,0.1)",border:"1px solid #2dd4bf",color:"#2dd4bf",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                          ⇌ Confirmar conversion
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {/* Transferencia entre CCs */}
                   <div style={{marginBottom:12}}>
                     <div style={{fontSize:9,letterSpacing:2,color:"#a78bfa",marginBottom:5}}>ENTRE CUENTAS</div>
