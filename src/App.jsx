@@ -56,9 +56,13 @@ const sumarDiasHabiles = (fechaStr, dias) => {
   }
   return d.toISOString().split("T")[0];
 };
-// Siempre usar horario Argentina (UTC-3)
+// Siempre usar horario Argentina (UTC-3) - funcion para calcular siempre fresco
+const getHoy = () => {
+  const ar = new Date(new Date().toLocaleString("en-US", {timeZone:"America/Argentina/Buenos_Aires"}));
+  return ar.getFullYear()+"-"+String(ar.getMonth()+1).padStart(2,"0")+"-"+String(ar.getDate()).padStart(2,"0");
+};
 const ahoraAR = new Date(new Date().toLocaleString("en-US", {timeZone:"America/Argentina/Buenos_Aires"}));
-const hoy = ahoraAR.getFullYear()+"-"+String(ahoraAR.getMonth()+1).padStart(2,"0")+"-"+String(ahoraAR.getDate()).padStart(2,"0");
+const hoy = getHoy();
 const fechaLarga = ahoraAR.toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
 const fmtFecha = (f) => f ? new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",year:"numeric",month:"short",day:"numeric"}) : "";
 
@@ -442,6 +446,13 @@ function LoginScreen({ onLogin }) {
 }
 
 function AppInterna({ usuario }) {
+  const [hoyState, setHoyState] = useState(getHoy());
+  // Actualizar fecha cada minuto por si la app queda abierta de un dia al otro
+  useEffect(()=>{
+    const t=setInterval(()=>setHoyState(getHoy()),60000);
+    return()=>clearInterval(t);
+  },[]);
+  const hoy=hoyState;
   const [pant, setPant] = useState("ape");
   const [toast, setToast] = useState(null);
   const [cargando, setCargando] = useState(true);
