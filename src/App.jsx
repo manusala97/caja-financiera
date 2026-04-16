@@ -771,8 +771,10 @@ function AppInterna({ usuario }) {
         const asignado=desglose.reduce((s,d)=>s+parse(d.monto),0);
         if (Math.abs(asignado-m2)>1) { notify("El desglose no cuadra con el total",false); return; }
       }
-      // Impacto en caja base (moneda principal)
-      tipo==="compra"?(ns[form.moneda]+=m):(ns[form.moneda]-=m);
+      // Impacto en caja base (moneda principal) - solo si no es pendiente CC
+      if(form.baseImpactaCaja!=="no"){
+        tipo==="compra"?(ns[form.moneda]+=m):(ns[form.moneda]-=m);
+      }
       // Si hay desglose, procesar cada línea para la moneda2
       // Si no hay desglose, impacto normal en caja
       if (mostrarDesglose&&desglose.length>0) {
