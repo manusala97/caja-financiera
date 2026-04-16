@@ -535,9 +535,27 @@ function AppInterna({ usuario }) {
           // Dia de hoy ya existe
           setDiaId(dia.id);
           const ci = dia.caja_ini || {};
-          setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
+          // Verificar si la caja fue abierta hoy
+          // Chequear si hay valores en caja_ini (monedas) O en _saldos_finales
           const sf = ci._saldos_finales;
-          if (sf) { setSaldos(sf); setPant("home"); }
+          const tieneMonedas = MONEDAS.some(m=>ci[m.id]&&ci[m.id]!=="");
+          const tieneSaldos = sf && Object.values(sf).some(v=>Number(v)!==0);
+          const cajaFueAbierta = tieneMonedas || tieneSaldos;
+          if (cajaFueAbierta) {
+            // Caja ya abierta: cargar saldos y ir al home
+            setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
+            if(sf) setSaldos(Object.fromEntries(MONEDAS.map(m=>[m.id, Number(sf[m.id])||0])));
+            setPant("home");
+          } else {
+            // Dia existe pero caja no abierta: pre-cargar cajaIni desde ultimo cierre
+            let ultimoCierreData = null;
+            try { const r = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single(); ultimoCierreData=r.data; } catch(e){}
+            if (ultimoCierreData?.saldos_finales) {
+              setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ultimoCierreData.saldos_finales[m.id]||""])));
+            }
+            // Ir a pantalla de apertura
+            setPant("ape");
+          }
           const ft = ci._fact; if (ft) setFact(ft);
           const po = ci._pos_ovr; if (po) setPosOvr(po);
         } else {
