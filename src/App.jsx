@@ -754,6 +754,7 @@ function AppInterna({ usuario }) {
     setSaldos(s);
     const cajaData = {...Object.fromEntries(MONEDAS.map(m=>[m.id,cajaIni[m.id]])), _saldos_finales:s};
     await SB.from("dias").upsert({id:hoy, caja_ini:cajaData, abierta:true},{onConflict:"id"});
+    setDiaId(hoy); // Marcar que el dia fue abierto
     setPant("home"); notify("Caja abierta ✓");
   }
 
