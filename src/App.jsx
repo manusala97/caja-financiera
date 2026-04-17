@@ -235,11 +235,18 @@ function PantallaAnalisis() {
   }
 
   function correrCPP(ops, cierres, dias, movsCC, diferidos) {
-    const primerCierre = cierres[0];
-    const cotizArranque = primerCierre?.cotiz_blue?.compra || parse(primerCierre?.cotizaciones?.ARS) || 0;
-    const primerDia = dias.find(d => d.id === primerCierre?.fecha);
-    const cajaIni = primerDia?.caja_ini || {};
-    const stockArranque = parse(cajaIni.USD || 0);
+    // Fecha de corte: a partir de acá el sistema es confiable
+    const FECHA_CORTE = "2026-04-14";
+
+    // Stock y CPP arrancan desde cero en la fecha de corte
+    // usando el saldo de apertura de ese día como punto de partida
+    const diaCorte = dias.find(d => d.id === FECHA_CORTE);
+    const cajaCorte = diaCorte?.caja_ini || {};
+    const stockArranque = parse(cajaCorte.USD || 0);
+    
+    // Cotizacion de arranque = blue de compra del cierre más cercano a la fecha de corte
+    const cierreCorte = cierres.find(c => c.fecha >= FECHA_CORTE) || cierres[0];
+    const cotizArranque = cierreCorte?.cotiz_blue?.compra || parse(cierreCorte?.cotizaciones?.ARS) || 0;
 
     let stockUSD = stockArranque;
     let cpp = cotizArranque > 0 ? cotizArranque : 0;
@@ -248,7 +255,9 @@ function PantallaAnalisis() {
     const historial = [];
     const resumenDias = {};
 
+    // Solo operaciones desde la fecha de corte
     const opsUSD = ops.filter(o =>
+      o.fecha >= FECHA_CORTE &&
       (o.tipo === "compra" || o.tipo === "venta") &&
       ((o.moneda === "USD" && o.moneda2 === "ARS") ||
        (o.moneda === "ARS" && o.moneda2 === "USD"))
@@ -316,7 +325,10 @@ function PantallaAnalisis() {
   }
 
   function calcularTenencia(cierres, movsCC, diferidos) {
-    if (cierres.length < 2) return null;
+    const FECHA_CORTE_T = "2026-04-14";
+    const cierresFiltrados = cierres.filter(c => c.fecha >= FECHA_CORTE_T);
+    if (cierresFiltrados.length < 2) return null;
+    cierres = cierresFiltrados;
 
     // Saldo CC por moneda acumulado hasta una fecha
     function saldoCCHasta(fecha) {
@@ -430,7 +442,8 @@ function PantallaAnalisis() {
     <div>
       <div style={{fontSize:9,letterSpacing:4,color:"#f59e0b",marginBottom:4,fontWeight:600}}>ANÁLISIS DE STOCK USD</div>
       <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Costo Promedio Ponderado Móvil</div>
-      <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>¿A qué precio tengo los dólares y cuánto gané por las ventas?</div>
+      <div style={{fontSize:12,color:"#4b5563",marginBottom:4}}>¿A qué precio tengo los dólares y cuánto gané por las ventas?</div>
+      <div style={{fontSize:11,color:"#374151",marginBottom:20,padding:"6px 12px",background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:8,display:"inline-block"}}>📅 Análisis desde el 14 de abril 2026 — fecha de inicio del sistema confiable</div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:10,marginBottom:24}}>
         {[
@@ -466,7 +479,7 @@ function PantallaAnalisis() {
               ["Valor al CPP (libro)", "$"+fmt(Math.round(cpp*stockUSD))],
               blueActual?["Valor al blue hoy","$"+fmt(Math.round(blueActual*stockUSD))]:null,
               gananciaNoRealizada!==null?["Ganancia latente","$"+fmt(Math.round(gananciaNoRealizada))+" ("+(((gananciaNoRealizada)/(cpp*stockUSD||1))*100).toFixed(1)+"%)"] :null,
-              ["Arranque del CPP","USD "+fmt(Math.round(stockArranque))+" × $"+fmt(Math.round(cotizArranque))+" (compra primer cierre)"],
+              ["Arranque del CPP","USD "+fmt(Math.round(stockArranque))+" × $"+fmt(Math.round(cotizArranque))+" (apertura 14/4/2026)"],
               ["Operaciones analizadas", historial.length+" compras/ventas USD/ARS"],
             ].filter(Boolean).map(([k,v])=>(
               <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",fontSize:12}}>
