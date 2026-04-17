@@ -244,9 +244,21 @@ function PantallaAnalisis() {
     const cajaCorte = diaCorte?.caja_ini || {};
     const stockArranque = parse(cajaCorte.USD || 0);
     
-    // Cotizacion de arranque = blue de compra del cierre más cercano a la fecha de corte
+    // Cotizacion de arranque = buscar el primer cierre desde la fecha de corte que tenga blue o ARS cargado
     const cierreCorte = cierres.find(c => c.fecha >= FECHA_CORTE) || cierres[0];
-    const cotizArranque = cierreCorte?.cotiz_blue?.compra || parse(cierreCorte?.cotizaciones?.ARS) || 0;
+    // Intentar todas las fuentes posibles de cotización
+    const cotizArranque = 
+      parse(cierreCorte?.cotiz_blue?.compra) ||
+      parse(cierreCorte?.cotiz_blue?.venta) ||
+      parse(cierreCorte?.cotizaciones?.ARS) ||
+      // Si el primer cierre no tiene nada, buscar el más cercano que sí tenga
+      parse(cierres.find(c => c.fecha >= FECHA_CORTE && (
+        parse(c?.cotiz_blue?.compra) || parse(c?.cotiz_blue?.venta) || parse(c?.cotizaciones?.ARS)
+      ))?.cotizaciones?.ARS) ||
+      parse(cierres.find(c => c.fecha >= FECHA_CORTE && (
+        parse(c?.cotiz_blue?.compra) || parse(c?.cotiz_blue?.venta) || parse(c?.cotizaciones?.ARS)
+      ))?.cotiz_blue?.venta) ||
+      0;
 
     let stockUSD = stockArranque;
     let cpp = cotizArranque > 0 ? cotizArranque : 0;
@@ -293,27 +305,47 @@ function PantallaAnalisis() {
       }
 
       const cierreDia = cierres.find(c => c.fecha === op.fecha);
-      const blueVenta = cierreDia?.cotiz_blue?.venta || 0;
+      const blueVenta = parse(cierreDia?.cotiz_blue?.venta) || 
+        parse(cierreDia?.cotiz_blue?.compra) || 
+        parse(cierreDia?.cotizaciones?.ARS) || 0;
+      const blueCompra = parse(cierreDia?.cotiz_blue?.compra) || blueVenta || 0;
+
+      // Ganancia vs mercado:
+      // En venta: cobré al cliente vs lo que pagaría el mercado (punta compra)
+      // En compra: pagué vs lo que cobraría el mercado (punta venta)
+      let gananciaVsMercado = null;
+      if (!esCompra && blueCompra > 0) {
+        // Vendí al cliente a cotizAplicada, el mercado me hubiera pagado blueCompra
+        gananciaVsMercado = (cotizAplicada - blueCompra) * montoUSD;
+      } else if (esCompra && blueVenta > 0) {
+        // Compré al cliente a cotizAplicada, en el mercado hubiera pagado blueVenta
+        gananciaVsMercado = (blueVenta - cotizAplicada) * montoUSD;
+      }
 
       historial.push({
         fecha: op.fecha, hora: op.hora || "",
         tipo: esCompra ? "compra" : "venta",
         montoUSD, cotizAplicada, cppAntes,
         cppDespues: cpp, gananciaOp,
-        stockDespues: stockUSD, blueVenta,
+        gananciaVsMercado,
+        stockDespues: stockUSD, blueVenta, blueCompra,
         cliente: op.cliente || ""
       });
 
-      if (!resumenDias[op.fecha]) resumenDias[op.fecha] = { fecha: op.fecha, compras: 0, ventas: 0, ganancia: 0, cppFinal: 0, stockFinal: 0, blueVenta: 0 };
+      if (!resumenDias[op.fecha]) resumenDias[op.fecha] = { fecha: op.fecha, compras: 0, ventas: 0, ganancia: 0, gananciaVsMercado: 0, cppFinal: 0, stockFinal: 0, blueVenta: 0, blueCompra: 0 };
       const d = resumenDias[op.fecha];
-      if (esCompra) d.compras += montoUSD;
-      else { d.ventas += montoUSD; d.ganancia += gananciaOp; }
+      if (esCompra) { d.compras += montoUSD; if(gananciaVsMercado!==null) d.gananciaVsMercado += gananciaVsMercado; }
+      else { d.ventas += montoUSD; d.ganancia += gananciaOp; if(gananciaVsMercado!==null) d.gananciaVsMercado += gananciaVsMercado; }
       d.cppFinal = cpp; d.stockFinal = stockUSD;
       d.blueVenta = blueVenta || d.blueVenta;
+      d.blueCompra = blueCompra || d.blueCompra;
     });
 
     const ultimoCierre = cierres[cierres.length - 1];
-    const blueActual = ultimoCierre?.cotiz_blue?.venta || parse(ultimoCierre?.cotizaciones?.ARS) || 0;
+    const blueActual = 
+      parse(ultimoCierre?.cotiz_blue?.venta) || 
+      parse(ultimoCierre?.cotiz_blue?.compra) || 
+      parse(ultimoCierre?.cotizaciones?.ARS) || 0;
     const gananciaNoRealizada = blueActual > 0 ? (blueActual - cpp) * stockUSD : null;
 
     // ── CÁLCULO DE TENENCIA POR MONEDA ──
@@ -426,6 +458,10 @@ function PantallaAnalisis() {
   const volVendido = ventas.reduce((s, v) => s + v.montoUSD, 0);
   const ganPromUSD = volVendido > 0 ? gananciaRealizada / volVendido : 0;
   const pctMargen = cpp > 0 && ganPromUSD ? (ganPromUSD / cpp * 100) : 0;
+  // Ganancia total vs mercado (todas las ops con blue disponible)
+  const ganTotalVsMercado = historial.reduce((s, h) => s + (h.gananciaVsMercado || 0), 0);
+  const opsConBlue = historial.filter(h => h.gananciaVsMercado !== null);
+  const ganPromVsMercado = opsConBlue.length > 0 ? ganTotalVsMercado / opsConBlue.reduce((s,h)=>s+h.montoUSD,0) : 0;
 
   const grafLabels = resumenDias.map(d => d.fecha.slice(5));
   const grafCPP = resumenDias.map(d => Math.round(d.cppFinal));
@@ -453,6 +489,7 @@ function PantallaAnalisis() {
           {label:"No realizada", val:gananciaNoRealizada!==null?"$"+fmt(Math.round(gananciaNoRealizada)):"—", sub:"si vendieras el stock hoy", color:gananciaNoRealizada!==null&&gananciaNoRealizada>=0?"#4ade80":"#f87171"},
           {label:"Blue actual", val:blueActual?"$"+fmt(Math.round(blueActual)):"—", sub:blueActual&&cpp?"dif. $"+fmt(Math.round(blueActual-cpp))+"/USD":"último cierre", color:"#38bdf8"},
           {label:"Margen promedio", val:pctMargen?pctMargen.toFixed(2)+"%":"—", sub:"ganancia / CPP por venta", color:pctMargen>=1?"#4ade80":"#f59e0b"},
+          {label:"Ganancia vs mercado", val:ganTotalVsMercado?"$"+fmt(Math.round(ganTotalVsMercado)):"—", sub:"$"+fmt(Math.round(ganPromVsMercado))+"/USD sobre puntas blue", color:ganTotalVsMercado>=0?"#38bdf8":"#f87171"},
         ].map(m=>(
           <div key={m.label} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px 16px"}}>
             <div style={{fontSize:9,color:"#475569",letterSpacing:1.5,marginBottom:6,fontWeight:600,textTransform:"uppercase"}}>{m.label}</div>
@@ -521,7 +558,7 @@ function PantallaAnalisis() {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead>
                   <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                    {["Fecha","Hora","Tipo","USD","Cotiz. cliente","CPP antes","CPP después","Ganancia op.","Stock"].map(h=>(
+                    {["Fecha","Hora","Tipo","USD","Cotiz. cliente","Punta mercado","CPP antes","CPP después","G. vs mercado","G. vs CPP","Stock"].map(h=>(
                       <th key={h} style={{textAlign:["Tipo","Fecha","Hora"].includes(h)?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
                     ))}
                   </tr>
@@ -537,8 +574,14 @@ function PantallaAnalisis() {
                       </td>
                       <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600}}>USD {fmt(Math.round(h.montoUSD))}</td>
                       <td style={{padding:"7px 8px",textAlign:"right"}}>${fmt(Math.round(h.cotizAplicada))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>
+                        {h.tipo==="venta"?(h.blueCompra?"$"+fmt(Math.round(h.blueCompra)):"—"):(h.blueVenta?"$"+fmt(Math.round(h.blueVenta)):"—")}
+                      </td>
                       <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(Math.round(h.cppAntes))}</td>
                       <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>${fmt(Math.round(h.cppDespues))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:h.gananciaVsMercado===null?"#4b5563":h.gananciaVsMercado>=0?"#38bdf8":"#f87171"}}>
+                        {h.gananciaVsMercado===null?"—":"$"+fmt(Math.round(h.gananciaVsMercado))}
+                      </td>
                       <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:h.gananciaOp===null?"#4b5563":h.gananciaOp>=0?"#4ade80":"#f87171"}}>
                         {h.gananciaOp===null?"—":"$"+fmt(Math.round(h.gananciaOp))}
                       </td>
@@ -671,23 +714,23 @@ function PantallaAnalisis() {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead>
                   <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                    {["Día","Compras USD","Ventas USD","Ganancia día","CPP cierre","Blue cierre","Diferencia"].map(h=>(
+                    {["Día","Compras USD","Ventas USD","G. vs CPP","G. vs mercado","CPP cierre","Blue compra","Blue venta"].map(h=>(
                       <th key={h} style={{textAlign:h==="Día"?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[...resumenDias].reverse().map((d,i)=>{
-                    const diff=d.blueVenta>0?d.blueVenta-d.cppFinal:null;
                     return(
                       <tr key={d.fecha} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
                         <td style={{padding:"7px 8px",color:"#9ca3af"}}>{d.fecha}</td>
                         <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(Math.round(d.compras))}</td>
                         <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(Math.round(d.ventas))}</td>
                         <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.ganancia>=0?"#4ade80":"#f87171"}}>${fmt(Math.round(d.ganancia))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.gananciaVsMercado>=0?"#38bdf8":"#f87171"}}>{d.gananciaVsMercado?"$"+fmt(Math.round(d.gananciaVsMercado)):"—"}</td>
                         <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b",fontWeight:600}}>${fmt(Math.round(d.cppFinal))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.blueCompra?"$"+fmt(Math.round(d.blueCompra)):"—"}</td>
                         <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.blueVenta?"$"+fmt(Math.round(d.blueVenta)):"—"}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:diff===null?"#374151":diff>=0?"#4ade80":"#f87171"}}>{diff!==null?"$"+fmt(Math.round(diff))+"/USD":"—"}</td>
                       </tr>
                     );
                   })}
