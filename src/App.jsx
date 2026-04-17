@@ -212,10 +212,12 @@ function PantallaAnalisis() {
   async function cargar() {
     setCargando(true); setError("");
     try {
-      const [{ data: opsRaw }, { data: cierres }, { data: dias }] = await Promise.all([
+      const [{ data: opsRaw }, { data: cierres }, { data: dias }, { data: movsCC }, { data: diferidosData }] = await Promise.all([
         SB.from("operaciones").select("*").order("fecha", { ascending: true }).order("hora", { ascending: true }),
         SB.from("cierres").select("*").order("fecha", { ascending: true }),
         SB.from("dias").select("*").order("id", { ascending: true }),
+        SB.from("movimientos_cc").select("*").limit(5000),
+        SB.from("diferidos").select("*"),
       ]);
       if (!cierres?.length) {
         setError("Necesitás al menos un cierre con cotización blue para calcular el CPP.");
@@ -227,12 +229,12 @@ function PantallaAnalisis() {
         hora: o.hora || o.datos?.hora,
         tipo: o.tipo
       })).filter(o => o.fecha);
-      setResultado(correrCPP(ops, cierres, dias || []));
+      setResultado(correrCPP(ops, cierres, dias || [], movsCC || [], diferidosData || []));
     } catch (e) { setError("Error al cargar: " + e.message); }
     setCargando(false);
   }
 
-  function correrCPP(ops, cierres, dias) {
+  function correrCPP(ops, cierres, dias, movsCC, diferidos) {
     const primerCierre = cierres[0];
     const cotizArranque = primerCierre?.cotiz_blue?.compra || parse(primerCierre?.cotizaciones?.ARS) || 0;
     const primerDia = dias.find(d => d.id === primerCierre?.fecha);
@@ -305,7 +307,93 @@ function PantallaAnalisis() {
     const blueActual = ultimoCierre?.cotiz_blue?.venta || parse(ultimoCierre?.cotizaciones?.ARS) || 0;
     const gananciaNoRealizada = blueActual > 0 ? (blueActual - cpp) * stockUSD : null;
 
-    return { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias: Object.values(resumenDias), cotizArranque, stockArranque };
+    // ── CÁLCULO DE TENENCIA POR MONEDA ──
+    // Para cada cierre consecutivo calculamos cuánto ganó/perdió cada posición
+    // por el simple hecho de tenerla (sin operar)
+    const tenencia = calcularTenencia(cierres, movsCC, diferidos);
+
+    return { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias: Object.values(resumenDias), cotizArranque, stockArranque, tenencia };
+  }
+
+  function calcularTenencia(cierres, movsCC, diferidos) {
+    if (cierres.length < 2) return null;
+
+    // Saldo CC por moneda acumulado hasta una fecha
+    function saldoCCHasta(fecha) {
+      const s = {USD:0,ARS:0,BRL:0,GBP:0,EUR:0,USDT:0};
+      (movsCC||[]).filter(m=>m.fecha<=fecha).forEach(m=>{
+        const mon = String(m.moneda||"").trim().toUpperCase();
+        if(s[mon]===undefined) return;
+        const ing = m.tipo==="ingreso_transf"||m.tipo==="ingreso_dep";
+        s[mon] += ing ? -Number(m.monto) : Number(m.monto);
+      });
+      return s;
+    }
+
+    let ganUSD=0, ganARSCaja=0, ganARSCC=0, ganCheques=0;
+    const detalleDias = [];
+
+    for (let i=0; i<cierres.length-1; i++) {
+      const c1 = cierres[i];
+      const c2 = cierres[i+1];
+      const sf1 = c1.saldos_finales || {};
+      const blue1 = c1.cotiz_blue?.venta || parse(c1.cotizaciones?.ARS) || 0;
+      const blue2 = c2.cotiz_blue?.venta || parse(c2.cotizaciones?.ARS) || 0;
+      if (!blue1||!blue2) continue;
+      const varBlue = blue2 - blue1;
+      const pctBlue = varBlue / blue1;
+
+      // USD físico
+      const usd1 = parse(sf1.USD||0);
+      const ganUSDDia = usd1 * varBlue;
+      ganUSD += ganUSDDia;
+
+      // ARS físico en caja — oportunidad perdida vs dolarizarse
+      const ars1 = parse(sf1.ARS||0);
+      const ganARSCajaDia = -(ars1 * pctBlue); // negativo = perdió vs tener USD
+      ganARSCaja += ganARSCajaDia;
+
+      // ARS en CCs — también oportunidad perdida
+      const ccFecha = saldoCCHasta(c1.fecha);
+      const arsCC = ccFecha.ARS || 0;
+      // Si nos deben ARS (arsCC > 0) y el blue subió, perdimos vs dolarizarlo
+      const ganARSCCDia = arsCC > 0 ? -(arsCC * pctBlue) : 0;
+      ganARSCC += ganARSCCDia;
+
+      // Cheques diferidos pendientes en ese período
+      const difPendDia = (diferidos||[]).filter(d=>!d.cobrado&&d.fecha<=c2.fecha&&d.fecha>=c1.fecha);
+      const ganChequeDia = difPendDia.reduce((s,d)=>s+(Number(d.ganancia)||0),0);
+      ganCheques += ganChequeDia;
+
+      detalleDias.push({
+        fecha: c1.fecha,
+        blue1: Math.round(blue1),
+        blue2: Math.round(blue2),
+        varBlue: Math.round(varBlue),
+        pctBlue: (pctBlue*100).toFixed(2),
+        usd: Math.round(usd1),
+        ars: Math.round(ars1),
+        arsCC: Math.round(arsCC),
+        ganUSD: Math.round(ganUSDDia),
+        ganARSCaja: Math.round(ganARSCajaDia),
+        ganARSCC: Math.round(ganARSCCDia),
+        ganCheques: Math.round(ganChequeDia),
+      });
+    }
+
+    // Cheques cobrados en el período completo (los que ya tienen ganancia registrada)
+    const totalChequesCobrados = (diferidos||[])
+      .filter(d=>d.cobrado)
+      .reduce((s,d)=>s+(Number(d.ganancia)||0),0);
+
+    return {
+      ganUSD: Math.round(ganUSD),
+      ganARSCaja: Math.round(ganARSCaja),
+      ganARSCC: Math.round(ganARSCC),
+      ganCheques: Math.round(totalChequesCobrados),
+      total: Math.round(ganUSD+ganARSCaja+ganARSCC+totalChequesCobrados),
+      detalleDias,
+    };
   }
 
   if (cargando) return <div style={{color:"#475569",padding:40,textAlign:"center"}}>Corriendo CPP móvil...</div>;
@@ -327,6 +415,7 @@ function PantallaAnalisis() {
     { id:"estado", label:"Estado actual" },
     { id:"historial", label:"Historial de ops" },
     { id:"diario", label:"Por día" },
+    { id:"tenencia", label:"Tenencia" },
   ];
 
   return (
@@ -441,6 +530,117 @@ function PantallaAnalisis() {
           }
         </Card>
       )}
+
+      {tab==="tenencia"&&(()=>{
+        const t = resultado?.tenencia;
+        if (!t) return <div style={{color:"#475569",fontSize:12,padding:20}}>Necesitás al menos 2 cierres consecutivos con cotización blue para calcular la tenencia.</div>;
+        const items = [
+          { label:"USD en caja física", sub:"ganancia por suba del blue", val:t.ganUSD, color:"#4ade80", icon:"$" },
+          { label:"ARS en caja física", sub:"costo de oportunidad vs dolarizarse", val:t.ganARSCaja, color:t.ganARSCaja>=0?"#4ade80":"#f87171", icon:"$" },
+          { label:"ARS en cuentas corrientes", sub:"costo de oportunidad — te deben pesos", val:t.ganARSCC, color:t.ganARSCC>=0?"#4ade80":"#f87171", icon:"$" },
+          { label:"Cheques diferidos cobrados", sub:"tasa pactada en pesos", val:t.ganCheques, color:"#c084fc", icon:"C" },
+        ];
+        return (
+          <div>
+            <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:16,marginBottom:16}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>¿CUÁNTO GANASTE/PERDISTE POR SIMPLEMENTE TENER CADA POSICIÓN?</div>
+              <div style={{fontSize:11,color:"#4b5563",marginBottom:16,lineHeight:1.6}}>
+                Esto mide el rendimiento de cada posición <strong style={{color:"#e2e8f0"}}>sin contar las operaciones</strong>. 
+                Si el blue sube y tenés USD, ganás. Si el blue sube y tenés ARS, perdés poder adquisitivo. 
+                Los cheques rinden la tasa que pactaste.
+              </div>
+              {items.map((it,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{it.label}</div>
+                    <div style={{fontSize:11,color:"#4b5563",marginTop:3}}>{it.sub}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:16,fontWeight:700,color:it.color,fontFamily:"'JetBrains Mono',monospace"}}>
+                      {it.val>=0?"+":""}{it.val>0||it.val<0?"$"+fmt(Math.abs(it.val)):"—"}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 4px",borderTop:"2px solid rgba(255,255,255,0.1)",marginTop:4}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>TOTAL TENENCIA</span>
+                <span style={{fontSize:18,fontWeight:700,color:t.total>=0?"#4ade80":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{t.total>=0?"+":""} ${fmt(Math.abs(t.total))}</span>
+              </div>
+            </div>
+
+            {/* Comparacion tenencia vs operativa */}
+            <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(99,102,241,0.3)",borderRadius:12,padding:16,marginBottom:16}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#818cf8",marginBottom:14}}>TRABAJO VS CONTEXTO</div>
+              {[
+                {label:"Ganancia operativa (CPP)", sub:"por comprar barato y vender caro", val:gananciaRealizada, color:"#4ade80"},
+                {label:"Ganancia por tenencia", sub:"por el simple hecho de tener las posiciones", val:t.total, color:"#38bdf8"},
+              ].map((it,i)=>{
+                const max=Math.max(Math.abs(gananciaRealizada),Math.abs(t.total),1);
+                const pct=Math.round((Math.abs(it.val)/max)*100);
+                return (
+                  <div key={i} style={{marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:"#e2e8f0"}}>{it.label}</div>
+                        <div style={{fontSize:10,color:"#4b5563"}}>{it.sub}</div>
+                      </div>
+                      <span style={{fontSize:14,fontWeight:700,color:it.color,fontFamily:"'JetBrains Mono',monospace"}}>{it.val>=0?"+":"-"}${fmt(Math.abs(it.val))}</span>
+                    </div>
+                    <div style={{background:"rgba(255,255,255,0.05)",borderRadius:4,height:8,overflow:"hidden"}}>
+                      <div style={{width:pct+"%",height:"100%",background:it.color,borderRadius:4,transition:"width .4s"}}/>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:12,marginTop:4}}>
+                {gananciaRealizada>t.total
+                  ?<div style={{fontSize:12,color:"#4ade80",background:"#0a1a0a",border:"1px solid #4ade8033",borderRadius:8,padding:"10px 14px"}}>
+                    Tu trabajo generó más que simplemente holdear. La diferencia es <strong style={{color:"#4ade80"}}>${fmt(Math.abs(gananciaRealizada-t.total))}</strong> a favor de operar.
+                  </div>
+                  :t.total>gananciaRealizada
+                  ?<div style={{fontSize:12,color:"#f59e0b",background:"#1a0f0a",border:"1px solid #f59e0b33",borderRadius:8,padding:"10px 14px"}}>
+                    El contexto (suba del blue) generó más que tus operaciones. No es malo — significa que el mercado te ayudó. La diferencia es <strong style={{color:"#f59e0b"}}>${fmt(Math.abs(t.total-gananciaRealizada))}</strong>.
+                  </div>
+                  :<div style={{fontSize:12,color:"#6b7280",padding:"10px 14px"}}>Trabajo y contexto empataron.</div>
+                }
+              </div>
+            </div>
+
+            {/* Detalle por día */}
+            {t.detalleDias.length>0&&(
+              <div style={{...S.card}}>
+                <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>DETALLE POR DÍA</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                        {["Día","Blue","Var.","USD caja","G. USD","ARS caja","C. op. ARS","ARS CCs","C. op. CCs"].map(h=>(
+                          <th key={h} style={{textAlign:h==="Día"?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...t.detalleDias].reverse().map((d,i)=>(
+                        <tr key={d.fecha} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                          <td style={{padding:"7px 8px",color:"#9ca3af"}}>{d.fecha}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(d.blue1)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.varBlue>=0?"#4ade80":"#f87171"}}>{d.varBlue>=0?"+":""}{fmt(d.varBlue)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(d.usd)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganUSD>=0?"#4ade80":"#f87171"}}>{d.ganUSD>=0?"+":""}{fmt(d.ganUSD)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(d.ars)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganARSCaja>=0?"#4ade80":"#f87171"}}>{d.ganARSCaja>=0?"+":""}{fmt(d.ganARSCaja)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(d.arsCC)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganARSCC>=0?"#4ade80":"#f87171"}}>{d.ganARSCC>=0?"+":""}{fmt(d.ganARSCC)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {tab==="diario"&&(
         <div>
