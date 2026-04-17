@@ -1,11 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Line } from "react-chartjs-2";
-import {
-  Chart as ChartJS, CategoryScale, LinearScale,
-  PointElement, LineElement, Tooltip, Legend
-} from "chart.js";
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+
 
 const SB = createClient(
   "https://aauyrjwytyxabjxyaech.supabase.co",
@@ -149,6 +144,59 @@ const MonedasSel = ({value,onChange,exclude}) => (
     {MONEDAS.filter(m=>m.id!==exclude).map(m=><option key={m.id} value={m.id}>{m.id} - {m.label}</option>)}
   </Sel>
 );
+
+// Grafico de lineas SVG puro — sin dependencias externas
+function MiniLineChart({ series=[], labels=[], height=180 }) {
+  if (!series.length || !series[0].data.length) return null;
+  const W=500, H=height, padL=52, padR=12, padT=10, padB=28;
+  const allVals = series.flatMap(s=>s.data.filter(v=>v!==null&&v!==undefined));
+  if (!allVals.length) return null;
+  const minV=Math.min(...allVals), maxV=Math.max(...allVals);
+  const range=maxV-minV||1;
+  const n=series[0].data.length;
+  const xOf=i=>padL+(i/(Math.max(n-1,1)))*(W-padL-padR);
+  const yOf=v=>padT+(1-((v-minV)/range))*(H-padT-padB);
+  // ticks Y
+  const ticks=4;
+  const tickVals=Array.from({length:ticks+1},(_,i)=>minV+(i/ticks)*range);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height}}>
+      {/* grid */}
+      {tickVals.map((v,i)=>(
+        <g key={i}>
+          <line x1={padL} y1={yOf(v)} x2={W-padR} y2={yOf(v)} stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>
+          <text x={padL-6} y={yOf(v)+4} textAnchor="end" fontSize="9" fill="#475569">${Math.round(v).toLocaleString("es-AR")}</text>
+        </g>
+      ))}
+      {/* labels X */}
+      {labels.filter((_,i)=>i%(Math.ceil(n/6))===0||i===n-1).map((l,_,arr,i=labels.indexOf(l))=>(
+        <text key={i} x={xOf(i)} y={H-6} textAnchor="middle" fontSize="9" fill="#475569">{l}</text>
+      ))}
+      {/* lineas */}
+      {series.map((s,si)=>{
+        const pts=s.data.map((v,i)=>v!==null&&v!==undefined?[xOf(i),yOf(v)]:null);
+        // construir segmentos continuos
+        const segments=[];
+        let seg=[];
+        pts.forEach(p=>{ if(p){seg.push(p);}else{if(seg.length>1)segments.push(seg);seg=[];} });
+        if(seg.length>1) segments.push(seg);
+        return segments.map((sg,sgi)=>(
+          <polyline key={si+"-"+sgi}
+            points={sg.map(p=>p.join(",")).join(" ")}
+            fill="none" stroke={s.color} strokeWidth="2"
+            strokeDasharray={s.dash?"6,4":"none"}
+            strokeLinecap="round" strokeLinejoin="round"/>
+        ));
+      })}
+      {/* puntos */}
+      {series.map((s,si)=>
+        s.data.map((v,i)=>v!==null&&v!==undefined?(
+          <circle key={si+"-"+i} cx={xOf(i)} cy={yOf(v)} r="3" fill={s.color}/>
+        ):null)
+      )}
+    </svg>
+  );
+}
 
 // ─────────────────────────────────────────────
 // PANTALLA ANÁLISIS CPP — NUEVA
@@ -429,23 +477,10 @@ function PantallaAnalisis() {
           {resumenDias.length>1&&(
             <Card sx={{border:"1px solid rgba(245,158,11,0.2)"}}>
               <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>EVOLUCIÓN CPP vs BLUE</div>
-              <Line
-                data={{
-                  labels:grafLabels,
-                  datasets:[
-                    {label:"CPP",data:grafCPP,borderColor:"#f59e0b",backgroundColor:"transparent",borderWidth:2,pointRadius:3,tension:0.2},
-                    {label:"Blue venta",data:grafBlue,borderColor:"#38bdf8",backgroundColor:"transparent",borderWidth:2,borderDash:[5,4],pointRadius:3,tension:0.2,spanGaps:true},
-                  ],
-                }}
-                options={{
-                  responsive:true,
-                  plugins:{legend:{display:false}},
-                  scales:{
-                    x:{ticks:{color:"#475569",font:{size:10},autoSkip:true,maxTicksLimit:10},grid:{display:false}},
-                    y:{ticks:{color:"#475569",font:{size:10},callback:v=>"$"+Math.round(v).toLocaleString("es-AR")},grid:{color:"rgba(255,255,255,0.05)"}},
-                  },
-                }}
-              />
+              <MiniLineChart series={[
+                  {data:grafCPP, color:"#f59e0b", dash:false},
+                  {data:grafBlue.map(v=>v||null), color:"#38bdf8", dash:true},
+                ]} labels={grafLabels}/>
               <div style={{display:"flex",gap:16,marginTop:12,fontSize:11,color:"#4b5563",flexWrap:"wrap"}}>
                 <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#f59e0b",display:"inline-block",borderRadius:2}}/>CPP móvil</span>
                 <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#38bdf8",display:"inline-block",borderRadius:2}}/>Blue venta (cierre)</span>
