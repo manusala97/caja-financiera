@@ -1,5 +1,11 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS, CategoryScale, LinearScale,
+  PointElement, LineElement, Tooltip, Legend
+} from "chart.js";
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 const SB = createClient(
   "https://aauyrjwytyxabjxyaech.supabase.co",
@@ -144,6 +150,317 @@ const MonedasSel = ({value,onChange,exclude}) => (
   </Sel>
 );
 
+// ─────────────────────────────────────────────
+// PANTALLA ANÁLISIS CPP — NUEVA
+// ─────────────────────────────────────────────
+function PantallaAnalisis() {
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("estado");
+  const [resultado, setResultado] = useState(null);
+
+  useEffect(() => { cargar(); }, []);
+
+  async function cargar() {
+    setCargando(true); setError("");
+    try {
+      const [{ data: opsRaw }, { data: cierres }, { data: dias }] = await Promise.all([
+        SB.from("operaciones").select("*").order("fecha", { ascending: true }).order("hora", { ascending: true }),
+        SB.from("cierres").select("*").order("fecha", { ascending: true }),
+        SB.from("dias").select("*").order("id", { ascending: true }),
+      ]);
+      if (!cierres?.length) {
+        setError("Necesitás al menos un cierre con cotización blue para calcular el CPP.");
+        setCargando(false); return;
+      }
+      const ops = (opsRaw || []).map(o => ({
+        ...(o.datos || {}), id: o.id,
+        fecha: o.fecha || o.datos?.fecha,
+        hora: o.hora || o.datos?.hora,
+        tipo: o.tipo
+      })).filter(o => o.fecha);
+      setResultado(correrCPP(ops, cierres, dias || []));
+    } catch (e) { setError("Error al cargar: " + e.message); }
+    setCargando(false);
+  }
+
+  function correrCPP(ops, cierres, dias) {
+    const primerCierre = cierres[0];
+    const cotizArranque = primerCierre?.cotiz_blue?.compra || parse(primerCierre?.cotizaciones?.ARS) || 0;
+    const primerDia = dias.find(d => d.id === primerCierre?.fecha);
+    const cajaIni = primerDia?.caja_ini || {};
+    const stockArranque = parse(cajaIni.USD || 0);
+
+    let stockUSD = stockArranque;
+    let cpp = cotizArranque > 0 ? cotizArranque : 0;
+    let costoBruto = stockUSD * cpp;
+    let gananciaRealizada = 0;
+    const historial = [];
+    const resumenDias = {};
+
+    const opsUSD = ops.filter(o =>
+      (o.tipo === "compra" || o.tipo === "venta") &&
+      ((o.moneda === "USD" && o.moneda2 === "ARS") ||
+       (o.moneda === "ARS" && o.moneda2 === "USD"))
+    );
+
+    opsUSD.forEach(op => {
+      let montoUSD, cotizAplicada, esCompra;
+      if (op.moneda === "USD" && op.moneda2 === "ARS") {
+        montoUSD = parse(op.monto);
+        cotizAplicada = parse(op.cotizacion) || (parse(op.monto2) / montoUSD);
+        esCompra = op.tipo === "compra";
+      } else {
+        montoUSD = parse(op.monto2);
+        cotizAplicada = parse(op.cotizacion) || (parse(op.monto) / montoUSD);
+        esCompra = op.tipo === "venta";
+      }
+      if (!montoUSD || !cotizAplicada) return;
+
+      const cppAntes = cpp;
+      let gananciaOp = null;
+
+      if (esCompra) {
+        const nuevoTotal = costoBruto + montoUSD * cotizAplicada;
+        const nuevoStock = stockUSD + montoUSD;
+        cpp = nuevoTotal / nuevoStock;
+        costoBruto = nuevoTotal;
+        stockUSD = nuevoStock;
+      } else {
+        gananciaOp = (cotizAplicada - cpp) * montoUSD;
+        gananciaRealizada += gananciaOp;
+        stockUSD = Math.max(0, stockUSD - montoUSD);
+        costoBruto = stockUSD * cpp;
+      }
+
+      const cierreDia = cierres.find(c => c.fecha === op.fecha);
+      const blueVenta = cierreDia?.cotiz_blue?.venta || 0;
+
+      historial.push({
+        fecha: op.fecha, hora: op.hora || "",
+        tipo: esCompra ? "compra" : "venta",
+        montoUSD, cotizAplicada, cppAntes,
+        cppDespues: cpp, gananciaOp,
+        stockDespues: stockUSD, blueVenta,
+        cliente: op.cliente || ""
+      });
+
+      if (!resumenDias[op.fecha]) resumenDias[op.fecha] = { fecha: op.fecha, compras: 0, ventas: 0, ganancia: 0, cppFinal: 0, stockFinal: 0, blueVenta: 0 };
+      const d = resumenDias[op.fecha];
+      if (esCompra) d.compras += montoUSD;
+      else { d.ventas += montoUSD; d.ganancia += gananciaOp; }
+      d.cppFinal = cpp; d.stockFinal = stockUSD;
+      d.blueVenta = blueVenta || d.blueVenta;
+    });
+
+    const ultimoCierre = cierres[cierres.length - 1];
+    const blueActual = ultimoCierre?.cotiz_blue?.venta || parse(ultimoCierre?.cotizaciones?.ARS) || 0;
+    const gananciaNoRealizada = blueActual > 0 ? (blueActual - cpp) * stockUSD : null;
+
+    return { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias: Object.values(resumenDias), cotizArranque, stockArranque };
+  }
+
+  if (cargando) return <div style={{color:"#475569",padding:40,textAlign:"center"}}>Corriendo CPP móvil...</div>;
+  if (error) return <div style={{color:"#f87171",padding:20}}>{error}</div>;
+  if (!resultado) return null;
+
+  const { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias, cotizArranque, stockArranque } = resultado;
+  const ventas = historial.filter(h => h.tipo === "venta");
+  const ventasNeg = ventas.filter(v => v.gananciaOp < 0);
+  const volVendido = ventas.reduce((s, v) => s + v.montoUSD, 0);
+  const ganPromUSD = volVendido > 0 ? gananciaRealizada / volVendido : 0;
+  const pctMargen = cpp > 0 && ganPromUSD ? (ganPromUSD / cpp * 100) : 0;
+
+  const grafLabels = resumenDias.map(d => d.fecha.slice(5));
+  const grafCPP = resumenDias.map(d => Math.round(d.cppFinal));
+  const grafBlue = resumenDias.map(d => d.blueVenta ? Math.round(d.blueVenta) : null);
+
+  const TABS = [
+    { id:"estado", label:"Estado actual" },
+    { id:"historial", label:"Historial de ops" },
+    { id:"diario", label:"Por día" },
+  ];
+
+  return (
+    <div>
+      <div style={{fontSize:9,letterSpacing:4,color:"#f59e0b",marginBottom:4,fontWeight:600}}>ANÁLISIS DE STOCK USD</div>
+      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Costo Promedio Ponderado Móvil</div>
+      <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>¿A qué precio tengo los dólares y cuánto gané por las ventas?</div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:10,marginBottom:24}}>
+        {[
+          {label:"CPP actual", val:"$"+fmt(Math.round(cpp)), sub:"costo prom. por USD", color:"#f59e0b"},
+          {label:"Stock en caja", val:fmtUSD(Math.round(stockUSD)), sub:"$"+fmt(Math.round(cpp*stockUSD))+" ARS", color:"#4ade80"},
+          {label:"Ganancia realizada", val:"$"+fmt(Math.round(gananciaRealizada)), sub:ventas.length+" ventas · $"+fmt(Math.round(ganPromUSD))+"/USD", color:gananciaRealizada>=0?"#4ade80":"#f87171"},
+          {label:"No realizada", val:gananciaNoRealizada!==null?"$"+fmt(Math.round(gananciaNoRealizada)):"—", sub:"si vendieras el stock hoy", color:gananciaNoRealizada!==null&&gananciaNoRealizada>=0?"#4ade80":"#f87171"},
+          {label:"Blue actual", val:blueActual?"$"+fmt(Math.round(blueActual)):"—", sub:blueActual&&cpp?"dif. $"+fmt(Math.round(blueActual-cpp))+"/USD":"último cierre", color:"#38bdf8"},
+          {label:"Margen promedio", val:pctMargen?pctMargen.toFixed(2)+"%":"—", sub:"ganancia / CPP por venta", color:pctMargen>=1?"#4ade80":"#f59e0b"},
+        ].map(m=>(
+          <div key={m.label} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px 16px"}}>
+            <div style={{fontSize:9,color:"#475569",letterSpacing:1.5,marginBottom:6,fontWeight:600,textTransform:"uppercase"}}>{m.label}</div>
+            <div style={{fontSize:18,fontWeight:700,color:m.color,fontFamily:"'JetBrains Mono',monospace"}}>{m.val}</div>
+            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>{m.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"flex",gap:4,marginBottom:18,flexWrap:"wrap"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid",borderColor:tab===t.id?"#f59e0b99":"rgba(255,255,255,0.08)",background:tab===t.id?"rgba(245,158,11,0.12)":"transparent",color:tab===t.id?"#f59e0b":"#475569",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t.label}</button>
+        ))}
+        <button onClick={cargar} style={{marginLeft:"auto",padding:"6px 12px",borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"#475569",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>↻ Actualizar</button>
+      </div>
+
+      {tab==="estado"&&(
+        <div>
+          <Card sx={{marginBottom:14}}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#f59e0b",marginBottom:14}}>ESTADO DEL STOCK AHORA</div>
+            {[
+              ["Stock en caja", fmtUSD(Math.round(stockUSD))],
+              ["Costo promedio (CPP)", "$"+fmt(Math.round(cpp))+" por USD"],
+              ["Valor al CPP (libro)", "$"+fmt(Math.round(cpp*stockUSD))],
+              blueActual?["Valor al blue hoy","$"+fmt(Math.round(blueActual*stockUSD))]:null,
+              gananciaNoRealizada!==null?["Ganancia latente","$"+fmt(Math.round(gananciaNoRealizada))+" ("+(((gananciaNoRealizada)/(cpp*stockUSD||1))*100).toFixed(1)+"%)"] :null,
+              ["Arranque del CPP","USD "+fmt(Math.round(stockArranque))+" × $"+fmt(Math.round(cotizArranque))+" (compra primer cierre)"],
+              ["Operaciones analizadas", historial.length+" compras/ventas USD/ARS"],
+            ].filter(Boolean).map(([k,v])=>(
+              <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",fontSize:12}}>
+                <span style={{color:"#4b5563"}}>{k}</span>
+                <span style={{fontWeight:600,color:"#e2e8f0"}}>{v}</span>
+              </div>
+            ))}
+          </Card>
+          <Card sx={{border:"1px solid rgba(245,158,11,0.2)"}}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#f59e0b",marginBottom:14}}>DIAGNÓSTICO</div>
+            {[
+              blueActual>0&&cpp>0&&(blueActual-cpp)>0
+                ?{color:"#4ade80",bg:"#0a1a0a",border:"#4ade8033",msg:`Stock $${fmt(Math.round(blueActual-cpp))}/USD por encima del costo (${((blueActual-cpp)/cpp*100).toFixed(1)}%). Ganancia latente: $${fmt(Math.round(gananciaNoRealizada))}.`}
+                :blueActual>0&&cpp>0
+                ?{color:"#f87171",bg:"#1c0a0a",border:"#f4433633",msg:`CPP por encima del blue en $${fmt(Math.round(cpp-blueActual))}/USD. Riesgo si venden ahora.`}
+                :null,
+              gananciaRealizada>0&&ventas.length>0
+                ?{color:"#4ade80",bg:"#0a1a0a",border:"#4ade8033",msg:`Promedio $${fmt(Math.round(ganPromUSD))}/USD vendido (${pctMargen.toFixed(2)}% margen). Total realizado: $${fmt(Math.round(gananciaRealizada))}.`}
+                :null,
+              ventasNeg.length>0
+                ?{color:"#f59e0b",bg:"#1a0f0a",border:"#f59e0b33",msg:`${ventasNeg.length} venta(s) por debajo del CPP. Pérdida en esas ops: $${fmt(Math.round(ventasNeg.reduce((s,v)=>s+v.gananciaOp,0)))}.`}
+                :null,
+              historial.length===0
+                ?{color:"#475569",bg:"#0a0a0a",border:"#1f2937",msg:"Sin operaciones USD/ARS con cierre disponible. Cargá ops y cerrá la caja con cotización blue."}
+                :null,
+            ].filter(Boolean).map((ins,i)=>(
+              <div key={i} style={{background:ins.bg,border:"1px solid "+ins.border,borderRadius:8,padding:"10px 14px",marginBottom:8,fontSize:12,color:ins.color}}>{ins.msg}</div>
+            ))}
+          </Card>
+        </div>
+      )}
+
+      {tab==="historial"&&(
+        <Card>
+          <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>OPERACIONES CON CPP VIGENTE ({historial.length})</div>
+          {historial.length===0
+            ?<div style={{color:"#374151",fontSize:12}}>Sin operaciones USD/ARS con cierre disponible.</div>
+            :<div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                    {["Fecha","Hora","Tipo","USD","Cotiz. cliente","CPP antes","CPP después","Ganancia op.","Stock"].map(h=>(
+                      <th key={h} style={{textAlign:["Tipo","Fecha","Hora"].includes(h)?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...historial].reverse().map((h,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                      <td style={{padding:"7px 8px",color:"#475569"}}>{h.fecha}</td>
+                      <td style={{padding:"7px 8px",color:"#4b5563"}}>{h.hora}</td>
+                      <td style={{padding:"7px 8px"}}>
+                        <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:h.tipo==="compra"?"rgba(56,189,248,0.15)":"rgba(74,222,128,0.15)",color:h.tipo==="compra"?"#38bdf8":"#4ade80",fontWeight:700}}>{h.tipo}</span>
+                        {h.cliente&&<span style={{fontSize:10,color:"#4b5563",marginLeft:6}}>· {h.cliente}</span>}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600}}>USD {fmt(Math.round(h.montoUSD))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right"}}>${fmt(Math.round(h.cotizAplicada))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(Math.round(h.cppAntes))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>${fmt(Math.round(h.cppDespues))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:h.gananciaOp===null?"#4b5563":h.gananciaOp>=0?"#4ade80":"#f87171"}}>
+                        {h.gananciaOp===null?"—":"$"+fmt(Math.round(h.gananciaOp))}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>USD {fmt(Math.round(h.stockDespues))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          }
+        </Card>
+      )}
+
+      {tab==="diario"&&(
+        <div>
+          <Card sx={{marginBottom:14}}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>RESUMEN POR DÍA</div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                    {["Día","Compras USD","Ventas USD","Ganancia día","CPP cierre","Blue cierre","Diferencia"].map(h=>(
+                      <th key={h} style={{textAlign:h==="Día"?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...resumenDias].reverse().map((d,i)=>{
+                    const diff=d.blueVenta>0?d.blueVenta-d.cppFinal:null;
+                    return(
+                      <tr key={d.fecha} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                        <td style={{padding:"7px 8px",color:"#9ca3af"}}>{d.fecha}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(Math.round(d.compras))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(Math.round(d.ventas))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.ganancia>=0?"#4ade80":"#f87171"}}>${fmt(Math.round(d.ganancia))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b",fontWeight:600}}>${fmt(Math.round(d.cppFinal))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.blueVenta?"$"+fmt(Math.round(d.blueVenta)):"—"}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:diff===null?"#374151":diff>=0?"#4ade80":"#f87171"}}>{diff!==null?"$"+fmt(Math.round(diff))+"/USD":"—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          {resumenDias.length>1&&(
+            <Card sx={{border:"1px solid rgba(245,158,11,0.2)"}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>EVOLUCIÓN CPP vs BLUE</div>
+              <Line
+                data={{
+                  labels:grafLabels,
+                  datasets:[
+                    {label:"CPP",data:grafCPP,borderColor:"#f59e0b",backgroundColor:"transparent",borderWidth:2,pointRadius:3,tension:0.2},
+                    {label:"Blue venta",data:grafBlue,borderColor:"#38bdf8",backgroundColor:"transparent",borderWidth:2,borderDash:[5,4],pointRadius:3,tension:0.2,spanGaps:true},
+                  ],
+                }}
+                options={{
+                  responsive:true,
+                  plugins:{legend:{display:false}},
+                  scales:{
+                    x:{ticks:{color:"#475569",font:{size:10},autoSkip:true,maxTicksLimit:10},grid:{display:false}},
+                    y:{ticks:{color:"#475569",font:{size:10},callback:v=>"$"+Math.round(v).toLocaleString("es-AR")},grid:{color:"rgba(255,255,255,0.05)"}},
+                  },
+                }}
+              />
+              <div style={{display:"flex",gap:16,marginTop:12,fontSize:11,color:"#4b5563",flexWrap:"wrap"}}>
+                <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#f59e0b",display:"inline-block",borderRadius:2}}/>CPP móvil</span>
+                <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#38bdf8",display:"inline-block",borderRadius:2}}/>Blue venta (cierre)</span>
+                <span style={{color:"#374151"}}>Cuando el blue supera el CPP, el stock vale más de lo que costó.</span>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+// ─────────────────────────────────────────────
+// FIN PANTALLA ANÁLISIS CPP
+// ─────────────────────────────────────────────
 function LineChart({ data, color="#4ade80", height=100 }) {
   if (!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151",fontSize:11}}>Sin datos suficientes</div>;
   const w=500,h=height,pad=12;
@@ -1068,6 +1385,7 @@ function AppInterna({ usuario }) {
     {id:"resumen_socios",label:"Por socio",c:"#34d399"},
     {id:"gastos",label:"Gastos",c:"#f43f5e"},
     {id:"socios",label:"Socios",c:"#a78bfa"},
+    {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
 
@@ -3687,6 +4005,8 @@ function AppInterna({ usuario }) {
             </div>
           );
         })()}
+
+        {pant==="analisis"&&<PantallaAnalisis/>}
 
       </main>
     </div>
