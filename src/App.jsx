@@ -773,6 +773,10 @@ function PantallaAnalisis() {
                 </div>}
               </div>
             )}
+        </div>
+      );
+    })()}
+
       {tab==="diario"&&(
         <div>
           <Card sx={{marginBottom:14}}>
