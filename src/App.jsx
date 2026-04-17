@@ -361,7 +361,7 @@ function PantallaAnalisis() {
       ganARSCC += ganARSCCDia;
 
       // Cheques diferidos pendientes en ese período
-      const difPendDia = (diferidos||[]).filter(d=>!d.cobrado&&d.fecha<=c2.fecha&&d.fecha>=c1.fecha);
+      const difPendDia = (diferidos||[]).filter(d=>!d.cobrado&&!d.manual&&d.tm&&d.tm>0&&d.fecha<=c2.fecha&&d.fecha>=c1.fecha);
       const ganChequeDia = difPendDia.reduce((s,d)=>s+(Number(d.ganancia)||0),0);
       ganCheques += ganChequeDia;
 
@@ -381,16 +381,24 @@ function PantallaAnalisis() {
       });
     }
 
-    // Cheques cobrados en el período completo (los que ya tienen ganancia registrada)
+    // Cheques cobrados — solo los que tienen tasa cargada (excluir manuales e históricos sin estructura)
     const totalChequesCobrados = (diferidos||[])
-      .filter(d=>d.cobrado)
+      .filter(d=>d.cobrado && !d.manual && d.tm && Number(d.tm)>0)
       .reduce((s,d)=>s+(Number(d.ganancia)||0),0);
+    
+    const cantChequesCobrados = (diferidos||[])
+      .filter(d=>d.cobrado && !d.manual && d.tm && Number(d.tm)>0).length;
+    
+    const cantChequesExcluidos = (diferidos||[])
+      .filter(d=>d.cobrado && (d.manual || !d.tm || Number(d.tm)===0)).length;
 
     return {
       ganUSD: Math.round(ganUSD),
       ganARSCaja: Math.round(ganARSCaja),
       ganARSCC: Math.round(ganARSCC),
       ganCheques: Math.round(totalChequesCobrados),
+      cantChequesCobrados,
+      cantChequesExcluidos,
       total: Math.round(ganUSD+ganARSCaja+ganARSCC+totalChequesCobrados),
       detalleDias,
     };
@@ -538,7 +546,7 @@ function PantallaAnalisis() {
           { label:"USD en caja física", sub:"ganancia por suba del blue", val:t.ganUSD, color:"#4ade80", icon:"$" },
           { label:"ARS en caja física", sub:"costo de oportunidad vs dolarizarse", val:t.ganARSCaja, color:t.ganARSCaja>=0?"#4ade80":"#f87171", icon:"$" },
           { label:"ARS en cuentas corrientes", sub:"costo de oportunidad — te deben pesos", val:t.ganARSCC, color:t.ganARSCC>=0?"#4ade80":"#f87171", icon:"$" },
-          { label:"Cheques diferidos cobrados", sub:"tasa pactada en pesos", val:t.ganCheques, color:"#c084fc", icon:"C" },
+          { label:"Cheques diferidos cobrados", sub:"tasa pactada en pesos · "+t.cantChequesCobrados+" cheques"+(t.cantChequesExcluidos>0?" ("+t.cantChequesExcluidos+" excluidos sin tasa)":""), val:t.ganCheques, color:"#c084fc", icon:"C" },
         ];
         return (
           <div>
