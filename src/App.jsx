@@ -1217,6 +1217,19 @@ function AppInterna({ usuario }) {
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
+
+  const ORDEN_SOCIOS = {
+    "Gonzalo Spadafora": 0,
+    "Manuel Sala": 1,
+    "Matias Speranza": 2,
+    "STS": 3,
+  };
+  const sortClientes = (arr) => [...arr].sort((a,b) => {
+    const oa = ORDEN_SOCIOS[a.socio] ?? 99;
+    const ob = ORDEN_SOCIOS[b.socio] ?? 99;
+    if (oa !== ob) return oa - ob;
+    return (a.orden||0) - (b.orden||0); // dentro del mismo socio, orden manual
+  });
   const notify = useCallback((msg,ok=true)=>{ setToast({msg,ok}); setTimeout(()=>setToast(null),2800); },[]);
   const setF = useCallback((k,v)=>setForm(f=>({...f,[k]:v})),[]);
 
@@ -1299,7 +1312,7 @@ function AppInterna({ usuario }) {
             },0);
             console.log("TRESOR saldo ARS calculado:",salARS);
           }
-          setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
+          setClientes(sortClientes(cls).map(c=>({
           id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
@@ -1341,7 +1354,7 @@ function AppInterna({ usuario }) {
       try {
         const {data:cls}=await SB.from("clientes").select("*");
         const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
-        if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+        if(cls) setClientes(sortClientes(cls).map(c2=>({
           id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
             id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
@@ -1793,7 +1806,7 @@ function AppInterna({ usuario }) {
             setRefreshing(true);
             const {data:cls}=await SB.from("clientes").select("*");
             const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
-            if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+            if(cls) setClientes(sortClientes(cls).map(c2=>({
               id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
               movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
                 id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
