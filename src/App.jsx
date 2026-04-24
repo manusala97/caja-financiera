@@ -2146,7 +2146,7 @@ function AppInterna({ usuario }) {
                                 {(()=>{
                                   const busq=buscarDesglose[d.id]||"";
                                   const clSel=d.tipo!=="efectivo"?clientes.find(x=>x.id===Number(d.tipo)):null;
-                                  const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(busq.toLowerCase()));
+                                  const filtrados=busq.trim().length===0?clientes:clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(busq.trim().toLowerCase()));
                                   const mostrarDrop=busq.length>0;
                                   return (
                                     <div>
@@ -2175,6 +2175,10 @@ function AppInterna({ usuario }) {
                                           <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"efectivo"}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
                                             style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
                                             💵 Efectivo
+                                          </div>
+                                          <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"op_simultanea",cotizSim:"",clienteSim:""}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                            style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#f59e0b",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
+                                            ⇄ Op. simultánea
                                           </div>
                                           {filtrados.map(cl=>(
                                             <div key={cl.id} onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
