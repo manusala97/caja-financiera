@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
+
 const SB = createClient(
   "https://aauyrjwytyxabjxyaech.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdXlyand5dHl4YWJqeHlhZWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NDc2MzcsImV4cCI6MjA4ODQyMzYzN30.KgsY8Oyn17eZrxHODj5jDXba-XrGx1H1bSh68jlSmmw"
@@ -144,6 +145,692 @@ const MonedasSel = ({value,onChange,exclude}) => (
   </Sel>
 );
 
+// Grafico de lineas SVG puro — sin dependencias externas
+function MiniLineChart({ series=[], labels=[], height=180 }) {
+  if (!series.length || !series[0].data.length) return null;
+  const W=500, H=height, padL=52, padR=12, padT=10, padB=28;
+  const allVals = series.flatMap(s=>s.data.filter(v=>v!==null&&v!==undefined));
+  if (!allVals.length) return null;
+  const minV=Math.min(...allVals), maxV=Math.max(...allVals);
+  const range=maxV-minV||1;
+  const n=series[0].data.length;
+  const xOf=i=>padL+(i/(Math.max(n-1,1)))*(W-padL-padR);
+  const yOf=v=>padT+(1-((v-minV)/range))*(H-padT-padB);
+  // ticks Y
+  const ticks=4;
+  const tickVals=Array.from({length:ticks+1},(_,i)=>minV+(i/ticks)*range);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height}}>
+      {/* grid */}
+      {tickVals.map((v,i)=>(
+        <g key={i}>
+          <line x1={padL} y1={yOf(v)} x2={W-padR} y2={yOf(v)} stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>
+          <text x={padL-6} y={yOf(v)+4} textAnchor="end" fontSize="9" fill="#475569">${Math.round(v).toLocaleString("es-AR")}</text>
+        </g>
+      ))}
+      {/* labels X */}
+      {labels.filter((_,i)=>i%(Math.ceil(n/6))===0||i===n-1).map((l,_,arr,i=labels.indexOf(l))=>(
+        <text key={i} x={xOf(i)} y={H-6} textAnchor="middle" fontSize="9" fill="#475569">{l}</text>
+      ))}
+      {/* lineas */}
+      {series.map((s,si)=>{
+        const pts=s.data.map((v,i)=>v!==null&&v!==undefined?[xOf(i),yOf(v)]:null);
+        // construir segmentos continuos
+        const segments=[];
+        let seg=[];
+        pts.forEach(p=>{ if(p){seg.push(p);}else{if(seg.length>1)segments.push(seg);seg=[];} });
+        if(seg.length>1) segments.push(seg);
+        return segments.map((sg,sgi)=>(
+          <polyline key={si+"-"+sgi}
+            points={sg.map(p=>p.join(",")).join(" ")}
+            fill="none" stroke={s.color} strokeWidth="2"
+            strokeDasharray={s.dash?"6,4":"none"}
+            strokeLinecap="round" strokeLinejoin="round"/>
+        ));
+      })}
+      {/* puntos */}
+      {series.map((s,si)=>
+        s.data.map((v,i)=>v!==null&&v!==undefined?(
+          <circle key={si+"-"+i} cx={xOf(i)} cy={yOf(v)} r="3" fill={s.color}/>
+        ):null)
+      )}
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────
+// PANTALLA ANÁLISIS CPP — NUEVA
+// ─────────────────────────────────────────────
+function PantallaAnalisis() {
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("estado");
+  const [resultado, setResultado] = useState(null);
+
+  useEffect(() => { cargar(); }, []);
+
+  async function cargar() {
+    setCargando(true); setError("");
+    try {
+      const [{ data: opsRaw }, { data: cierres }, { data: dias }, { data: movsCC }, { data: diferidosData }] = await Promise.all([
+        SB.from("operaciones").select("*").order("fecha", { ascending: true }).order("hora", { ascending: true }),
+        SB.from("cierres").select("*").order("fecha", { ascending: true }),
+        SB.from("dias").select("*").order("id", { ascending: true }),
+        SB.from("movimientos_cc").select("*").limit(5000),
+        SB.from("diferidos").select("*"),
+      ]);
+      if (!cierres?.length) {
+        setError("Necesitás al menos un cierre con cotización blue para calcular el CPP.");
+        setCargando(false); return;
+      }
+      const ops = (opsRaw || []).map(o => ({
+        ...(o.datos || {}), id: o.id,
+        fecha: o.fecha || o.datos?.fecha,
+        hora: o.hora || o.datos?.hora,
+        tipo: o.tipo
+      })).filter(o => o.fecha);
+      setResultado(correrCPP(ops, cierres, dias || [], movsCC || [], diferidosData || []));
+    } catch (e) { setError("Error al cargar: " + e.message); }
+    setCargando(false);
+  }
+
+  function correrCPP(ops, cierres, dias, movsCC, diferidos) {
+    // Fecha de corte: a partir de acá el sistema es confiable
+    const FECHA_CORTE = "2026-04-14";
+
+    // Stock y CPP arrancan desde cero en la fecha de corte
+    // usando el saldo de apertura de ese día como punto de partida
+    const diaCorte = dias.find(d => d.id === FECHA_CORTE);
+    const cajaCorte = diaCorte?.caja_ini || {};
+    const stockArranque = parse(cajaCorte.USD || 0);
+    
+    // Cotizacion de arranque = buscar el primer cierre desde la fecha de corte que tenga blue o ARS cargado
+    const cierreCorte = cierres.find(c => c.fecha >= FECHA_CORTE) || cierres[0];
+    // Intentar todas las fuentes posibles de cotización
+    const cotizArranque = 
+      parse(cierreCorte?.cotiz_blue?.compra) ||
+      parse(cierreCorte?.cotiz_blue?.venta) ||
+      parse(cierreCorte?.cotizaciones?.ARS) ||
+      // Si el primer cierre no tiene nada, buscar el más cercano que sí tenga
+      parse(cierres.find(c => c.fecha >= FECHA_CORTE && (
+        parse(c?.cotiz_blue?.compra) || parse(c?.cotiz_blue?.venta) || parse(c?.cotizaciones?.ARS)
+      ))?.cotizaciones?.ARS) ||
+      parse(cierres.find(c => c.fecha >= FECHA_CORTE && (
+        parse(c?.cotiz_blue?.compra) || parse(c?.cotiz_blue?.venta) || parse(c?.cotizaciones?.ARS)
+      ))?.cotiz_blue?.venta) ||
+      0;
+
+    let stockUSD = stockArranque;
+    let cpp = cotizArranque > 0 ? cotizArranque : 0;
+    let costoBruto = stockUSD * cpp;
+    let gananciaRealizada = 0;
+    const historial = [];
+    const resumenDias = {};
+
+    // Solo operaciones desde la fecha de corte
+    const opsUSD = ops.filter(o =>
+      o.fecha >= FECHA_CORTE &&
+      (o.tipo === "compra" || o.tipo === "venta") &&
+      ((o.moneda === "USD" && o.moneda2 === "ARS") ||
+       (o.moneda === "ARS" && o.moneda2 === "USD"))
+    );
+
+    opsUSD.forEach(op => {
+      let montoUSD, cotizAplicada, esCompra;
+      if (op.moneda === "USD" && op.moneda2 === "ARS") {
+        montoUSD = parse(op.monto);
+        cotizAplicada = parse(op.cotizacion) || (parse(op.monto2) / montoUSD);
+        esCompra = op.tipo === "compra";
+      } else {
+        montoUSD = parse(op.monto2);
+        cotizAplicada = parse(op.cotizacion) || (parse(op.monto) / montoUSD);
+        esCompra = op.tipo === "venta";
+      }
+      if (!montoUSD || !cotizAplicada) return;
+
+      const cppAntes = cpp;
+      let gananciaOp = null;
+
+      if (esCompra) {
+        const nuevoTotal = costoBruto + montoUSD * cotizAplicada;
+        const nuevoStock = stockUSD + montoUSD;
+        cpp = nuevoTotal / nuevoStock;
+        costoBruto = nuevoTotal;
+        stockUSD = nuevoStock;
+      } else {
+        gananciaOp = (cotizAplicada - cpp) * montoUSD;
+        gananciaRealizada += gananciaOp;
+        stockUSD = Math.max(0, stockUSD - montoUSD);
+        costoBruto = stockUSD * cpp;
+      }
+
+      const cierreDia = cierres.find(c => c.fecha === op.fecha);
+      const blueVenta = parse(cierreDia?.cotiz_blue?.venta) || 
+        parse(cierreDia?.cotiz_blue?.compra) || 
+        parse(cierreDia?.cotizaciones?.ARS) || 0;
+      const blueCompra = parse(cierreDia?.cotiz_blue?.compra) || blueVenta || 0;
+
+      // Ganancia vs mercado:
+      // En venta: cobré al cliente vs lo que pagaría el mercado (punta compra)
+      // En compra: pagué vs lo que cobraría el mercado (punta venta)
+      let gananciaVsMercado = null;
+      if (!esCompra && blueCompra > 0) {
+        // Vendí al cliente a cotizAplicada, el mercado me hubiera pagado blueCompra
+        gananciaVsMercado = (cotizAplicada - blueCompra) * montoUSD;
+      } else if (esCompra && blueVenta > 0) {
+        // Compré al cliente a cotizAplicada, en el mercado hubiera pagado blueVenta
+        gananciaVsMercado = (blueVenta - cotizAplicada) * montoUSD;
+      }
+
+      historial.push({
+        fecha: op.fecha, hora: op.hora || "",
+        tipo: esCompra ? "compra" : "venta",
+        montoUSD, cotizAplicada, cppAntes,
+        cppDespues: cpp, gananciaOp,
+        gananciaVsMercado,
+        stockDespues: stockUSD, blueVenta, blueCompra,
+        cliente: op.cliente || ""
+      });
+
+      if (!resumenDias[op.fecha]) resumenDias[op.fecha] = { fecha: op.fecha, compras: 0, ventas: 0, ganancia: 0, gananciaVsMercado: 0, cppFinal: 0, stockFinal: 0, blueVenta: 0, blueCompra: 0 };
+      const d = resumenDias[op.fecha];
+      if (esCompra) { d.compras += montoUSD; if(gananciaVsMercado!==null) d.gananciaVsMercado += gananciaVsMercado; }
+      else { d.ventas += montoUSD; d.ganancia += gananciaOp; if(gananciaVsMercado!==null) d.gananciaVsMercado += gananciaVsMercado; }
+      d.cppFinal = cpp; d.stockFinal = stockUSD;
+      d.blueVenta = blueVenta || d.blueVenta;
+      d.blueCompra = blueCompra || d.blueCompra;
+    });
+
+    const ultimoCierre = cierres[cierres.length - 1];
+    const blueActual = 
+      parse(ultimoCierre?.cotiz_blue?.venta) || 
+      parse(ultimoCierre?.cotiz_blue?.compra) || 
+      parse(ultimoCierre?.cotizaciones?.ARS) || 0;
+    const gananciaNoRealizada = blueActual > 0 ? (blueActual - cpp) * stockUSD : null;
+
+    // ── CÁLCULO DE TENENCIA POR MONEDA ──
+    // Para cada cierre consecutivo calculamos cuánto ganó/perdió cada posición
+    // por el simple hecho de tenerla (sin operar)
+    const tenencia = calcularTenencia(cierres, movsCC, diferidos);
+
+    return { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias: Object.values(resumenDias), cotizArranque, stockArranque, tenencia };
+  }
+
+  function calcularTenencia(cierres, movsCC, diferidos) {
+    const FECHA_CORTE_T = "2026-04-14";
+    const cierresFiltrados = cierres.filter(c => c.fecha >= FECHA_CORTE_T);
+    if (cierresFiltrados.length < 2) return null;
+    cierres = cierresFiltrados;
+
+    // Saldo CC por moneda acumulado hasta una fecha
+    function saldoCCHasta(fecha) {
+      const s = {USD:0,ARS:0,BRL:0,GBP:0,EUR:0,USDT:0};
+      (movsCC||[]).filter(m=>m.fecha<=fecha).forEach(m=>{
+        const mon = String(m.moneda||"").trim().toUpperCase();
+        if(s[mon]===undefined) return;
+        const ing = m.tipo==="ingreso_transf"||m.tipo==="ingreso_dep";
+        s[mon] += ing ? -Number(m.monto) : Number(m.monto);
+      });
+      return s;
+    }
+
+    // Dias de tenencia en CCs — para calcular promedio
+    // Para cada movimiento de entrada, buscamos cuándo se canceló
+    function calcDiasTenenciaCC() {
+      const movsPorCliente = {};
+      (movsCC||[]).filter(m=>m.fecha>=FECHA_CORTE_T).forEach(m=>{
+        const key = m.cliente_id+"_"+m.moneda;
+        if(!movsPorCliente[key]) movsPorCliente[key]=[];
+        movsPorCliente[key].push({...m, monto:Number(m.monto)});
+      });
+      let totalDias=0, totalMonto=0;
+      Object.values(movsPorCliente).forEach(movs=>{
+        movs.sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
+        let saldo=0;
+        movs.forEach((mv,i)=>{
+          const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+          const antes=saldo;
+          saldo += ing ? -mv.monto : mv.monto;
+          // Si era deuda nuestra (negativo) y se redujo → alguien esperó
+          if(antes<0&&saldo>antes&&i>0){
+            const diasEsp = diasEntre(movs[i-1].fecha, mv.fecha);
+            const montoEsp = Math.abs(antes);
+            totalDias += diasEsp * montoEsp;
+            totalMonto += montoEsp;
+          }
+        });
+      });
+      return totalMonto>0 ? (totalDias/totalMonto).toFixed(1) : null;
+    }
+
+    let ganUSD=0, ganARSCaja=0, ganARSCC=0, ganUSDCC=0;
+    const detalleDias = [];
+
+    for (let i=0; i<cierres.length-1; i++) {
+      const c1 = cierres[i];
+      const c2 = cierres[i+1];
+      const sf1 = c1.saldos_finales || {};
+      const blue1 = parse(c1.cotiz_blue?.venta) || parse(c1.cotiz_blue?.compra) || parse(c1.cotizaciones?.ARS) || 0;
+      const blue2 = parse(c2.cotiz_blue?.venta) || parse(c2.cotiz_blue?.compra) || parse(c2.cotizaciones?.ARS) || 0;
+      if (!blue1||!blue2) continue;
+      const varBlue = blue2 - blue1;
+      const pctBlue = varBlue / blue1;
+
+      // Saldos CC hasta este cierre
+      const ccFecha = saldoCCHasta(c1.fecha);
+
+      // 1. USD físico en caja
+      const usdFisico = parse(sf1.USD||0);
+      const ganUSDFisicoDia = usdFisico * varBlue;
+      ganUSD += ganUSDFisicoDia;
+
+      // 2. USD en CCs (nos deben USD → positivo = ganamos si blue sube)
+      const usdCC = ccFecha.USD || 0;
+      const ganUSDCCDia = usdCC * varBlue;
+      ganUSDCC += ganUSDCCDia;
+
+      // 3. ARS físico en caja — costo de oportunidad vs dolarizarse
+      // Si el blue sube y tenés ARS, perdés poder adquisitivo en USD
+      const arsFisico = parse(sf1.ARS||0);
+      const arsFisicoEnUSD = blue1 > 0 ? arsFisico / blue1 : 0;
+      const ganARSFisicoDia = -(arsFisicoEnUSD * (blue2 - blue1)); // perdés USD si blue sube
+      ganARSCaja += ganARSFisicoDia;
+
+      // 4. ARS en CCs — mismo efecto que ARS en caja
+      // arsCC > 0 = nos deben ARS → si blue sube esos ARS valen menos en USD
+      // arsCC < 0 = les debemos ARS → si blue sube nos conviene (pagamos con ARS que se devalúan)
+      const arsCC = ccFecha.ARS || 0;
+      const arsCCEnUSD = blue1 > 0 ? arsCC / blue1 : 0;
+      const ganARSCCDia = -(arsCCEnUSD * (blue2 - blue1));
+      ganARSCC += ganARSCCDia;
+
+      detalleDias.push({
+        fecha: c1.fecha,
+        blue1: Math.round(blue1),
+        blue2: Math.round(blue2),
+        varBlue: Math.round(varBlue),
+        pctBlue: (pctBlue*100).toFixed(2),
+        // Saldos
+        usdFisico: Math.round(usdFisico),
+        arsFisico: Math.round(arsFisico),
+        usdCC: Math.round(usdCC),
+        arsCC: Math.round(arsCC),
+        // Efectos
+        ganUSDFisico: Math.round(ganUSDFisicoDia),
+        ganARSFisico: Math.round(ganARSFisicoDia),
+        ganUSDCC: Math.round(ganUSDCCDia),
+        ganARSCC: Math.round(ganARSCCDia),
+        totalDia: Math.round(ganUSDFisicoDia + ganARSFisicoDia + ganUSDCCDia + ganARSCCDia),
+      });
+    }
+
+    // Cheques cobrados con tasa
+    const chequesCobrados = (diferidos||[]).filter(d=>d.cobrado && !d.manual && d.tm && Number(d.tm)>0);
+    const totalChequesCobrados = chequesCobrados.reduce((s,d)=>s+(Number(d.ganancia)||0),0);
+    const cantChequesCobrados = chequesCobrados.length;
+    const cantChequesExcluidos = (diferidos||[]).filter(d=>d.cobrado && (d.manual || !d.tm || Number(d.tm)===0)).length;
+
+    // Cheques pendientes — nominal a cobrar
+    const chequesPendientes = (diferidos||[]).filter(d=>!d.cobrado && !d.manual && d.tm && Number(d.tm)>0);
+    const totalChequesPendientes = chequesPendientes.reduce((s,d)=>s+(Number(d.nominal)||0),0);
+
+    // Promedio dias tenencia CCs
+    const diasPromedioCC = calcDiasTenenciaCC();
+
+    const totalSinCheques = Math.round(ganUSD+ganARSCaja+ganARSCC+ganUSDCC);
+
+    return {
+      ganUSD: Math.round(ganUSD),
+      ganUSDCC: Math.round(ganUSDCC),
+      ganARSCaja: Math.round(ganARSCaja),
+      ganARSCC: Math.round(ganARSCC),
+      ganCheques: Math.round(totalChequesCobrados),
+      cantChequesCobrados,
+      cantChequesExcluidos,
+      chequesPendientes: Math.round(totalChequesPendientes),
+      cantChequesPendientes: chequesPendientes.length,
+      diasPromedioCC,
+      total: Math.round(totalSinCheques + totalChequesCobrados),
+      detalleDias,
+    };
+  }
+
+  if (cargando) return <div style={{color:"#475569",padding:40,textAlign:"center"}}>Corriendo CPP móvil...</div>;
+  if (error) return <div style={{color:"#f87171",padding:20}}>{error}</div>;
+  if (!resultado) return null;
+
+  const { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias, cotizArranque, stockArranque } = resultado;
+  const ventas = historial.filter(h => h.tipo === "venta");
+  const ventasNeg = ventas.filter(v => v.gananciaOp < 0);
+  const volVendido = ventas.reduce((s, v) => s + v.montoUSD, 0);
+  const ganPromUSD = volVendido > 0 ? gananciaRealizada / volVendido : 0;
+  const pctMargen = cpp > 0 && ganPromUSD ? (ganPromUSD / cpp * 100) : 0;
+  // Ganancia total vs mercado (todas las ops con blue disponible)
+  const ganTotalVsMercado = historial.reduce((s, h) => s + (h.gananciaVsMercado || 0), 0);
+  const opsConBlue = historial.filter(h => h.gananciaVsMercado !== null);
+  const ganPromVsMercado = opsConBlue.length > 0 ? ganTotalVsMercado / opsConBlue.reduce((s,h)=>s+h.montoUSD,0) : 0;
+
+  const grafLabels = resumenDias.map(d => d.fecha.slice(5));
+  const grafCPP = resumenDias.map(d => Math.round(d.cppFinal));
+  const grafBlue = resumenDias.map(d => d.blueVenta ? Math.round(d.blueVenta) : null);
+
+  const TABS = [
+    { id:"estado", label:"Estado actual" },
+    { id:"historial", label:"Historial de ops" },
+    { id:"diario", label:"Por día" },
+    { id:"tenencia", label:"Tenencia" },
+  ];
+
+  return (
+    <div>
+      <div style={{fontSize:9,letterSpacing:4,color:"#f59e0b",marginBottom:4,fontWeight:600}}>ANÁLISIS DE STOCK USD</div>
+      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Costo Promedio Ponderado Móvil</div>
+      <div style={{fontSize:12,color:"#4b5563",marginBottom:4}}>¿A qué precio tengo los dólares y cuánto gané por las ventas?</div>
+      <div style={{fontSize:11,color:"#374151",marginBottom:20,padding:"6px 12px",background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:8,display:"inline-block"}}>📅 Análisis desde el 14 de abril 2026 — fecha de inicio del sistema confiable</div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:10,marginBottom:24}}>
+        {[
+          {label:"CPP actual", val:"$"+fmt(Math.round(cpp)), sub:"costo prom. por USD", color:"#f59e0b"},
+          {label:"Stock en caja", val:fmtUSD(Math.round(stockUSD)), sub:"$"+fmt(Math.round(cpp*stockUSD))+" ARS", color:"#4ade80"},
+          {label:"Ganancia realizada", val:"$"+fmt(Math.round(gananciaRealizada)), sub:ventas.length+" ventas · $"+fmt(Math.round(ganPromUSD))+"/USD", color:gananciaRealizada>=0?"#4ade80":"#f87171"},
+          {label:"No realizada", val:gananciaNoRealizada!==null?"$"+fmt(Math.round(gananciaNoRealizada)):"—", sub:"si vendieras el stock hoy", color:gananciaNoRealizada!==null&&gananciaNoRealizada>=0?"#4ade80":"#f87171"},
+          {label:"Blue actual", val:blueActual?"$"+fmt(Math.round(blueActual)):"—", sub:blueActual&&cpp?"dif. $"+fmt(Math.round(blueActual-cpp))+"/USD":"último cierre", color:"#38bdf8"},
+          {label:"Margen promedio", val:pctMargen?pctMargen.toFixed(2)+"%":"—", sub:"ganancia / CPP por venta", color:pctMargen>=1?"#4ade80":"#f59e0b"},
+          {label:"Ganancia vs mercado", val:ganTotalVsMercado?"$"+fmt(Math.round(ganTotalVsMercado)):"—", sub:"$"+fmt(Math.round(ganPromVsMercado))+"/USD sobre puntas blue", color:ganTotalVsMercado>=0?"#38bdf8":"#f87171"},
+        ].map(m=>(
+          <div key={m.label} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px 16px"}}>
+            <div style={{fontSize:9,color:"#475569",letterSpacing:1.5,marginBottom:6,fontWeight:600,textTransform:"uppercase"}}>{m.label}</div>
+            <div style={{fontSize:18,fontWeight:700,color:m.color,fontFamily:"'JetBrains Mono',monospace"}}>{m.val}</div>
+            <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>{m.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"flex",gap:4,marginBottom:18,flexWrap:"wrap"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid",borderColor:tab===t.id?"#f59e0b99":"rgba(255,255,255,0.08)",background:tab===t.id?"rgba(245,158,11,0.12)":"transparent",color:tab===t.id?"#f59e0b":"#475569",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>{t.label}</button>
+        ))}
+        <button onClick={cargar} style={{marginLeft:"auto",padding:"6px 12px",borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"#475569",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>↻ Actualizar</button>
+      </div>
+
+      {tab==="estado"&&(
+        <div>
+          <Card sx={{marginBottom:14}}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#f59e0b",marginBottom:14}}>ESTADO DEL STOCK AHORA</div>
+            {[
+              ["Stock en caja", fmtUSD(Math.round(stockUSD))],
+              ["Costo promedio (CPP)", "$"+fmt(Math.round(cpp))+" por USD"],
+              ["Valor al CPP (libro)", "$"+fmt(Math.round(cpp*stockUSD))],
+              blueActual?["Valor al blue hoy","$"+fmt(Math.round(blueActual*stockUSD))]:null,
+              gananciaNoRealizada!==null?["Ganancia latente","$"+fmt(Math.round(gananciaNoRealizada))+" ("+(((gananciaNoRealizada)/(cpp*stockUSD||1))*100).toFixed(1)+"%)"] :null,
+              ["Arranque del CPP","USD "+fmt(Math.round(stockArranque))+" × $"+fmt(Math.round(cotizArranque))+" (apertura 14/4/2026)"],
+              ["Operaciones analizadas", historial.length+" compras/ventas USD/ARS"],
+            ].filter(Boolean).map(([k,v])=>(
+              <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",fontSize:12}}>
+                <span style={{color:"#4b5563"}}>{k}</span>
+                <span style={{fontWeight:600,color:"#e2e8f0"}}>{v}</span>
+              </div>
+            ))}
+          </Card>
+          <Card sx={{border:"1px solid rgba(245,158,11,0.2)"}}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#f59e0b",marginBottom:14}}>DIAGNÓSTICO</div>
+            {[
+              blueActual>0&&cpp>0&&(blueActual-cpp)>0
+                ?{color:"#4ade80",bg:"#0a1a0a",border:"#4ade8033",msg:`Stock $${fmt(Math.round(blueActual-cpp))}/USD por encima del costo (${((blueActual-cpp)/cpp*100).toFixed(1)}%). Ganancia latente: $${fmt(Math.round(gananciaNoRealizada))}.`}
+                :blueActual>0&&cpp>0
+                ?{color:"#f87171",bg:"#1c0a0a",border:"#f4433633",msg:`CPP por encima del blue en $${fmt(Math.round(cpp-blueActual))}/USD. Riesgo si venden ahora.`}
+                :null,
+              gananciaRealizada>0&&ventas.length>0
+                ?{color:"#4ade80",bg:"#0a1a0a",border:"#4ade8033",msg:`Promedio $${fmt(Math.round(ganPromUSD))}/USD vendido (${pctMargen.toFixed(2)}% margen). Total realizado: $${fmt(Math.round(gananciaRealizada))}.`}
+                :null,
+              ventasNeg.length>0
+                ?{color:"#f59e0b",bg:"#1a0f0a",border:"#f59e0b33",msg:`${ventasNeg.length} venta(s) por debajo del CPP. Pérdida en esas ops: $${fmt(Math.round(ventasNeg.reduce((s,v)=>s+v.gananciaOp,0)))}.`}
+                :null,
+              historial.length===0
+                ?{color:"#475569",bg:"#0a0a0a",border:"#1f2937",msg:"Sin operaciones USD/ARS con cierre disponible. Cargá ops y cerrá la caja con cotización blue."}
+                :null,
+            ].filter(Boolean).map((ins,i)=>(
+              <div key={i} style={{background:ins.bg,border:"1px solid "+ins.border,borderRadius:8,padding:"10px 14px",marginBottom:8,fontSize:12,color:ins.color}}>{ins.msg}</div>
+            ))}
+          </Card>
+        </div>
+      )}
+
+      {tab==="historial"&&(
+        <Card>
+          <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>OPERACIONES CON CPP VIGENTE ({historial.length})</div>
+          {historial.length===0
+            ?<div style={{color:"#374151",fontSize:12}}>Sin operaciones USD/ARS con cierre disponible.</div>
+            :<div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                    {["Fecha","Hora","Tipo","USD","Cotiz. cliente","Punta mercado","CPP antes","CPP después","G. vs mercado","G. vs CPP","Stock"].map(h=>(
+                      <th key={h} style={{textAlign:["Tipo","Fecha","Hora"].includes(h)?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...historial].reverse().map((h,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                      <td style={{padding:"7px 8px",color:"#475569"}}>{h.fecha}</td>
+                      <td style={{padding:"7px 8px",color:"#4b5563"}}>{h.hora}</td>
+                      <td style={{padding:"7px 8px"}}>
+                        <span style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:h.tipo==="compra"?"rgba(56,189,248,0.15)":"rgba(74,222,128,0.15)",color:h.tipo==="compra"?"#38bdf8":"#4ade80",fontWeight:700}}>{h.tipo}</span>
+                        {h.cliente&&<span style={{fontSize:10,color:"#4b5563",marginLeft:6}}>· {h.cliente}</span>}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600}}>USD {fmt(Math.round(h.montoUSD))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right"}}>${fmt(Math.round(h.cotizAplicada))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>
+                        {h.tipo==="venta"?(h.blueCompra?"$"+fmt(Math.round(h.blueCompra)):"—"):(h.blueVenta?"$"+fmt(Math.round(h.blueVenta)):"—")}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(Math.round(h.cppAntes))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>${fmt(Math.round(h.cppDespues))}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:h.gananciaVsMercado===null?"#4b5563":h.gananciaVsMercado>=0?"#38bdf8":"#f87171"}}>
+                        {h.gananciaVsMercado===null?"—":"$"+fmt(Math.round(h.gananciaVsMercado))}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:h.gananciaOp===null?"#4b5563":h.gananciaOp>=0?"#4ade80":"#f87171"}}>
+                        {h.gananciaOp===null?"—":"$"+fmt(Math.round(h.gananciaOp))}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>USD {fmt(Math.round(h.stockDespues))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          }
+        </Card>
+      )}
+
+      {tab==="tenencia"&&(()=>{
+        const t = resultado?.tenencia;
+        if (!t) return <div style={{color:"#475569",fontSize:12,padding:20}}>Necesitás al menos 2 cierres consecutivos con cotización blue para calcular la tenencia.</div>;
+        const items = [
+          { label:"USD en caja física", sub:"si el blue sube $1, ganás $"+fmt(t.detalleDias[0]?.usdFisico||0)+" por cada peso de variación", val:t.ganUSD, color:t.ganUSD>=0?"#4ade80":"#f87171" },
+          { label:"USD en cuentas corrientes", sub:"USD que te deben clientes — mismo efecto que el físico", val:t.ganUSDCC, color:t.ganUSDCC>=0?"#4ade80":"#f87171" },
+          { label:"ARS en caja física", sub:"costo de oportunidad vs dolarizarse — si el blue sube, perdés en términos de USD", val:t.ganARSCaja, color:t.ganARSCaja>=0?"#4ade80":"#f87171" },
+          { label:"ARS en cuentas corrientes", sub:"pesos que te deben o debés — expuestos a variación del blue"+(t.diasPromedioCC?" · promedio "+t.diasPromedioCC+" días de tenencia":""), val:t.ganARSCC, color:t.ganARSCC>=0?"#4ade80":"#f87171" },
+          { label:"Cheques diferidos cobrados", sub:t.cantChequesCobrados+" cheques con tasa"+(t.cantChequesExcluidos>0?" · "+t.cantChequesExcluidos+" excluidos sin tasa":"")+(t.cantChequesPendientes>0?" · "+t.cantChequesPendientes+" pendientes ($"+fmt(t.chequesPendientes)+")":""), val:t.ganCheques, color:"#c084fc" },
+        ];
+        return (
+          <div>
+            <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:16,marginBottom:16}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>¿CUÁNTO GANASTE/PERDISTE POR SIMPLEMENTE TENER CADA POSICIÓN?</div>
+              <div style={{fontSize:11,color:"#4b5563",marginBottom:16,lineHeight:1.6}}>
+                Esto mide el rendimiento de cada posición <strong style={{color:"#e2e8f0"}}>sin contar las operaciones</strong>. 
+                Si el blue sube y tenés USD, ganás. Si el blue sube y tenés ARS, perdés poder adquisitivo. 
+                Los cheques rinden la tasa que pactaste.
+              </div>
+              {items.map((it,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{it.label}</div>
+                    <div style={{fontSize:11,color:"#4b5563",marginTop:3}}>{it.sub}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:16,fontWeight:700,color:it.color,fontFamily:"'JetBrains Mono',monospace"}}>
+                      {it.val>=0?"+":""}{it.val>0||it.val<0?"$"+fmt(Math.abs(it.val)):"—"}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0 4px",borderTop:"2px solid rgba(255,255,255,0.1)",marginTop:4}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>TOTAL TENENCIA</span>
+                <span style={{fontSize:18,fontWeight:700,color:t.total>=0?"#4ade80":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{t.total>=0?"+":""} ${fmt(Math.abs(t.total))}</span>
+              </div>
+            </div>
+
+            {/* Comparacion tenencia vs operativa */}
+            <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(99,102,241,0.3)",borderRadius:12,padding:16,marginBottom:16}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#818cf8",marginBottom:14}}>TRABAJO VS CONTEXTO</div>
+              {[
+                {label:"Ganancia operativa (CPP)", sub:"por comprar barato y vender caro", val:gananciaRealizada, color:"#4ade80"},
+                {label:"Ganancia por tenencia", sub:"por el simple hecho de tener las posiciones", val:t.total, color:"#38bdf8"},
+              ].map((it,i)=>{
+                const max=Math.max(Math.abs(gananciaRealizada),Math.abs(t.total),1);
+                const pct=Math.round((Math.abs(it.val)/max)*100);
+                return (
+                  <div key={i} style={{marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:"#e2e8f0"}}>{it.label}</div>
+                        <div style={{fontSize:10,color:"#4b5563"}}>{it.sub}</div>
+                      </div>
+                      <span style={{fontSize:14,fontWeight:700,color:it.color,fontFamily:"'JetBrains Mono',monospace"}}>{it.val>=0?"+":"-"}${fmt(Math.abs(it.val))}</span>
+                    </div>
+                    <div style={{background:"rgba(255,255,255,0.05)",borderRadius:4,height:8,overflow:"hidden"}}>
+                      <div style={{width:pct+"%",height:"100%",background:it.color,borderRadius:4,transition:"width .4s"}}/>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:12,marginTop:4}}>
+                {gananciaRealizada>t.total
+                  ?<div style={{fontSize:12,color:"#4ade80",background:"#0a1a0a",border:"1px solid #4ade8033",borderRadius:8,padding:"10px 14px"}}>
+                    Tu trabajo generó más que simplemente holdear. La diferencia es <strong style={{color:"#4ade80"}}>${fmt(Math.abs(gananciaRealizada-t.total))}</strong> a favor de operar.
+                  </div>
+                  :t.total>gananciaRealizada
+                  ?<div style={{fontSize:12,color:"#f59e0b",background:"#1a0f0a",border:"1px solid #f59e0b33",borderRadius:8,padding:"10px 14px"}}>
+                    El contexto (suba del blue) generó más que tus operaciones. No es malo — significa que el mercado te ayudó. La diferencia es <strong style={{color:"#f59e0b"}}>${fmt(Math.abs(t.total-gananciaRealizada))}</strong>.
+                  </div>
+                  :<div style={{fontSize:12,color:"#6b7280",padding:"10px 14px"}}>Trabajo y contexto empataron.</div>
+                }
+              </div>
+            </div>
+
+            {/* Detalle por día */}
+            {t.detalleDias.length>0&&(
+              <div style={{...S.card}}>
+                <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>DETALLE POR DÍA — efecto blue sobre cada posición</div>
+                <div style={{fontSize:11,color:"#374151",marginBottom:12}}>Positivo = te favoreció tener esa posición. Negativo = te perjudicó vs dolarizar todo.</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                        {["Día","Blue","Var. %","USD físico","Ef. USD fís.","USD CCs","Ef. USD CC","ARS físico","Ef. ARS fís.","ARS CCs","Ef. ARS CC","Total día"].map(h=>(
+                          <th key={h} style={{textAlign:h==="Día"?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...t.detalleDias].reverse().map((d,i)=>(
+                        <tr key={d.fecha} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                          <td style={{padding:"7px 8px",color:"#9ca3af"}}>{d.fecha}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>${fmt(d.blue1)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.varBlue>=0?"#4ade80":"#f87171"}}>{d.varBlue>=0?"+":""}{d.pctBlue}%</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>USD {fmt(d.usdFisico)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganUSDFisico>=0?"#4ade80":"#f87171"}}>{d.ganUSDFisico>=0?"+":""}{fmt(d.ganUSDFisico)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.usdCC!==0?"USD "+fmt(d.usdCC):"—"}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganUSDCC>=0?"#4ade80":"#f87171"}}>{d.usdCC!==0?(d.ganUSDCC>=0?"+":"")+fmt(d.ganUSDCC):"—"}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.arsFisico>0?"$"+fmt(d.arsFisico):"—"}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganARSFisico>=0?"#4ade80":"#f87171"}}>{d.arsFisico>0?(d.ganARSFisico>=0?"+":"")+fmt(d.ganARSFisico):"—"}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.arsCC!==0?"$"+fmt(Math.abs(d.arsCC))+(d.arsCC<0?" (debo)":""):"—"}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.ganARSCC>=0?"#4ade80":"#f87171"}}>{d.arsCC!==0?(d.ganARSCC>=0?"+":"")+fmt(d.ganARSCC):"—"}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.totalDia>=0?"#4ade80":"#f87171",borderLeft:"1px solid rgba(255,255,255,0.06)"}}>{d.totalDia>=0?"+":""}{fmt(d.totalDia)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
+                        <td colSpan={2} style={{padding:"8px",color:"#6b7280",fontSize:10,fontWeight:600}}>TOTAL PERÍODO</td>
+                        <td colSpan={2}/>
+                        <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:t.ganUSD>=0?"#4ade80":"#f87171"}}>{t.ganUSD>=0?"+":""}{fmt(t.ganUSD)}</td>
+                        <td/>
+                        <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:t.ganUSDCC>=0?"#4ade80":"#f87171"}}>{t.ganUSDCC>=0?"+":""}{fmt(t.ganUSDCC)}</td>
+                        <td/>
+                        <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:t.ganARSCaja>=0?"#4ade80":"#f87171"}}>{t.ganARSCaja>=0?"+":""}{fmt(t.ganARSCaja)}</td>
+                        <td/>
+                        <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:t.ganARSCC>=0?"#4ade80":"#f87171"}}>{t.ganARSCC>=0?"+":""}{fmt(t.ganARSCC)}</td>
+                        <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:(t.ganUSD+t.ganUSDCC+t.ganARSCaja+t.ganARSCC)>=0?"#4ade80":"#f87171",borderLeft:"1px solid rgba(255,255,255,0.06)"}}>
+                          {(t.ganUSD+t.ganUSDCC+t.ganARSCaja+t.ganARSCC)>=0?"+":""}{fmt(t.ganUSD+t.ganUSDCC+t.ganARSCaja+t.ganARSCC)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                {t.diasPromedioCC&&<div style={{marginTop:12,fontSize:11,color:"#6366f1",background:"rgba(99,102,241,0.08)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:8,padding:"8px 14px"}}>
+                  Promedio de días de tenencia en CCs: <strong style={{color:"#a5b4fc"}}>{t.diasPromedioCC} días</strong> — tiempo promedio que la plata queda trabada
+                </div>}
+              </div>
+            )}
+        </div>
+      );
+    })()}
+
+      {tab==="diario"&&(
+        <div>
+          <Card sx={{marginBottom:14}}>
+            <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>RESUMEN POR DÍA</div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                    {["Día","Compras USD","Ventas USD","G. vs CPP","G. vs mercado","CPP cierre","Blue compra","Blue venta"].map(h=>(
+                      <th key={h} style={{textAlign:h==="Día"?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...resumenDias].reverse().map((d,i)=>{
+                    return(
+                      <tr key={d.fecha} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+                        <td style={{padding:"7px 8px",color:"#9ca3af"}}>{d.fecha}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(Math.round(d.compras))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right"}}>USD {fmt(Math.round(d.ventas))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.ganancia>=0?"#4ade80":"#f87171"}}>${fmt(Math.round(d.ganancia))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:d.gananciaVsMercado>=0?"#38bdf8":"#f87171"}}>{d.gananciaVsMercado?"$"+fmt(Math.round(d.gananciaVsMercado)):"—"}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b",fontWeight:600}}>${fmt(Math.round(d.cppFinal))}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.blueCompra?"$"+fmt(Math.round(d.blueCompra)):"—"}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#6b7280"}}>{d.blueVenta?"$"+fmt(Math.round(d.blueVenta)):"—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+          {resumenDias.length>1&&(
+            <Card sx={{border:"1px solid rgba(245,158,11,0.2)"}}>
+              <div style={{fontSize:9,letterSpacing:3,color:"#6b7280",marginBottom:14}}>EVOLUCIÓN CPP vs BLUE</div>
+              <MiniLineChart series={[
+                  {data:grafCPP, color:"#f59e0b", dash:false},
+                  {data:grafBlue.map(v=>v||null), color:"#38bdf8", dash:true},
+                ]} labels={grafLabels}/>
+              <div style={{display:"flex",gap:16,marginTop:12,fontSize:11,color:"#4b5563",flexWrap:"wrap"}}>
+                <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#f59e0b",display:"inline-block",borderRadius:2}}/>CPP móvil</span>
+                <span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:16,height:3,background:"#38bdf8",display:"inline-block",borderRadius:2}}/>Blue venta (cierre)</span>
+                <span style={{color:"#374151"}}>Cuando el blue supera el CPP, el stock vale más de lo que costó.</span>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+// ─────────────────────────────────────────────
+// FIN PANTALLA ANÁLISIS CPP
+// ─────────────────────────────────────────────
 function LineChart({ data, color="#4ade80", height=100 }) {
   if (!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151",fontSize:11}}>Sin datos suficientes</div>;
   const w=500,h=height,pad=12;
@@ -513,10 +1200,9 @@ function AppInterna({ usuario }) {
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
-  const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", impactaCaja:true}]
+  const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId|"op_simultanea", monto:"", impactaCaja:true, cotizSim:"", clienteSim:""}]
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
-  const [sinCCNombre, setSinCCNombre] = useState({}); // {desgloseId: nombre}
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
   const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
@@ -531,6 +1217,19 @@ function AppInterna({ usuario }) {
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
+
+  const ORDEN_SOCIOS = {
+    "Gonzalo Spadafora": 0,
+    "Manuel Sala": 1,
+    "Matias Speranza": 2,
+    "STS": 3,
+  };
+  const sortClientes = (arr) => [...arr].sort((a,b) => {
+    const oa = ORDEN_SOCIOS[a.socio] ?? 99;
+    const ob = ORDEN_SOCIOS[b.socio] ?? 99;
+    if (oa !== ob) return oa - ob;
+    return (a.orden||0) - (b.orden||0); // dentro del mismo socio, orden manual
+  });
   const notify = useCallback((msg,ok=true)=>{ setToast({msg,ok}); setTimeout(()=>setToast(null),2800); },[]);
   const setF = useCallback((k,v)=>setForm(f=>({...f,[k]:v})),[]);
 
@@ -613,7 +1312,7 @@ function AppInterna({ usuario }) {
             },0);
             console.log("TRESOR saldo ARS calculado:",salARS);
           }
-          setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
+          setClientes(sortClientes(cls).map(c=>({
           id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
@@ -655,7 +1354,7 @@ function AppInterna({ usuario }) {
       try {
         const {data:cls}=await SB.from("clientes").select("*");
         const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
-        if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+        if(cls) setClientes(sortClientes(cls).map(c2=>({
           id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
             id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
@@ -744,26 +1443,10 @@ function AppInterna({ usuario }) {
     const opsHoy=ops.filter(o=>o.fecha===hoy);
     const resumen=Object.fromEntries(Object.entries(TIPOS_OP).map(([id])=>[id,opsHoy.filter(o=>o.tipo===id).length]));
     const cierre={fecha:hoy,saldos_finales:saldos,saldos_iniciales:cajaIni,cotizaciones:cotiz,total_usd:totalUSD,ops_resumen:resumen,cotiz_blue:cotizBlue};
-    try {
-      const {error} = await SB.from("cierres").upsert(cierre,{onConflict:"fecha"});
-      if(error) {
-        console.error("Error al guardar cierre:",error);
-        notify("Error al guardar cierre: "+error.message, false);
-        return;
-      }
-      // Verificar que se guardo correctamente
-      const {data:check} = await SB.from("cierres").select("fecha,total_usd").eq("fecha",hoy).single();
-      if(!check) {
-        notify("El cierre no se guardo correctamente. Intentalo de nuevo.", false);
-        return;
-      }
-      setCierres(p=>{const sin=p.filter(c=>c.fecha!==hoy);return [...sin,cierre].sort((a,b)=>a.fecha.localeCompare(b.fecha));});
-      setCajaCerrada(true); setShowModalCierre(false);
-      notify("Caja cerrada correctamente - "+fmtUSD(totalUSD));
-    } catch(e) {
-      console.error("Error inesperado al cerrar:",e);
-      notify("Error inesperado al cerrar caja", false);
-    }
+    await SB.from("cierres").upsert(cierre,{onConflict:"fecha"});
+    setCierres(p=>{const sin=p.filter(c=>c.fecha!==hoy);return [...sin,cierre].sort((a,b)=>a.fecha.localeCompare(b.fecha));});
+    setCajaCerrada(true); setShowModalCierre(false);
+    notify("Caja cerrada correctamente");
   }
 
   async function abrirCaja() {
@@ -800,6 +1483,43 @@ function AppInterna({ usuario }) {
           if (d.tipo==="efectivo") {
             // Efectivo siempre impacta caja
             tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
+          } else if (d.tipo==="op_simultanea") {
+            // Operación simultánea: genera una op de compra/venta inversa automáticamente
+            const cotizSim = parse(d.cotizSim) || parse(form.cotizacion);
+            if (!cotizSim) continue;
+            const usdSim = dm / cotizSim; // USD que se mueven en la op simultánea
+            const horaSim = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+            // Si la op principal es COMPRA → la simultánea es VENTA (le vendemos USD al cliente)
+            // Si la op principal es VENTA → la simultánea es COMPRA (le compramos USD al cliente)
+            const tipoSim = tipo==="compra" ? "venta" : "compra";
+            // Impacto en caja:
+            // Compra principal + venta simultánea: los ARS entran a caja (los paga el cliente), los USD salen
+            // Venta principal + compra simultánea: los ARS salen de caja (los pagamos), los USD entran
+            if (tipo==="compra") {
+              // Cliente nos da ARS → entran a caja para financiar la compra
+              ns[form.moneda2] += dm;    // ARS entran
+              ns[form.moneda] -= usdSim; // USD salen (se los damos al cliente)
+            } else {
+              // Cliente nos da USD → entran a caja
+              ns[form.moneda] += usdSim; // USD entran
+              ns[form.moneda2] -= dm;    // ARS salen (se los damos al cliente)
+            }
+            // Registrar la op simultánea en operaciones
+            const opSimData = {
+              tipo: tipoSim,
+              hora: horaSim,
+              moneda: form.moneda,
+              monto: usdSim,
+              moneda2: form.moneda2,
+              monto2: dm,
+              cotizacion: cotizSim,
+              cliente: d.clienteSim || "",
+              nota: "Op. simultánea vinculada a " + (tipo==="compra"?"compra":"venta") + " " + fmt(m) + " " + form.moneda,
+            };
+            const {data:insSim} = await SB.from("operaciones").insert({
+              dia_id: hoy, fecha: hoy, hora: horaSim, tipo: tipoSim, datos: opSimData
+            }).select().single();
+            if (insSim) setOps(p=>[...p,{...opSimData,id:insSim.id,fecha:hoy}]);
           } else {
             // Cliente CC
             const cId=Number(d.tipo);
@@ -832,35 +1552,6 @@ function AppInterna({ usuario }) {
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
       opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
-      // Procesar lineas sincc del desglose
-      for(const d of desglose.filter(x=>x.tipo==="sincc")){
-        const dm=parse(d.monto); if(!dm) continue;
-        const nombre=(sinCCNombre[d.id]||"Cliente").trim();
-        if(!d.impactaCaja){
-          // USD no salen de caja - cliente pendiente
-          if(!d.impactaCaja) tipo==="compra"?null:(ns[form.moneda]-=dm/parse(form.cotizacion)); // no impactar
-          if(d.crearCC){
-            // Crear CC nueva para este cliente
-            const partes=nombre.split(" ");
-            const nomNuevo=partes[0]||nombre;
-            const apNuevo=partes.slice(1).join(" ")||"";
-            const {data:newCl}=await SB.from("clientes").insert({nombre:nomNuevo,apellido:apNuevo,socio:false}).select().single();
-            if(newCl){
-              const montoPend=parse(form.monto);
-              const horaPend=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-              const notaPend="Op. vinculada - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(montoPend)+" "+form.moneda+" pendiente";
-              await SB.from("movimientos_cc").insert({cliente_id:newCl.id,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend,nota:notaPend});
-              const mvNew={id:Date.now()+newCl.id,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend,nota:notaPend};
-              setClientes(p=>[...p,{id:newCl.id,nombre:nomNuevo,apellido:apNuevo,socio:false,movimientos:[mvNew]}]);
-              notify("CC creada para "+nombre+" con "+fmt(montoPend)+" "+form.moneda+" pendiente");
-            }
-          }
-        } else {
-          // Retira - impacta caja moneda base
-          tipo==="venta"?ns[form.moneda]-=dm/parse(form.cotizacion||1):ns[form.moneda]+=dm/parse(form.cotizacion||1);
-        }
-      }
-      setSinCCNombre({});
       // Procesar base pendiente (no impacta caja)
       if(form.baseImpactaCaja==="no"&&usdPendiente.clienteId){
         const cPendId2=Number(usdPendiente.clienteId);
@@ -1114,6 +1805,7 @@ function AppInterna({ usuario }) {
     {id:"resumen_socios",label:"Por socio",c:"#34d399"},
     {id:"gastos",label:"Gastos",c:"#f43f5e"},
     {id:"socios",label:"Socios",c:"#a78bfa"},
+    {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
 
@@ -1151,7 +1843,7 @@ function AppInterna({ usuario }) {
             setRefreshing(true);
             const {data:cls}=await SB.from("clientes").select("*");
             const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
-            if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+            if(cls) setClientes(sortClientes(cls).map(c2=>({
               id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
               movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
                 id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
@@ -1463,8 +2155,8 @@ function AppInterna({ usuario }) {
                                         {!busq&&(
                                           <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:5,background:d.tipo==="efectivo"?"rgba(74,222,128,0.08)":"rgba(99,102,241,0.08)",border:"1px solid "+(d.tipo==="efectivo"?"#4ade8033":"#6366f133"),flexShrink:0,cursor:"pointer"}}
                                             onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:" "}))}>
-                                            <span style={{fontSize:10,color:d.tipo==="efectivo"?"#4ade80":d.tipo==="sincc"?"#f59e0b":"#a5b4fc",fontWeight:600}}>
-                                              {d.tipo==="efectivo"?"💵 Efectivo":d.tipo==="sincc"?"👤 "+(sinCCNombre[d.id]||"Sin CC"):clSel?clSel.nombre+" "+clSel.apellido:"?"}
+                                            <span style={{fontSize:10,color:d.tipo==="efectivo"?"#4ade80":d.tipo==="op_simultanea"?"#f59e0b":"#a5b4fc",fontWeight:600}}>
+                                              {d.tipo==="efectivo"?"💵 Efectivo":d.tipo==="op_simultanea"?"⇄ Op. simultánea":clSel?clSel.nombre+" "+clSel.apellido:"?"}
                                             </span>
                                             <span style={{fontSize:9,color:"#475569"}}>▾</span>
                                           </div>
@@ -1490,15 +2182,7 @@ function AppInterna({ usuario }) {
                                               {cl.nombre} {cl.apellido}
                                             </div>
                                           ))}
-                                          {filtrados.length===0&&busq.trim()&&(
-                                            <>
-                                            <div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados en CC</div>
-                                            <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"sincc"}));setBuscarDesglose(b=>({...b,[d.id]:""}));setSinCCNombre(n=>({...n,[d.id]:busq.trim()}));}}
-                                              style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#f59e0b",borderTop:"1px solid #1a1a1a",fontWeight:600}}>
-                                              + Nuevo cliente: "{busq.trim()}"
-                                            </div>
-                                            </>
-                                          )}
+                                          {filtrados.length===0&&busq.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados</div>}
                                         </div>
                                       )}
                                     </div>
@@ -1509,32 +2193,37 @@ function AppInterna({ usuario }) {
                               <Inp type="number" placeholder="Monto" value={d.monto}
                                 onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monto:e.target.value}))}
                                 sx={{flex:2,minWidth:100}}/>
-                              {/* Cliente sin CC - toggle retira/pendiente y crear CC */}
-                              {d.tipo==="sincc"&&(
-                                <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-                                  <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid #1f2937"}}>
-                                    <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:true,crearCC:false}))}
-                                      style={{padding:"3px 7px",background:d.impactaCaja?"#4ade8022":"transparent",color:d.impactaCaja?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
-                                      💵 Retira
-                                    </button>
-                                    <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:false}))}
-                                      style={{padding:"3px 7px",background:!d.impactaCaja?"#f59e0b22":"transparent",color:!d.impactaCaja?"#f59e0b":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",whiteSpace:"nowrap"}}>
-                                      ⏳ Pendiente
-                                    </button>
+                              {/* Campos extra para op simultánea */}
+                              {d.tipo==="op_simultanea"&&(
+                                <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0,minWidth:160}}>
+                                  <div>
+                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>COTIZ. SIMULTÁNEA</div>
+                                    <input type="number"
+                                      placeholder={form.cotizacion||"cotiz."}
+                                      value={d.cotizSim||""}
+                                      onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,cotizSim:e.target.value}))}
+                                      style={{width:"100%",background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
                                   </div>
-                                  {!d.impactaCaja&&(
-                                    <div onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,crearCC:!x.crearCC}))}
-                                      style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"3px 7px",borderRadius:5,border:"1px solid "+(d.crearCC?"#f59e0b44":"#1f2937"),background:d.crearCC?"rgba(245,158,11,0.08)":"transparent"}}>
-                                      <div style={{width:10,height:10,borderRadius:2,border:"2px solid "+(d.crearCC?"#f59e0b":"#475569"),background:d.crearCC?"#f59e0b":"transparent",flexShrink:0}}>
-                                        {d.crearCC&&<span style={{color:"#000",fontSize:7,fontWeight:900,display:"block",textAlign:"center",lineHeight:"10px"}}>✓</span>}
-                                      </div>
-                                      <span style={{fontSize:9,color:d.crearCC?"#f59e0b":"#475569",whiteSpace:"nowrap"}}>Crear CC</span>
-                                    </div>
-                                  )}
+                                  <div>
+                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>CLIENTE (opcional)</div>
+                                    <input type="text"
+                                      placeholder="Nombre libre..."
+                                      value={d.clienteSim||""}
+                                      onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteSim:e.target.value}))}
+                                      style={{width:"100%",background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                                  </div>
+                                  {d.monto&&(d.cotizSim||form.cotizacion)&&(()=>{
+                                    const cotiz = parse(d.cotizSim)||parse(form.cotizacion);
+                                    const usdSim = parse(d.monto)/cotiz;
+                                    const tipoSim = form.tipo==="compra"?"Venta":"Compra";
+                                    return <div style={{fontSize:10,color:"#f59e0b",padding:"3px 6px",background:"rgba(245,158,11,0.08)",borderRadius:4}}>
+                                      → {tipoSim} USD {fmt(usdSim)} a ${fmt(cotiz)}
+                                    </div>;
+                                  })()}
                                 </div>
                               )}
-                              {/* Impacta caja — solo para clientes con CC */}
-                              {d.tipo!=="efectivo"&&d.tipo!=="sincc"&&(()=>{
+                              {/* Impacta caja — solo para clientes */}
+                              {d.tipo!=="efectivo"&&d.tipo!=="op_simultanea"&&(()=>{
                                 const clSel=clientes.find(x=>x.id===Number(d.tipo));
                                 const salCC=clSel?saldoCC(clSel):null;
                                 const monBase=form.moneda2;
@@ -1704,40 +2393,127 @@ function AppInterna({ usuario }) {
           </div>
         )}
 
-        {pant==="libro"&&(
-          <div>
-            <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16}}>LIBRO DIARIO - {fechaLarga} - {opsHoy.length} ops</div>
-            <Card sx={{marginBottom:14}}>
-              <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:10}}>APERTURA</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                {MONEDAS.map(m=>{ const v=parse(cajaIni[m.id]); if(!v) return null;
-                  return <div key={m.id} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 10px"}}>
-                    <span style={{fontSize:9,color:m.color,marginRight:6}}>{m.id}</span><span style={{fontWeight:700}}>{m.simbolo}{fmt(v)}</span>
-                  </div>;})}
+        {pant==="libro"&&(()=>{
+          const movsCC_hoy = clientes.flatMap(cl=>
+            cl.movimientos
+              .filter(mv=>mv.fecha===hoy)
+              .map(mv=>({...mv, clienteNombre:cl.nombre+" "+cl.apellido}))
+          );
+          const todosMovs = [
+            ...opsHoy.map(op=>{
+              const movs = [];
+              const t = op.tipo;
+              if(t==="compra"){
+                movs.push({moneda:op.moneda,monto:op.monto,entrada:true,label:"Compra "+op.moneda,detalle:op.cliente||(op.nota||"")});
+                movs.push({moneda:op.moneda2,monto:op.monto2,entrada:false,label:"Compra "+op.moneda+" (pago)",detalle:op.cliente||(op.nota||"")});
+              } else if(t==="venta"){
+                movs.push({moneda:op.moneda,monto:op.monto,entrada:false,label:"Venta "+op.moneda,detalle:op.cliente||(op.nota||"")});
+                movs.push({moneda:op.moneda2,monto:op.monto2,entrada:true,label:"Venta "+op.moneda+" (cobro)",detalle:op.cliente||(op.nota||"")});
+              } else if(t==="cheque_dia"){
+                movs.push({moneda:"ARS",monto:op.cn,entrada:true,label:"Cheque al día",detalle:op.cliente||(op.nota||"")});
+              } else if(t==="cheque_dif"){
+                movs.push({moneda:"ARS",monto:op.montoFinal||op.monto,entrada:false,label:"Cheque diferido (pago)",detalle:op.cliente||(op.nota||"")});
+              } else if(t==="transferencia"){
+                movs.push({moneda:"ARS",monto:op.tcom||op.monto,entrada:true,label:"Transferencia (comisión)",detalle:op.cliente||(op.nota||"")});
+              } else if(t==="cobro_dif"){
+                movs.push({moneda:"ARS",monto:op.monto,entrada:true,label:"Cobro diferido",detalle:op.cliente||(op.nota||"")});
+              } else if(t==="ajuste"){
+                movs.push({moneda:op.moneda,monto:Math.abs(op.delta||op.monto),entrada:(op.delta||0)>0,label:"Ajuste manual",detalle:op.nota||""});
+              }
+              return movs.map(mv=>({...mv,hora:op.hora,id:op.id+"_"+mv.moneda,origen:"op"}));
+            }).flat(),
+            ...movsCC_hoy
+              .filter(mv=>mv.tipo==="cc_ingreso_transf"||mv.tipo==="cc_ingreso_dep"||mv.tipo==="cc_retiro_transf"||mv.tipo==="cc_retiro_efectivo")
+              .map(mv=>{
+                const ing=mv.tipo==="cc_ingreso_transf"||mv.tipo==="cc_ingreso_dep";
+                return {moneda:mv.moneda,monto:mv.monto,entrada:ing,label:(ing?"Cobro CC":"Pago CC")+" — "+mv.clienteNombre,detalle:mv.nota||"",hora:mv.hora,id:"cc_"+mv.id,origen:"cc"};
+              })
+          ].sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+
+          const extractoPorMoneda = {};
+          MONEDAS.forEach(m=>{
+            const ini=parse(cajaIni[m.id]||0);
+            let sal=ini;
+            const filas=[{hora:"APERTURA",label:"Saldo inicial",entrada:true,monto:0,saldo:ini,detalle:"",id:"ini_"+m.id,origen:"ini"}];
+            todosMovs.filter(mv=>mv.moneda===m.id).forEach(mv=>{
+              sal+=mv.entrada?mv.monto:-mv.monto;
+              filas.push({...mv,saldo:sal});
+            });
+            if(filas.length>1) extractoPorMoneda[m.id]={filas,ini,fin:sal,mon:m};
+          });
+
+          return (
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:2}}>LIBRO DE CAJA — {fechaLarga}</div>
+                  <div style={{fontSize:11,color:"#4b5563"}}>{opsHoy.length} operaciones · extracto con saldo corriente</div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {MONEDAS.map(m=>{
+                    const ini=parse(cajaIni[m.id]||0),fin=saldos[m.id]||0,dif=fin-ini;
+                    if(!ini&&!fin) return null;
+                    return <div key={m.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid "+m.color+"33",borderRadius:8,padding:"8px 12px"}}>
+                      <div style={{fontSize:9,color:m.color,marginBottom:3,fontWeight:700}}>{m.id}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>{m.simbolo}{fmt(fin)}</div>
+                      <div style={{fontSize:10,color:dif>0?"#4ade80":dif<0?"#f87171":"#475569"}}>{dif>0?"+":""}{m.simbolo}{fmt(dif)}</div>
+                    </div>;
+                  })}
+                </div>
               </div>
-            </Card>
-            {MONEDAS.map(m=>{ const mv=movPorMoneda[m.id]; if(!mv.ent.length&&!mv.sal.length) return null;
-              const tE=mv.ent.reduce((s,o)=>s+(o.monto||0),0),tS=mv.sal.reduce((s,o)=>s+(o.monto||0),0);
-              return (
-                <Card key={m.id} sx={{marginBottom:10,border:"1px solid "+m.color+"22"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                    <span style={{fontSize:11,fontWeight:700,color:m.color}}>{m.id}</span>
-                    <span style={{fontSize:11,color:"#6b7280"}}>{m.simbolo}{fmt(parse(cajaIni[m.id]))} -&gt; <strong style={{color:"#fff"}}>{fmt(saldos[m.id])}</strong></span>
+              {Object.values(extractoPorMoneda).map(({filas,ini,fin,mon})=>(
+                <Card key={mon.id} sx={{marginBottom:14,border:"1px solid "+mon.color+"22"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <span style={{fontSize:12,fontWeight:700,color:mon.color}}>{mon.id} — {mon.label}</span>
+                    <span style={{fontSize:11,color:"#6b7280"}}>{mon.simbolo}{fmt(ini)} → <strong style={{color:"#fff"}}>{mon.simbolo}{fmt(fin)}</strong>
+                      <span style={{marginLeft:8,color:fin-ini>0?"#4ade80":fin-ini<0?"#f87171":"#475569",fontWeight:700}}>{fin-ini>0?"+":""}{mon.simbolo}{fmt(fin-ini)}</span>
+                    </span>
                   </div>
-                  <div style={S.grid("1fr 1fr",10)}>
-                    <div><div style={{fontSize:9,color:"#4ade80",marginBottom:5}}>ENTRADAS +{m.simbolo}{fmt(tE)}</div>
-                      {mv.ent.map(o=><div key={o.id} style={{fontSize:11,color:"#9ca3af",padding:"2px 0",borderBottom:"1px solid #1a1a1a"}}>{o.hora} - {TIPOS_OP[o.tipo]?.label} - <span style={{color:"#4ade80"}}>{m.simbolo}{fmt(o.monto)}</span></div>)}
-                    </div>
-                    <div><div style={{fontSize:9,color:"#f87171",marginBottom:5}}>SALIDAS -{m.simbolo}{fmt(tS)}</div>
-                      {mv.sal.map(o=><div key={o.id} style={{fontSize:11,color:"#9ca3af",padding:"2px 0",borderBottom:"1px solid #1a1a1a"}}>{o.hora} - {TIPOS_OP[o.tipo]?.label} - <span style={{color:"#f87171"}}>{m.simbolo}{fmt(o.monto)}</span></div>)}
-                    </div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                      <thead>
+                        <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                          {["Hora","Concepto","Detalle","Entrada","Salida","Saldo"].map(h=>(
+                            <th key={h} style={{textAlign:["Hora","Concepto","Detalle"].includes(h)?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filas.map((f,i)=>(
+                          <tr key={f.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:f.origen==="ini"?"rgba(255,255,255,0.02)":f.origen==="cc"?"rgba(99,102,241,0.04)":"transparent"}}>
+                            <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{f.hora}</td>
+                            <td style={{padding:"7px 8px",color:"#e2e8f0",fontWeight:f.origen==="ini"?600:400}}>
+                              {f.origen==="cc"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc",marginRight:6}}>CC</span>}
+                              {f.label}
+                            </td>
+                            <td style={{padding:"7px 8px",color:"#4b5563",fontSize:10}}>{f.detalle}</td>
+                            <td style={{padding:"7px 8px",textAlign:"right",color:"#4ade80",fontWeight:600}}>{f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
+                            <td style={{padding:"7px 8px",textAlign:"right",color:"#f87171",fontWeight:600}}>{!f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
+                            <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:f.saldo>0?"#e2e8f0":f.saldo<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{mon.simbolo}{fmt(f.saldo)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
+                          <td colSpan={3} style={{padding:"8px",fontSize:10,color:"#6b7280",fontWeight:600}}>SALDO FINAL</td>
+                          <td style={{padding:"8px",textAlign:"right",color:"#4ade80",fontWeight:700}}>{mon.simbolo}{fmt(filas.filter(f=>f.entrada&&f.monto>0).reduce((s,f)=>s+f.monto,0))}</td>
+                          <td style={{padding:"8px",textAlign:"right",color:"#f87171",fontWeight:700}}>{mon.simbolo}{fmt(filas.filter(f=>!f.entrada&&f.monto>0).reduce((s,f)=>s+f.monto,0))}</td>
+                          <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:fin>0?"#4ade80":fin<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{mon.simbolo}{fmt(fin)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </Card>
-              );
-            })}
-          </div>
-        )}
-
+              ))}
+              {Object.keys(extractoPorMoneda).length===0&&(
+                <Card sx={{textAlign:"center",padding:40}}>
+                  <div style={{fontSize:24,marginBottom:8}}>📒</div>
+                  <div style={{color:"#374151"}}>Sin movimientos hoy</div>
+                </Card>
+              )}
+            </div>
+          );
+        })()}
         {pant==="cartera"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -3765,6 +4541,8 @@ function AppInterna({ usuario }) {
             </div>
           );
         })()}
+
+        {pant==="analisis"&&<PantallaAnalisis/>}
 
       </main>
     </div>
