@@ -45,9 +45,24 @@ const fmt = (n) => {
 };
 const fmtUSD = (n) => "USD "+fmt(n);
 const diasEntre = (a,b) => { if(!a||!b) return 0; return Math.max(0,Math.round((new Date(b)-new Date(a))/86400000)); };
-// Siempre usar horario Argentina (UTC-3)
+const sumarDiasHabiles = (fechaStr, dias) => {
+  if(!fechaStr) return "";
+  let d = new Date(fechaStr+"T12:00:00");
+  let agregados = 0;
+  while(agregados < dias) {
+    d.setDate(d.getDate()+1);
+    const dow = d.getDay(); // 0=dom, 6=sab
+    if(dow !== 0 && dow !== 6) agregados++;
+  }
+  return d.toISOString().split("T")[0];
+};
+// Siempre usar horario Argentina (UTC-3) - funcion para calcular siempre fresco
+const getHoy = () => {
+  const ar = new Date(new Date().toLocaleString("en-US", {timeZone:"America/Argentina/Buenos_Aires"}));
+  return ar.getFullYear()+"-"+String(ar.getMonth()+1).padStart(2,"0")+"-"+String(ar.getDate()).padStart(2,"0");
+};
 const ahoraAR = new Date(new Date().toLocaleString("en-US", {timeZone:"America/Argentina/Buenos_Aires"}));
-const hoy = ahoraAR.getFullYear()+"-"+String(ahoraAR.getMonth()+1).padStart(2,"0")+"-"+String(ahoraAR.getDate()).padStart(2,"0");
+const hoy = getHoy();
 const fechaLarga = ahoraAR.toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
 const fmtFecha = (f) => f ? new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short",year:"numeric",month:"short",day:"numeric"}) : "";
 
@@ -239,7 +254,17 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
             <div><Lbl>Tasa gestion %</Lbl><Inp type="number" value={f.dtg} onChange={e=>sf("dtg",e.target.value)}/></div>
             <div><Lbl>Nominal</Lbl><Inp type="number" value={f.dn} onChange={e=>sf("dn",e.target.value)}/></div>
             <div><Lbl>Fecha recepcion</Lbl><Inp type="date" value={f.dfr} onChange={e=>sf("dfr",e.target.value)}/></div>
-            <div><Lbl>Fecha acreditacion</Lbl><Inp type="date" value={f.dfa} onChange={e=>sf("dfa",e.target.value)}/></div>
+            <div>
+              <Lbl>F. vencimiento cheque</Lbl>
+              <Inp type="date" value={f.dfv||""} onChange={e=>{
+                sf("dfv",e.target.value);
+                if(e.target.value) sf("dfa", sumarDiasHabiles(e.target.value, 2));
+              }}/>
+            </div>
+            <div>
+              <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h habiles</span></Lbl>
+              <Inp type="date" value={f.dfa} onChange={e=>sf("dfa",e.target.value)}/>
+            </div>
             <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
           </div>
           {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #c084fc33",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",8),fontSize:11}}>
@@ -270,15 +295,21 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
   );
 }
 
-function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancelar, ultimaCotiz={} }) {
+function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancelar, ultimaCotiz={}, ultimaBlue="" }) {
   const [cotiz, setCotiz] = useState({ ARS:ultimaCotiz.ARS||"", BRL:ultimaCotiz.BRL||"", GBP:ultimaCotiz.GBP||"", EUR:ultimaCotiz.EUR||"", USDT:"1" });
+  const [cotizCompra, setCotizCompra] = useState(ultimaBlue?.compra||"");
+  const [cotizVenta, setCotizVenta] = useState(ultimaBlue?.venta||"");
   const sc = (k,v) => setCotiz(c=>({...c,[k]:v}));
   // Calcular patrimonio total = caja fisica + CCs + cheques a cobrar
   const patrimonioTotal = useMemo(()=>{
     if (!parse(cotiz.ARS)) return null;
     const tots=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
     const difPend=(diferidos||[]).filter(d=>!d.cobrado);
-    const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+    const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
     const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)]));
     return {
       totalUSD: calcTotalUSD(patrimonioSaldos, cotiz),
@@ -321,6 +352,21 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
             ))}
           </div>
           <div style={{marginTop:8,fontSize:10,color:"#374151"}}>* ARS: pesos por USD (ej: 1400) | EUR/GBP/BRL: valor en USD (ej: EUR=1.2, BRL=0.19)</div>
+          <div style={{marginTop:10,display:"flex",gap:8}}>
+            <div style={{flex:1}}>
+              <Lbl><span style={{color:"#f59e0b"}}>Cotizacion Compra</span></Lbl>
+              <Inp type="number" placeholder="ej: 1380" value={cotizCompra} onChange={e=>setCotizCompra(e.target.value)}
+                sx={{borderColor:"#f59e0b44"}}/>
+            </div>
+            <div style={{flex:1}}>
+              <Lbl><span style={{color:"#4ade80"}}>Cotizacion Venta</span></Lbl>
+              <Inp type="number" placeholder="ej: 1400" value={cotizVenta} onChange={e=>setCotizVenta(e.target.value)}
+                sx={{borderColor:"#4ade8044"}}/>
+            </div>
+          </div>
+          {cotizCompra&&cotizVenta&&<div style={{marginTop:6,fontSize:10,color:"#a5b4fc"}}>
+            Spread: ${fmt(parse(cotizVenta)-parse(cotizCompra))} ({(((parse(cotizVenta)-parse(cotizCompra))/parse(cotizCompra))*100).toFixed(2)}%)
+          </div>}
         </div>
         {totalUSD!==null&&patrimonioTotal&&(
           <div style={{marginBottom:16}}>
@@ -331,7 +377,7 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
             </div>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1,background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:10,textAlign:"center"}}>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CAJA FÍSICA</div>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CAJA FISICA</div>
                 <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioTotal.cajaUSD)}</div>
               </div>
               <div style={{flex:1,background:"#0a0a1a",border:"1px solid #c084fc33",borderRadius:8,padding:10,textAlign:"center"}}>
@@ -342,7 +388,7 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
           </div>
         )}
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>onCerrar(cotiz,totalUSD)} disabled={!parse(cotiz.ARS)}
+          <button onClick={()=>onCerrar(cotiz,totalUSD,{compra:parse(cotizCompra)||0,venta:parse(cotizVenta)||0})} disabled={!parse(cotiz.ARS)}
             style={{flex:1,padding:12,borderRadius:7,background:parse(cotiz.ARS)?"#052e16":"#0a0a0a",border:"1px solid "+(parse(cotiz.ARS)?"#4ade80":"#1f2937"),color:parse(cotiz.ARS)?"#4ade80":"#374151",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:parse(cotiz.ARS)?"pointer":"not-allowed"}}>
             CERRAR CAJA
           </button>
@@ -361,10 +407,10 @@ function LoginScreen({ onLogin }) {
 
   async function handleLogin(e) {
     e.preventDefault();
-    if(!email||!pass) { setError("Completá email y contraseña"); return; }
+    if(!email||!pass) { setError("Completa email y contrasena"); return; }
     setLoading(true); setError("");
     const { error:err } = await SB.auth.signInWithPassword({ email, password:pass });
-    if (err) { setError("Email o contraseña incorrectos"); setLoading(false); }
+    if (err) { setError("Email o contrasena incorrectos"); setLoading(false); }
     else { onLogin(); }
   }
 
@@ -374,7 +420,7 @@ function LoginScreen({ onLogin }) {
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 8px 32px rgba(99,102,241,0.4)"}}>S</div>
           <div style={{fontSize:20,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>STS FINANCIERA</div>
-          <div style={{fontSize:12,color:"#475569",marginTop:4}}>Ingresá tus credenciales para continuar</div>
+          <div style={{fontSize:12,color:"#475569",marginTop:4}}>Ingresa tus credenciales para continuar</div>
         </div>
         <form onSubmit={handleLogin} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,padding:28}}>
           <div style={{marginBottom:16}}>
@@ -384,7 +430,7 @@ function LoginScreen({ onLogin }) {
               style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           </div>
           <div style={{marginBottom:20}}>
-            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contraseña</label>
+            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contrasena</label>
             <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
               placeholder="••••••••" autoComplete="current-password"
               style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
@@ -400,6 +446,13 @@ function LoginScreen({ onLogin }) {
 }
 
 function AppInterna({ usuario }) {
+  const [hoyState, setHoyState] = useState(getHoy());
+  // Actualizar fecha cada minuto por si la app queda abierta de un dia al otro
+  useEffect(()=>{
+    const t=setInterval(()=>setHoyState(getHoy()),60000);
+    return()=>clearInterval(t);
+  },[]);
+  const hoy=hoyState;
   const [pant, setPant] = useState("ape");
   const [toast, setToast] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -415,6 +468,9 @@ function AppInterna({ usuario }) {
   const [diaId, setDiaId] = useState(null);
   const [cajaCerrada, setCajaCerrada] = useState(false);
   const [showModalCierre, setShowModalCierre] = useState(false);
+  const [ultimaBlue, setUltimaBlue] = useState({compra:0,venta:0});
+  const [ultimoRefresh, setUltimoRefresh] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
   const [cierres, setCierres] = useState([]);
   const [editandoOp, setEditandoOp] = useState(null);
   const [histFecha, setHistFecha] = useState("");
@@ -425,13 +481,13 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfa:"", tn:"", tpct:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", baseImpactaCaja:"si" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
-  const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy});
+  const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy,usaCC:false});
   const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Otros"];
   const [socios, setSocios] = useState([]);
   const [nuevoSocio, setNuevoSocio] = useState({nombre:"",monto:""});
@@ -457,6 +513,20 @@ function AppInterna({ usuario }) {
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
+  const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", impactaCaja:true}]
+  const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
+  const [sinCCNombre, setSinCCNombre] = useState({}); // {desgloseId: nombre}
+  const [buscarDesglose, setBuscarDesglose] = useState({});
+  const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
+  const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
+  const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
+  const [liquidacion, setLiquidacion] = useState({
+    sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
+    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{},
+    periodo:"", fechaImpacto:""
+  });
+  const [liquidaciones, setLiquidaciones] = useState([]);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -466,6 +536,7 @@ function AppInterna({ usuario }) {
 
   useEffect(()=>{
     async function cargar() {
+      setCargando(true);
       try {
         // Asegurar sesion activa antes de cargar datos
         const {data:{session}} = await SB.auth.getSession();
@@ -476,9 +547,27 @@ function AppInterna({ usuario }) {
           // Dia de hoy ya existe
           setDiaId(dia.id);
           const ci = dia.caja_ini || {};
-          setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
+          // Verificar si la caja fue abierta hoy
+          // Chequear si hay valores en caja_ini (monedas) O en _saldos_finales
           const sf = ci._saldos_finales;
-          if (sf) { setSaldos(sf); setPant("home"); }
+          const tieneMonedas = MONEDAS.some(m=>ci[m.id]&&ci[m.id]!=="");
+          const tieneSaldos = sf && Object.values(sf).some(v=>Number(v)!==0);
+          const cajaFueAbierta = tieneMonedas || tieneSaldos;
+          if (cajaFueAbierta) {
+            // Caja ya abierta: cargar saldos y ir al home
+            setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ci[m.id]||""])));
+            if(sf) setSaldos(Object.fromEntries(MONEDAS.map(m=>[m.id, Number(sf[m.id])||0])));
+            setPant("home");
+          } else {
+            // Dia existe pero caja no abierta: pre-cargar cajaIni desde ultimo cierre
+            let ultimoCierreData = null;
+            try { const r = await SB.from("cierres").select("*").order("fecha",{ascending:false}).limit(1).single(); ultimoCierreData=r.data; } catch(e){}
+            if (ultimoCierreData?.saldos_finales) {
+              setCajaIni(Object.fromEntries(MONEDAS.map(m=>[m.id, ultimoCierreData.saldos_finales[m.id]||""])));
+            }
+            // Ir a pantalla de apertura
+            setPant("ape");
+          }
           const ft = ci._fact; if (ft) setFact(ft);
           const po = ci._pos_ovr; if (po) setPosOvr(po);
         } else {
@@ -507,18 +596,30 @@ function AppInterna({ usuario }) {
           nominal:d.nominal, mFinal:d.m_final, ganancia:d.ganancia,
           fechaAcr:d.fecha_acr, tm:d.tm, dias:d.dias, cobrado:d.cobrado,
           nota:d.nota||"", manual:d.manual||false,
-          fechaCobro:d.fecha_cobro||"", tasaEndoso:d.tasa_endoso||""
+          fechaCobro:d.fecha_cobro||"", tasaEndoso:d.tasa_endoso||"", fechaVenc:d.fecha_venc||""
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
-        const {data:movs} = await SB.from("movimientos_cc").select("*");
-        if (cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
+        const {data:movs} = await SB.from("movimientos_cc").select("*").limit(5000);
+        if (cls) {
+          const tresor=cls.find(x=>x.nombre==="TRESOR"||x.nombre==="Tresor");
+          if(tresor) {
+            const movsTresor=(movs||[]).filter(m=>Number(m.cliente_id)===Number(tresor.id));
+            console.log("TRESOR id:",tresor.id,"movimientos cargados:",movsTresor.length,"de",movs?.length,"total");
+            const salARS=movsTresor.reduce((s,m)=>{
+              if(m.moneda!=="ARS") return s;
+              const ing=m.tipo==="ingreso_transf"||m.tipo==="ingreso_dep";
+              return s+(ing?-Number(m.monto):Number(m.monto));
+            },0);
+            console.log("TRESOR saldo ARS calculado:",salARS);
+          }
+          setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c=>({
           id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
             moneda:m.moneda, monto:Number(m.monto), nota:m.nota
           }))
-        })));
+        })));}
         // Facturacion
         const {data:factData} = await SB.from("facturacion").select("*").eq("id","config").single();
         if (factData) setFact({objetivo:String(factData.objetivo||""), meses:factData.meses||{}});
@@ -531,6 +632,9 @@ function AppInterna({ usuario }) {
         // Socios
         const {data:sociosData} = await SB.from("socios").select("*").order("nombre");
         if (sociosData) setSocios(sociosData);
+        // Liquidaciones
+        const {data:liqData} = await SB.from("liquidaciones").select("*").order("fecha",{ascending:false}).limit(12);
+        if (liqData) setLiquidaciones(liqData);
         // Cierres
         const {data:ciData} = await SB.from("cierres").select("*").order("fecha",{ascending:true});
         if (ciData) setCierres(ciData);
@@ -538,6 +642,7 @@ function AppInterna({ usuario }) {
         if (ciData&&ciData.length>0) {
           const ult=ciData[ciData.length-1];
           if (ult.cotizaciones) setUltimaCotiz(prev=>({...prev,...ult.cotizaciones}));
+        if (ult.cotiz_blue) setUltimaBlue(ult.cotiz_blue);
         }
         const {data:ciHoy,error:ciHoyErr} = await SB.from("cierres").select("id").eq("fecha",hoy).single();
         if (ciHoy&&!ciHoyErr) setCajaCerrada(true);
@@ -545,6 +650,23 @@ function AppInterna({ usuario }) {
       setCargando(false);
     }
     cargar();
+    // Auto-refresh cada 30 segundos - solo ops y CCs (sin resetear pantalla)
+    const interval = setInterval(async()=>{
+      try {
+        const {data:cls}=await SB.from("clientes").select("*");
+        const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
+        if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+          id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
+          movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
+            id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
+          }))
+        })));
+        const {data:opsData}=await SB.from("operaciones").select("*").order("hora",{ascending:true});
+        if(opsData) setOps(opsData.map(o=>({...(o.datos||{}),id:o.id,fecha:o.fecha||o.datos?.fecha,hora:o.hora||o.datos?.hora,tipo:o.tipo})));
+        setUltimoRefresh(new Date());
+      } catch(e){}
+    }, 30000);
+    return ()=>clearInterval(interval);
   },[]);
 
   const calcDif = useMemo(()=>{
@@ -618,14 +740,30 @@ function AppInterna({ usuario }) {
     await SB.from("dias").upsert({id:hoy, caja_ini:cajaData, abierta:true},{onConflict:"id"});
   }
 
-  async function ejecutarCierre(cotiz, totalUSD) {
+  async function ejecutarCierre(cotiz, totalUSD, cotizBlue={compra:0,venta:0}) {
     const opsHoy=ops.filter(o=>o.fecha===hoy);
     const resumen=Object.fromEntries(Object.entries(TIPOS_OP).map(([id])=>[id,opsHoy.filter(o=>o.tipo===id).length]));
-    const cierre={fecha:hoy,saldos_finales:saldos,saldos_iniciales:cajaIni,cotizaciones:cotiz,total_usd:totalUSD,ops_resumen:resumen};
-    await SB.from("cierres").upsert(cierre,{onConflict:"fecha"});
-    setCierres(p=>{const sin=p.filter(c=>c.fecha!==hoy);return [...sin,cierre].sort((a,b)=>a.fecha.localeCompare(b.fecha));});
-    setCajaCerrada(true); setShowModalCierre(false);
-    notify("Caja cerrada correctamente");
+    const cierre={fecha:hoy,saldos_finales:saldos,saldos_iniciales:cajaIni,cotizaciones:cotiz,total_usd:totalUSD,ops_resumen:resumen,cotiz_blue:cotizBlue};
+    try {
+      const {error} = await SB.from("cierres").upsert(cierre,{onConflict:"fecha"});
+      if(error) {
+        console.error("Error al guardar cierre:",error);
+        notify("Error al guardar cierre: "+error.message, false);
+        return;
+      }
+      // Verificar que se guardo correctamente
+      const {data:check} = await SB.from("cierres").select("fecha,total_usd").eq("fecha",hoy).single();
+      if(!check) {
+        notify("El cierre no se guardo correctamente. Intentalo de nuevo.", false);
+        return;
+      }
+      setCierres(p=>{const sin=p.filter(c=>c.fecha!==hoy);return [...sin,cierre].sort((a,b)=>a.fecha.localeCompare(b.fecha));});
+      setCajaCerrada(true); setShowModalCierre(false);
+      notify("Caja cerrada correctamente - "+fmtUSD(totalUSD));
+    } catch(e) {
+      console.error("Error inesperado al cerrar:",e);
+      notify("Error inesperado al cerrar caja", false);
+    }
   }
 
   async function abrirCaja() {
@@ -633,6 +771,7 @@ function AppInterna({ usuario }) {
     setSaldos(s);
     const cajaData = {...Object.fromEntries(MONEDAS.map(m=>[m.id,cajaIni[m.id]])), _saldos_finales:s};
     await SB.from("dias").upsert({id:hoy, caja_ini:cajaData, abierta:true},{onConflict:"id"});
+    setDiaId(hoy); // Marcar que el dia fue abierto
     setPant("home"); notify("Caja abierta ✓");
   }
 
@@ -644,9 +783,110 @@ function AppInterna({ usuario }) {
     if (tipo==="compra"||tipo==="venta") {
       const m=parse(form.monto),m2=parse(form.monto2);
       if (!m||!m2) { notify("Ingresa montos validos",false); return; }
-      tipo==="compra"?(ns[form.moneda]+=m,ns[form.moneda2]-=m2):(ns[form.moneda]-=m,ns[form.moneda2]+=m2);
+      // Validar desglose si está activo
+      if (mostrarDesglose&&desglose.length>0) {
+        const asignado=desglose.reduce((s,d)=>s+parse(d.monto),0);
+        if (Math.abs(asignado-m2)>1) { notify("El desglose no cuadra con el total",false); return; }
+      }
+      // Impacto en caja base (moneda principal) - solo si no es pendiente CC
+      if(form.baseImpactaCaja!=="no"){
+        tipo==="compra"?(ns[form.moneda]+=m):(ns[form.moneda]-=m);
+      }
+      // Si hay desglose, procesar cada línea para la moneda2
+      // Si no hay desglose, impacto normal en caja
+      if (mostrarDesglose&&desglose.length>0) {
+        for (const d of desglose) {
+          const dm=parse(d.monto); if(!dm) continue;
+          if (d.tipo==="efectivo") {
+            // Efectivo siempre impacta caja
+            tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
+          } else {
+            // Cliente CC
+            const cId=Number(d.tipo);
+            const cliente=clientes.find(cl=>cl.id===cId);
+            if(!cliente) continue;
+            // Venta de USD: cliente me transfiere ARS → él me debe (retiro_transf = yo le mandé, positivo para mí)
+            // Compra de USD: yo/tercero le manda ARS → le debo (ingreso_transf = recibí plata, negativo para mí)
+            const tipoMov=tipo==="venta"?"retiro_transf":"ingreso_transf";
+            const horaCC=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+            const opDesc="Op. vinculada - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(m)+" "+form.moneda+(form.cliente?" ("+form.cliente+")":"");
+            const mv={id:Date.now()+cId,hora:horaCC,fecha:hoy,tipo:tipoMov,moneda:form.moneda2,monto:dm,nota:opDesc};
+            await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota});
+            setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+            if (d.impactaCaja) {
+              tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
+            }
+            // Acreditar moneda base en CC del cliente
+            if (d.acreditarBase) {
+              const montoBase=m; // monto en moneda base (ej: USD)
+              // En venta: le damos USD al cliente → retiro_transf de USD en su CC (nos debe USD → positivo para nosotros)
+              // En compra: recibimos USD del cliente → ingreso_transf de USD en su CC (le debemos USD → negativo para nosotros)  
+              const tipoMovBase=tipo==="venta"?"ingreso_transf":"retiro_transf";
+              const mvBase={id:Date.now()+cId+1,hora:horaCC,fecha:hoy,tipo:tipoMovBase,moneda:form.moneda,monto:montoBase,nota:"Op. vinculada - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(montoBase)+" "+form.moneda};
+              await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mvBase.hora,fecha:mvBase.fecha,tipo:mvBase.tipo,moneda:mvBase.moneda,monto:mvBase.monto,nota:mvBase.nota});
+              setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mvBase]}));
+            }
+          }
+        }
+      } else {
+        tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
+      }
       opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
+      // Procesar lineas sincc del desglose
+      for(const d of desglose.filter(x=>x.tipo==="sincc")){
+        const dm=parse(d.monto); if(!dm) continue;
+        const nombre=(sinCCNombre[d.id]||"Cliente").trim();
+        if(!d.impactaCaja){
+          // USD no salen de caja - cliente pendiente
+          if(!d.impactaCaja) tipo==="compra"?null:(ns[form.moneda]-=dm/parse(form.cotizacion)); // no impactar
+          if(d.crearCC){
+            // Crear CC nueva para este cliente
+            const partes=nombre.split(" ");
+            const nomNuevo=partes[0]||nombre;
+            const apNuevo=partes.slice(1).join(" ")||"";
+            const {data:newCl}=await SB.from("clientes").insert({nombre:nomNuevo,apellido:apNuevo,socio:false}).select().single();
+            if(newCl){
+              const montoPend=parse(form.monto);
+              const horaPend=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+              const notaPend="Op. vinculada - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(montoPend)+" "+form.moneda+" pendiente";
+              await SB.from("movimientos_cc").insert({cliente_id:newCl.id,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend,nota:notaPend});
+              const mvNew={id:Date.now()+newCl.id,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend,nota:notaPend};
+              setClientes(p=>[...p,{id:newCl.id,nombre:nomNuevo,apellido:apNuevo,socio:false,movimientos:[mvNew]}]);
+              notify("CC creada para "+nombre+" con "+fmt(montoPend)+" "+form.moneda+" pendiente");
+            }
+          }
+        } else {
+          // Retira - impacta caja moneda base
+          tipo==="venta"?ns[form.moneda]-=dm/parse(form.cotizacion||1):ns[form.moneda]+=dm/parse(form.cotizacion||1);
+        }
+      }
+      setSinCCNombre({});
+      // Procesar base pendiente (no impacta caja)
+      if(form.baseImpactaCaja==="no"&&usdPendiente.clienteId){
+        const cPendId2=Number(usdPendiente.clienteId);
+        const montoPend2=parse(form.monto);
+        const horaPend2=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+        const notaPend2=(tipo==="compra"?"Compra":"Venta")+" "+fmt(montoPend2)+" "+form.moneda+" - pendiente entrega";
+        // compra: cliente nos debe los USD → retiro_transf (nos debe)
+        // venta: cliente nos debe los ARS → retiro_transf (nos debe)  
+        const mvPend2={id:Date.now()+998,hora:horaPend2,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend2,nota:notaPend2};
+        await SB.from("movimientos_cc").insert({cliente_id:cPendId2,hora:horaPend2,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend2,nota:notaPend2});
+        setClientes(p=>p.map(cl=>cl.id!==cPendId2?cl:{...cl,movimientos:[...cl.movimientos,mvPend2]}));
+      }
+      // Procesar USD pendiente de entrega (desglose)
+      if(usdPendiente.activo&&usdPendiente.clienteId&&(parse(usdPendiente.monto)||parse(form.monto))){
+        const cPendId=Number(usdPendiente.clienteId);
+        const montoPend=parse(usdPendiente.monto)||parse(form.monto);
+        const monPend=tipo==="venta"?form.moneda:form.moneda2;
+        const horaPend=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+        const notaPend="Entrega diferida - "+(tipo==="venta"?"Venta":"Compra")+" "+fmt(montoPend)+" "+monPend;
+        const mvPend={id:Date.now()+999,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:monPend,monto:montoPend,nota:notaPend};
+        await SB.from("movimientos_cc").insert({cliente_id:cPendId,hora:horaPend,fecha:hoy,tipo:"retiro_transf",moneda:monPend,monto:montoPend,nota:notaPend});
+        setClientes(p=>p.map(cl=>cl.id!==cPendId?cl:{...cl,movimientos:[...cl.movimientos,mvPend]}));
+        setUsdPendiente({clienteId:"",buscar:"",monto:"",activo:false});
+      }
       setF("monto",""); setF("monto2",""); setF("cotizacion","");
+      setDesglose([]); setMostrarDesglose(false); setF("baseImpactaCaja","si");
     } else if (tipo==="cheque_dia") {
       const cn=parse(form.cn),cpct=parse(form.cpct);
       if (!cn||!cpct) { notify("Ingresa nominal y %",false); return; }
@@ -657,7 +897,7 @@ function AppInterna({ usuario }) {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
       ns.ARS-=calcDif.mFinal;
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
-      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
+      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,fecha_venc:form.dfv||"",tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
       if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
@@ -673,26 +913,6 @@ function AppInterna({ usuario }) {
     setSaldos(ns);
     const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo,datos:opData}).select().single();
     if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
-
-    // Registrar comisión de referidor si corresponde
-    if (refForm.activo && refForm.clienteId && refForm.cotizRef && (tipo==="compra"||tipo==="venta")) {
-      const cotizRef = parse(refForm.cotizRef);
-      const cotizOp  = parse(form.cotizacion);
-      const cantUSD  = parse(form.cantidad);
-      if (cotizRef > 0 && cotizOp > 0 && cantUSD > 0) {
-        const difCotiz = Math.abs(cotizRef - cotizOp);
-        const comisionUSD = (difCotiz * cantUSD) / cotizOp;
-        if (comisionUSD > 0) {
-          const cRefId = Number(refForm.clienteId);
-          const notaRef = `Comisión ref. ${tipo} ${fmt(cantUSD)} USD ($${fmt(cotizOp)}→$${fmt(cotizRef)}) = USD ${comisionUSD.toFixed(4)}`;
-          const mvRef = {id:Date.now(), hora, fecha:hoy, tipo:"ingreso_transf", moneda:"USD", monto:comisionUSD, nota:notaRef};
-          await SB.from("movimientos_cc").insert({cliente_id:cRefId, hora, fecha:hoy, tipo:"ingreso_transf", moneda:"USD", monto:comisionUSD, nota:notaRef});
-          setClientes(p=>p.map(cl=>cl.id!==cRefId?cl:{...cl,movimientos:[...cl.movimientos,mvRef]}));
-        }
-      }
-      setRefForm({activo:false,clienteId:"",buscar:"",cotizRef:""});
-    }
-
     await guardarDia(ns,null,null);
     notify("Registrado"); setF("cliente",""); setF("nota","");
   }
@@ -705,7 +925,21 @@ function AppInterna({ usuario }) {
   }
 
   async function eliminarOpHoy(op) {
-    if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir.")) return;
+    // Buscar movimientos CC vinculados a esta operacion (por nota "Op. vinculada")
+    const movsVinculados=[];
+    clientes.forEach(cl=>{
+      cl.movimientos.forEach(mv=>{
+        if(mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora){
+          movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+cl.apellido});
+        }
+      });
+    });
+    // Confirm con detalle de qué se va a borrar
+    const detalleCC=movsVinculados.length>0
+      ? "\n\nTambien se van a borrar movimientos CC de:\n"+[...new Set(movsVinculados.map(x=>x.nombre))].join(", ")
+      : "";
+    if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
+
     // Revertir el impacto en saldos
     const ns={...saldos};
     const t=op.tipo;
@@ -716,12 +950,18 @@ function AppInterna({ usuario }) {
     else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
     else if (t==="ajuste") { ns[op.moneda]-=op.delta; }
     else if (t==="cobro_dif") { ns[op.moneda]-=op.monto; }
-    // cc_ingreso/retiro no impactan saldo fisico
     setSaldos(ns);
     await SB.from("operaciones").delete().eq("id",op.id);
     setOps(p=>p.filter(o=>o.id!==op.id));
+
+    // Borrar movimientos CC vinculados
+    for(const mv of movsVinculados){
+      await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
+      setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
+    }
+
     await guardarDia(ns,null,null);
-    notify("Eliminada y saldo revertido");
+    notify("Eliminada"+(movsVinculados.length>0?" y movimientos CC revertidos":"")+" ✓");
   }
 
   async function cobrarDif(id) {
@@ -741,7 +981,7 @@ function AppInterna({ usuario }) {
     const nv=parse(editSaldoV),delta=nv-saldos[mon];
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const ns={...saldos,[mon]:nv}; setSaldos(ns);
-    const opData={tipo:"ajuste",hora,moneda:mon,monto:Math.abs(delta),delta,nota:"Ajuste "+(delta>=0?"+":"")+fmt(delta)+" "+mon};
+    const opData={tipo:"ajuste",hora,moneda:mon,monto:Math.abs(delta),delta,nota:"Ajuste "+(delta>-1?"+":"")+fmt(delta)+" "+mon};
     const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"ajuste",datos:opData}).select().single();
     if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
     await guardarDia(ns,null,null); setEditSaldo(null); notify("Ajustado");
@@ -874,7 +1114,6 @@ function AppInterna({ usuario }) {
     {id:"resumen_socios",label:"Por socio",c:"#34d399"},
     {id:"gastos",label:"Gastos",c:"#f43f5e"},
     {id:"socios",label:"Socios",c:"#a78bfa"},
-    {id:"referidores",label:"Referidores",c:"#fb923c"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
 
@@ -890,7 +1129,7 @@ function AppInterna({ usuario }) {
   return (
     <div style={S.app}>
       {toast&&<div style={S.toast(toast.ok)}>{toast.msg}</div>}
-      {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} onCerrar={(cotiz,total)=>{setUltimaCotiz(cotiz);ejecutarCierre(cotiz,total);}} onCancelar={()=>setShowModalCierre(false)}/>}
+      {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} ultimaBlue={ultimaBlue} onCerrar={(cotiz,total,blue)=>{setUltimaCotiz(cotiz);setUltimaBlue(blue);ejecutarCierre(cotiz,total,blue);}} onCancelar={()=>setShowModalCierre(false)}/>}
       {editandoOp&&(
         <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}}>
@@ -907,9 +1146,27 @@ function AppInterna({ usuario }) {
             <div style={{fontSize:9,color:"#475569",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
           </div>
         </div>
-        <div style={{marginLeft:"auto",paddingRight:8}} className="hide-mobile">
+        <div style={{marginLeft:"auto",paddingRight:8,display:"flex",gap:6,alignItems:"center"}} className="hide-mobile">
+          <button onClick={async()=>{
+            setRefreshing(true);
+            const {data:cls}=await SB.from("clientes").select("*");
+            const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
+            if(cls) setClientes(cls.sort((a,b)=>(a.orden||0)-(b.orden||0)).map(c2=>({
+              id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
+              movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
+                id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
+              }))
+            })));
+            const {data:opsData}=await SB.from("operaciones").select("*").order("hora",{ascending:true});
+            if(opsData) setOps(opsData.map(o=>({...(o.datos||{}),id:o.id,fecha:o.fecha||o.datos?.fecha,hora:o.hora||o.datos?.hora,tipo:o.tipo})));
+            setUltimoRefresh(new Date());
+            setRefreshing(false);
+            notify("Datos actualizados");
+          }} style={{padding:"4px 8px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:refreshing?"#4ade80":"#374151",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>
+            {refreshing?"↻ ...":"↻ Actualizar"}
+          </button>
           <button onClick={async()=>{ await SB.auth.signOut(); }} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
-            {usuario?.email?.split("@")[0]} · salir
+            {usuario?.email?.split("@")[0]} - salir
           </button>
         </div>
         <div className="desktop-nav" style={{display:"flex",gap:1,flex:1,overflowX:"auto"}}>
@@ -992,7 +1249,7 @@ function AppInterna({ usuario }) {
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #34d39933",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("posicion")}>
                   <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>POSICION CC</div>
-                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>=0?"#34d399":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{tots.ARS>=0?"+":""}{fmt(tots.ARS)}</div>
+                  <div style={{fontSize:28,fontWeight:700,color:tots.ARS>-1?"#34d399":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{tots.ARS>-1?"+":""}{fmt(tots.ARS)}</div>
                   <div style={{fontSize:11,color:"#475569",marginTop:4}}>ARS neto en CCs</div>
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #f59e0b33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("clientes")}>
@@ -1107,7 +1364,7 @@ function AppInterna({ usuario }) {
                 <div style={{fontSize:10,letterSpacing:3,color:"#f59e0b",marginBottom:12}}>NUEVA OPERACION</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
                   {Object.entries(TIPOS_OP).filter(([id])=>!id.startsWith("cc_")&&id!=="ajuste"&&id!=="cobro_dif").map(([id,t])=>(
-                    <button key={id} onClick={()=>setF("tipo",id)} style={S.btn(form.tipo===id,t.color)}>{t.label}</button>
+                    <button key={id} onClick={()=>{setF("tipo",id);setMostrarDesglose(false);setDesglose([]);}} style={S.btn(form.tipo===id,t.color)}>{t.label}</button>
                   ))}
                 </div>
                 {(form.tipo==="compra"||form.tipo==="venta")&&(
@@ -1120,6 +1377,276 @@ function AppInterna({ usuario }) {
                       <div><Lbl>Cantidad</Lbl><Inp type="number" placeholder="0" value={form.monto} onChange={e=>{setF("monto",e.target.value);const c=parse(form.cotizacion);if(c)setF("monto2",String(parse(e.target.value)*c));}}/></div>
                       <div><Lbl>Cotizacion</Lbl><Inp type="number" placeholder="0" value={form.cotizacion} onChange={e=>{setF("cotizacion",e.target.value);const m=parse(form.monto);if(m)setF("monto2",String(m*parse(e.target.value)));}}/></div>
                       <div><Lbl>Total</Lbl><Inp type="number" placeholder="0" value={form.monto2} onChange={e=>{setF("monto2",e.target.value);const m=parse(form.monto);if(m)setF("cotizacion",String(parse(e.target.value)/m));}}/></div>
+                    </div>
+                    {/* Toggle impacto en caja de moneda base */}
+                    <div style={{marginTop:10,marginBottom:4}}>
+                      <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:6}}>
+                        {form.tipo==="compra"?"USD ENTRAN A CAJA":"USD SALEN DE CAJA"}
+                      </div>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                        <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid #1f2937"}}>
+                          <button onClick={()=>{setF("baseImpactaCaja","si");setUsdPendiente(u=>({...u,activo:false,clienteId:"",buscar:"",monto:""}));}}
+                            style={{padding:"5px 12px",background:form.baseImpactaCaja!=="no"?"rgba(74,222,128,0.12)":"transparent",color:form.baseImpactaCaja!=="no"?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:11,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
+                            ✓ Impacta caja
+                          </button>
+                          <button onClick={()=>{setF("baseImpactaCaja","no");setUsdPendiente(u=>({...u,activo:true}));}}
+                            style={{padding:"5px 12px",background:form.baseImpactaCaja==="no"?"rgba(99,102,241,0.12)":"transparent",color:form.baseImpactaCaja==="no"?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:11,cursor:"pointer",whiteSpace:"nowrap"}}>
+                            ⏳ Pendiente — CC
+                          </button>
+                        </div>
+                        {form.baseImpactaCaja==="no"&&(()=>{
+                          const clSel=clientes.find(x=>x.id===Number(usdPendiente.clienteId));
+                          const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((usdPendiente.buscar||"").toLowerCase()));
+                          return (
+                            <div style={{flex:1,minWidth:180,position:"relative"}}>
+                              <div style={{display:"flex",gap:4}}>
+                                {clSel&&!usdPendiente.buscar&&(
+                                  <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f133",fontSize:10,color:"#a5b4fc",fontWeight:600}}>
+                                    {clSel.nombre} {clSel.apellido}
+                                  </div>
+                                )}
+                                <input value={usdPendiente.buscar||""} onChange={e=>setUsdPendiente(u=>({...u,buscar:e.target.value}))}
+                                  placeholder={clSel?"Cambiar...":"¿Quien nos debe los "+form.moneda+"?"}
+                                  style={{flex:1,background:"#0a0a0a",border:"1px solid #6366f133",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
+                                  style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                              </div>
+                              {usdPendiente.buscar&&filtrados.length>0&&(
+                                <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                                  {filtrados.map(cl=>(
+                                    <div key={cl.id} onClick={()=>setUsdPendiente(u=>({...u,clienteId:String(cl.id),buscar:""}))}
+                                      style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                      {cl.nombre} {cl.apellido}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    {/* Desglose de pago */}
+                    <div style={{marginTop:10}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <button onClick={()=>{
+                          setMostrarDesglose(v=>!v);
+                          if(!mostrarDesglose&&desglose.length===0) setDesglose([{id:Date.now(),tipo:"efectivo",monto:"",impactaCaja:true}]);
+                        }} style={{padding:"5px 12px",borderRadius:6,background:mostrarDesglose?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.03)",border:"1px solid "+(mostrarDesglose?"#f59e0b44":"rgba(255,255,255,0.08)"),color:mostrarDesglose?"#f59e0b":"#475569",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                          {mostrarDesglose?"▾ Ocultar desglose":"+ Desglosar pago"}
+                        </button>
+                        {mostrarDesglose&&(()=>{
+                          const total=parse(form.monto2)||0;
+                          const asignado=desglose.reduce((s,d)=>s+parse(d.monto),0);
+                          const resta=total-asignado;
+                          return <span style={{fontSize:11,color:resta===0?"#4ade80":resta<0?"#f87171":"#f59e0b",fontWeight:700}}>
+                            {resta===0?"✓ Cuadra":resta>0?"Resta: $"+fmt(resta):"Excede: $"+fmt(Math.abs(resta))}
+                          </span>;
+                        })()}
+                      </div>
+                      {mostrarDesglose&&(
+                        <div style={{marginTop:8,background:"rgba(245,158,11,0.04)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:8,padding:10}}>
+                          <div style={{fontSize:9,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>DESGLOSE — {form.moneda2} {fmt(parse(form.monto2)||0)}</div>
+                          {desglose.map((d,i)=>(
+                            <div key={d.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+                              {/* Selector: efectivo o cliente con buscador */}
+                              <div style={{flex:2,minWidth:140,position:"relative"}}>
+                                {(()=>{
+                                  const busq=buscarDesglose[d.id]||"";
+                                  const clSel=d.tipo!=="efectivo"?clientes.find(x=>x.id===Number(d.tipo)):null;
+                                  const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(busq.toLowerCase()));
+                                  const mostrarDrop=busq.length>0;
+                                  return (
+                                    <div>
+                                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                        {/* Chip efectivo o nombre cliente seleccionado */}
+                                        {!busq&&(
+                                          <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:5,background:d.tipo==="efectivo"?"rgba(74,222,128,0.08)":"rgba(99,102,241,0.08)",border:"1px solid "+(d.tipo==="efectivo"?"#4ade8033":"#6366f133"),flexShrink:0,cursor:"pointer"}}
+                                            onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:" "}))}>
+                                            <span style={{fontSize:10,color:d.tipo==="efectivo"?"#4ade80":d.tipo==="sincc"?"#f59e0b":"#a5b4fc",fontWeight:600}}>
+                                              {d.tipo==="efectivo"?"💵 Efectivo":d.tipo==="sincc"?"👤 "+(sinCCNombre[d.id]||"Sin CC"):clSel?clSel.nombre+" "+clSel.apellido:"?"}
+                                            </span>
+                                            <span style={{fontSize:9,color:"#475569"}}>▾</span>
+                                          </div>
+                                        )}
+                                        <input
+                                          value={busq.trim()===""&&busq.length>0?"":busq}
+                                          onChange={e=>setBuscarDesglose(b=>({...b,[d.id]:e.target.value}))}
+                                          onFocus={e=>{ if(!busq) setBuscarDesglose(b=>({...b,[d.id]:" "})); }}
+                                          placeholder={busq?" ":"Cambiar..."}
+                                          style={{flex:1,minWidth:0,background:"transparent",border:"none",borderBottom:busq?"1px solid #6366f1":"none",padding:"4px 0",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none",display:busq?"block":"none"}}/>
+                                        {busq&&<button onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:""}))}
+                                          style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10,flexShrink:0}}>✕</button>}
+                                      </div>
+                                      {mostrarDrop&&(
+                                        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:160,overflowY:"auto",marginTop:2}}>
+                                          <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"efectivo"}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                            style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
+                                            💵 Efectivo
+                                          </div>
+                                          {filtrados.map(cl=>(
+                                            <div key={cl.id} onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                              style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                              {cl.nombre} {cl.apellido}
+                                            </div>
+                                          ))}
+                                          {filtrados.length===0&&busq.trim()&&(
+                                            <>
+                                            <div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados en CC</div>
+                                            <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"sincc"}));setBuscarDesglose(b=>({...b,[d.id]:""}));setSinCCNombre(n=>({...n,[d.id]:busq.trim()}));}}
+                                              style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#f59e0b",borderTop:"1px solid #1a1a1a",fontWeight:600}}>
+                                              + Nuevo cliente: "{busq.trim()}"
+                                            </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              {/* Monto */}
+                              <Inp type="number" placeholder="Monto" value={d.monto}
+                                onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monto:e.target.value}))}
+                                sx={{flex:2,minWidth:100}}/>
+                              {/* Cliente sin CC - toggle retira/pendiente y crear CC */}
+                              {d.tipo==="sincc"&&(
+                                <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                                  <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid #1f2937"}}>
+                                    <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:true,crearCC:false}))}
+                                      style={{padding:"3px 7px",background:d.impactaCaja?"#4ade8022":"transparent",color:d.impactaCaja?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
+                                      💵 Retira
+                                    </button>
+                                    <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:false}))}
+                                      style={{padding:"3px 7px",background:!d.impactaCaja?"#f59e0b22":"transparent",color:!d.impactaCaja?"#f59e0b":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",whiteSpace:"nowrap"}}>
+                                      ⏳ Pendiente
+                                    </button>
+                                  </div>
+                                  {!d.impactaCaja&&(
+                                    <div onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,crearCC:!x.crearCC}))}
+                                      style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"3px 7px",borderRadius:5,border:"1px solid "+(d.crearCC?"#f59e0b44":"#1f2937"),background:d.crearCC?"rgba(245,158,11,0.08)":"transparent"}}>
+                                      <div style={{width:10,height:10,borderRadius:2,border:"2px solid "+(d.crearCC?"#f59e0b":"#475569"),background:d.crearCC?"#f59e0b":"transparent",flexShrink:0}}>
+                                        {d.crearCC&&<span style={{color:"#000",fontSize:7,fontWeight:900,display:"block",textAlign:"center",lineHeight:"10px"}}>✓</span>}
+                                      </div>
+                                      <span style={{fontSize:9,color:d.crearCC?"#f59e0b":"#475569",whiteSpace:"nowrap"}}>Crear CC</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {/* Impacta caja — solo para clientes con CC */}
+                              {d.tipo!=="efectivo"&&d.tipo!=="sincc"&&(()=>{
+                                const clSel=clientes.find(x=>x.id===Number(d.tipo));
+                                const salCC=clSel?saldoCC(clSel):null;
+                                const monBase=form.moneda2;
+                                const salMon=salCC?salCC[monBase]:0;
+                                return (
+                                  <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                                    {/* Saldo CC del cliente en la moneda de la operacion */}
+                                    {salCC&&salMon!==0&&(
+                                      <div style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:salMon>0?"rgba(74,222,128,0.08)":"rgba(248,113,113,0.08)",border:"1px solid "+(salMon>0?"#4ade8033":"#f8717133"),color:salMon>0?"#4ade80":"#f87171",whiteSpace:"nowrap"}}>
+                                        CC: {salMon>0?"me debe":"le debo"} {MONEDAS.find(m=>m.id===monBase)?.simbolo}{fmt(Math.abs(salMon))}
+                                      </div>
+                                    )}
+                                    {/* Toggle retira billetes / compensacion */}
+                                    <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid #1f2937"}}>
+                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:true}))}
+                                        style={{padding:"3px 7px",background:d.impactaCaja?"#4ade8022":"transparent",color:d.impactaCaja?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
+                                        💵 Retira
+                                      </button>
+                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:false}))}
+                                        style={{padding:"3px 7px",background:!d.impactaCaja?"#6366f122":"transparent",color:!d.impactaCaja?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",whiteSpace:"nowrap"}}>
+                                        ⇄ Comp.
+                                      </button>
+                                    </div>
+                                    {/* Acreditar moneda base en CC */}
+                                    {(()=>{
+                                      const salMonBase=salCC?salCC[form.moneda]:0;
+                                      return (
+                                        <div onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,acreditarBase:!x.acreditarBase}))}
+                                          style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"3px 7px",borderRadius:5,border:"1px solid "+(d.acreditarBase?"#f59e0b44":"#1f2937"),background:d.acreditarBase?"rgba(245,158,11,0.08)":"transparent"}}>
+                                          <div style={{width:10,height:10,borderRadius:2,border:"2px solid "+(d.acreditarBase?"#f59e0b":"#475569"),background:d.acreditarBase?"#f59e0b":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                            {d.acreditarBase&&<span style={{color:"#000",fontSize:7,fontWeight:900}}>✓</span>}
+                                          </div>
+                                          <span style={{fontSize:9,color:d.acreditarBase?"#f59e0b":"#475569",whiteSpace:"nowrap"}}>
+                                            +{form.moneda} CC
+                                          </span>
+                                          {salMonBase!==0&&<span style={{fontSize:8,color:salMonBase>0?"#4ade80":"#f87171"}}>
+                                            ({salMonBase>0?"me debe":"le debo"} {fmt(Math.abs(salMonBase))})
+                                          </span>}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                );
+                              })()}
+                              {/* Borrar fila */}
+                              <button onClick={()=>setDesglose(p=>p.filter(x=>x.id!==d.id))} style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#f87171",fontFamily:"inherit",fontSize:11,cursor:"pointer",flexShrink:0}}>✕</button>
+                            </div>
+                          ))}
+                          <button onClick={()=>setDesglose(p=>[...p,{id:Date.now(),tipo:"efectivo",monto:"",impactaCaja:true}])}
+                            style={{marginTop:4,padding:"5px 12px",borderRadius:5,background:"transparent",border:"1px dashed #374151",color:"#6b7280",fontFamily:"inherit",fontSize:11,cursor:"pointer",width:"100%"}}>
+                            + Agregar linea
+                          </button>
+                          {/* USD pendiente de entrega */}
+                          {(form.tipo==="compra"||form.tipo==="venta")&&(
+                            <div style={{marginTop:10,borderTop:"1px solid #1f2937",paddingTop:10}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                <span style={{fontSize:9,letterSpacing:2,color:"#6366f1"}}>
+                                  {form.tipo==="venta"?"USD A RECIBIR (entrega diferida)":"ARS A RECIBIR (entrega diferida)"}
+                                </span>
+                                <button onClick={()=>setUsdPendiente(u=>({...u,activo:!u.activo}))}
+                                  style={{fontSize:9,padding:"2px 7px",borderRadius:4,background:usdPendiente.activo?"rgba(99,102,241,0.15)":"transparent",border:"1px solid "+(usdPendiente.activo?"#6366f1":"#374151"),color:usdPendiente.activo?"#a5b4fc":"#475569",cursor:"pointer",fontFamily:"inherit"}}>
+                                  {usdPendiente.activo?"- Quitar":"+ Agregar"}
+                                </button>
+                              </div>
+                              {usdPendiente.activo&&(()=>{
+                                const clSel=clientes.find(x=>x.id===Number(usdPendiente.clienteId));
+                                const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((usdPendiente.buscar||"").toLowerCase()));
+                                const monBase=form.tipo==="venta"?form.moneda:form.moneda2;
+                                return (
+                                  <div style={{background:"rgba(99,102,241,0.05)",border:"1px solid #6366f122",borderRadius:7,padding:8,position:"relative"}}>
+                                    <div style={S.grid("1fr 100px",6)}>
+                                      <div>
+                                        <Lbl>Quien nos debe entregar</Lbl>
+                                        <div style={{display:"flex",gap:4}}>
+                                          {clSel&&!usdPendiente.buscar&&(
+                                            <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(99,102,241,0.1)",border:"1px solid #6366f133",fontSize:10,color:"#a5b4fc",fontWeight:600}}>
+                                              {clSel.nombre} {clSel.apellido}
+                                            </div>
+                                          )}
+                                          <input value={usdPendiente.buscar||""} onChange={e=>setUsdPendiente(u=>({...u,buscar:e.target.value}))}
+                                            placeholder={clSel&&!usdPendiente.buscar?"Cambiar...":"Buscar cliente..."}
+                                            style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                          {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
+                                            style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                        </div>
+                                        {usdPendiente.buscar&&filtrados.length>0&&(
+                                          <div style={{position:"absolute",left:8,right:8,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                                            {filtrados.map(cl=>(
+                                              <div key={cl.id} onClick={()=>setUsdPendiente(u=>({...u,clienteId:String(cl.id),buscar:""}))}
+                                                style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                                {cl.nombre} {cl.apellido}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <Lbl>Monto {monBase}</Lbl>
+                                        <Inp type="number" placeholder={form.monto||"0"} value={usdPendiente.monto}
+                                          onChange={e=>setUsdPendiente(u=>({...u,monto:e.target.value}))}/>
+                                      </div>
+                                    </div>
+                                    {clSel&&<div style={{fontSize:9,color:"#6366f1",marginTop:4}}>
+                                      Al registrar: {form.tipo==="venta"?"nos debe entregar":"nos debe pagar"} {usdPendiente.monto||form.monto} {monBase} → retiro_transf en su CC (nos debe)
+                                    </div>}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1134,7 +1661,18 @@ function AppInterna({ usuario }) {
                     <div><Lbl>Tasa gestion %</Lbl><Inp type="number" value={form.dtg} onChange={e=>setF("dtg",e.target.value)}/></div>
                     <div><Lbl>Nominal</Lbl><Inp type="number" value={form.dn} onChange={e=>setF("dn",e.target.value)}/></div>
                     <div><Lbl>F. recepcion</Lbl><Inp type="date" value={form.dfr} onChange={e=>setF("dfr",e.target.value)}/></div>
-                    <div><Lbl>F. acreditacion</Lbl><Inp type="date" value={form.dfa} onChange={e=>setF("dfa",e.target.value)}/></div>
+                    <div>
+                      <Lbl>F. vencimiento cheque</Lbl>
+                      <Inp type="date" value={form.dfv||""} onChange={e=>{
+                        setF("dfv",e.target.value);
+                        // Auto-calcular acreditacion = vencimiento + 2 dias habiles
+                        if(e.target.value) setF("dfa", sumarDiasHabiles(e.target.value, 2));
+                      }}/>
+                    </div>
+                    <div>
+                      <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h habiles</span></Lbl>
+                      <Inp type="date" value={form.dfa} onChange={e=>setF("dfa",e.target.value)}/>
+                    </div>
                     <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
                   </div>
                   {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",6),fontSize:11}}>
@@ -1152,63 +1690,6 @@ function AppInterna({ usuario }) {
                   <div><Lbl>Cliente</Lbl><Inp placeholder="(opcional)" value={form.cliente} onChange={e=>setF("cliente",e.target.value)}/></div>
                   <div><Lbl>Nota</Lbl><Inp placeholder="..." value={form.nota} onChange={e=>setF("nota",e.target.value)}/></div>
                 </div>
-
-                {/* REFERIDOR */}
-                {(form.tipo==="compra"||form.tipo==="venta")&&(
-                  <div style={{marginTop:8,background:"rgba(251,146,60,0.05)",border:"1px solid rgba(251,146,60,0.2)",borderRadius:8,padding:10}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:refForm.activo?10:0}}>
-                      <button onClick={()=>setRefForm(p=>({...p,activo:!p.activo}))}
-                        style={{padding:"4px 10px",borderRadius:5,background:refForm.activo?"rgba(251,146,60,0.15)":"transparent",border:"1px solid "+(refForm.activo?"#fb923c":"#374151"),color:refForm.activo?"#fb923c":"#6b7280",fontFamily:"inherit",fontSize:10,cursor:"pointer",fontWeight:600}}>
-                        {refForm.activo?"⬡ Con referidor":"○ Sin referidor"}
-                      </button>
-                      {refForm.activo&&<span style={{fontSize:10,color:"#6b7280"}}>La comisión se acreditará en su CC automáticamente</span>}
-                    </div>
-                    {refForm.activo&&(()=>{
-                      const clRef = clientes.find(x=>x.id===Number(refForm.clienteId));
-                      const filtRef = clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((refForm.buscar||"").trim().toLowerCase()));
-                      const cotizRef = parse(refForm.cotizRef);
-                      const cotizOp  = parse(form.cotizacion);
-                      const cantUSD  = parse(form.cantidad);
-                      const comUSD   = cotizRef>0&&cotizOp>0&&cantUSD>0 ? (Math.abs(cotizRef-cotizOp)*cantUSD/cotizOp) : 0;
-                      return (
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                          <div style={{position:"relative"}}>
-                            <Lbl>Referidor</Lbl>
-                            <div style={{display:"flex",gap:4}}>
-                              {clRef&&!refForm.buscar&&<div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(251,146,60,0.08)",border:"1px solid #fb923c44",fontSize:10,color:"#fb923c",fontWeight:600}}>{clRef.nombre} {clRef.apellido}</div>}
-                              <input value={refForm.buscar||""} onChange={e=>setRefForm(p=>({...p,buscar:e.target.value}))}
-                                placeholder={clRef&&!refForm.buscar?"Cambiar...":"Buscar referidor..."}
-                                style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                              {refForm.clienteId&&<button onClick={()=>setRefForm(p=>({...p,clienteId:"",buscar:""}))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
-                            </div>
-                            {refForm.buscar&&filtRef.length>0&&(
-                              <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
-                                {filtRef.map(cl=>(
-                                  <div key={cl.id} onClick={()=>setRefForm(p=>({...p,clienteId:String(cl.id),buscar:""}))}
-                                    style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <Lbl>Cotiz. referidor</Lbl>
-                            <input type="number" value={refForm.cotizRef||""} onChange={e=>setRefForm(p=>({...p,cotizRef:e.target.value}))}
-                              placeholder={form.cotizacion||"$"}
-                              style={{width:"100%",background:"#0a0a0a",border:"1px solid #fb923c44",borderRadius:5,padding:"5px 8px",color:"#fb923c",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
-                          </div>
-                          {comUSD>0&&(
-                            <div style={{gridColumn:"1/-1",background:"rgba(251,146,60,0.08)",border:"1px solid rgba(251,146,60,0.2)",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                              <span style={{color:"#6b7280"}}>Comisión: <strong style={{color:"#fb923c"}}>USD {comUSD.toFixed(4)}</strong></span>
-                              <span style={{color:"#6b7280",fontSize:10}}>({fmt(cantUSD)} USD × (${fmt(cotizRef)}-${fmt(cotizOp)}) / ${fmt(cotizOp)})</span>
-                              <span style={{color:"#fb923c",fontSize:10}}>→ CC {clRef?clRef.nombre:"referidor"}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
                 <button onClick={registrarOp} style={{marginTop:12,width:"100%",padding:11,borderRadius:7,background:"#0a1a0a",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:2}}>REGISTRAR</button>
               </Card>
             ):(
@@ -1304,20 +1785,57 @@ function AppInterna({ usuario }) {
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#6b7280"}}>Acredita {d.fechaAcr} - {dr}d</span>}
                         {d.cliente&&<span style={{fontSize:10,color:"#9ca3af"}}>👤 {d.cliente}</span>}
                       </div>
-                      <div style={{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap"}}>
-                        <div>
-                          <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>${fmt(d.mFinal||d.nominal)}</span>
-                          <span style={{fontSize:10,color:"#6b7280",marginLeft:4}}>a cobrar</span>
+                      <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
+                        {/* Fila nominal */}
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#6b7280"}}>Nominal</span>
+                          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>${fmt(d.nominal)}</span>
                         </div>
-                        {!d.manual&&<div>
-                          <span style={{fontSize:11,color:"#6b7280"}}>${fmt(d.nominal)}</span>
-                          <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>nominal</span>
+                        {/* Fila pagaste al cliente */}
+                        {!d.manual&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#6b7280"}}>Pagaste al cliente</span>
+                          <span style={{fontSize:12,fontWeight:600,color:"#f87171"}}>-${fmt(d.mFinal||d.nominal)}</span>
                         </div>}
-                        {!d.manual&&d.ganancia>0&&<div>
-                          <span style={{fontSize:11,color:"#4ade80"}}>+${fmt(d.ganancia)}</span>
-                          <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>ganancia</span>
-                        </div>}
+                        {/* Fila empresa te paga - solo si tiene tasa endoso */}
+                        {d.tasaEndoso&&parse(d.tasaEndoso)>0&&(()=>{
+                          const empresaPaga=d.nominal*(1-parse(d.tasaEndoso)/100);
+                          const gananciaNeta=empresaPaga-(d.mFinal||d.nominal);
+                          return (<>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Empresa te paga ({d.tasaEndoso}%)</span>
+                              <span style={{fontSize:12,fontWeight:600,color:"#c084fc"}}>${fmt(empresaPaga)}</span>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #1f2937",paddingTop:4}}>
+                              <span style={{fontSize:10,color:"#4ade80",fontWeight:600}}>Ganancia neta</span>
+                              <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>-1?"#4ade80":"#f87171"}}>{gananciaNeta>-1?"+":"-"}${fmt(Math.abs(gananciaNeta))}</span>
+                            </div>
+                          </>);
+                        })()}
+                        {/* Si no tiene tasa endoso, mostrar ganancia basica */}
+                        {(!d.tasaEndoso||parse(d.tasaEndoso)===0)&&!d.manual&&d.ganancia>0&&(
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #1f2937",paddingTop:4}}>
+                            <span style={{fontSize:10,color:"#4ade80",fontWeight:600}}>Ganancia estimada</span>
+                            <span style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>+${fmt(d.ganancia)}</span>
+                          </div>
+                        )}
                       </div>
+                      {/* Alertas de fechas */}
+                      {(d.fechaVenc||d.fechaAcr)&&(()=>{
+                        const drVenc=d.fechaVenc?diasEntre(hoy,d.fechaVenc):null;
+                        const drAcr=d.fechaAcr?diasEntre(hoy,d.fechaAcr):null;
+                        return (
+                          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                            {d.fechaVenc&&<div style={{padding:"3px 8px",borderRadius:5,background:drVenc===0?"rgba(244,63,94,0.15)":drVenc<=2?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drVenc===0?"#f43f5e44":drVenc<=2?"#f59e0b44":"#1f2937")}}>
+                              <span style={{fontSize:9,color:"#6b7280"}}>📋 Depositar: </span>
+                              <span style={{fontSize:10,fontWeight:600,color:drVenc===0?"#f43f5e":drVenc<=2?"#f59e0b":"#9ca3af"}}>{d.fechaVenc}{drVenc!==null&&<span> ({drVenc===0?"HOY":drVenc+"d"})</span>}</span>
+                            </div>}
+                            {d.fechaAcr&&<div style={{padding:"3px 8px",borderRadius:5,background:drAcr===0?"rgba(99,102,241,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drAcr===0?"#6366f144":"#1f2937")}}>
+                              <span style={{fontSize:9,color:"#6b7280"}}>💰 Acreditacion: </span>
+                              <span style={{fontSize:10,fontWeight:600,color:drAcr===0?"#a5b4fc":"#9ca3af"}}>{d.fechaAcr}{drAcr!==null&&<span> ({drAcr===0?"HOY":drAcr+"d"})</span>}</span>
+                            </div>}
+                          </div>
+                        );
+                      })()}
                       <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap",alignItems:"center"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4}}>
                           <span style={{fontSize:9,color:"#4b5563"}}>COBRO:</span>
@@ -1447,10 +1965,180 @@ function AppInterna({ usuario }) {
                     <div style={{fontSize:9,letterSpacing:2,color:"#f97316",marginBottom:5}}>MANDAS PLATA</div>
                     <div style={{display:"flex",gap:5}}>
                       {[{id:"retiro_transf",label:"Transferencia",c:"#38bdf8"},{id:"retiro_efectivo",label:"Efectivo",c:"#f97316"}].map(t=>(
-                        <button key={t.id} onClick={()=>setFormCC(f=>({...f,tipo:t.id}))} style={{...S.btn(formCC.tipo===t.id,t.c),flex:1}}>{t.label}</button>
+                        <button key={t.id} onClick={()=>{setFormCC(f=>({...f,tipo:t.id}));setTransCC(t=>({...t,activo:false}));}} style={{...S.btn(formCC.tipo===t.id&&!transCC.activo,t.c),flex:1}}>{t.label}</button>
                       ))}
                     </div>
                   </div>
+                  {/* Convertir saldo */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,letterSpacing:2,color:"#2dd4bf",marginBottom:5}}>CONVERTIR SALDO</div>
+                    <button onClick={()=>{setConvertirCC(cv=>({...cv,activo:!cv.activo}));setTransCC(t=>({...t,activo:false}));}}
+                      style={{...S.btn(convertirCC.activo,"#2dd4bf"),width:"100%"}}>
+                      ⇌ Convertir moneda en CC
+                    </button>
+                  </div>
+                  {convertirCC.activo&&(()=>{
+                    const salOrigen=saldoCC(c)[convertirCC.monedaOrigen]||0;
+                    const monO=MONEDAS.find(m=>m.id===convertirCC.monedaOrigen);
+                    const monD=MONEDAS.find(m=>m.id===convertirCC.monedaDestino);
+                    const montoOrigen=parse(convertirCC.monto)||Math.abs(salOrigen);
+                    const cotiz=parse(convertirCC.cotiz)||1;
+                    const montoDestino=convertirCC.monedaOrigen==="USD"&&convertirCC.monedaDestino==="ARS"
+                      ? montoOrigen*cotiz
+                      : convertirCC.monedaOrigen==="ARS"&&convertirCC.monedaDestino==="USD"
+                      ? montoOrigen/cotiz
+                      : montoOrigen*cotiz;
+                    return (
+                      <div style={{background:"rgba(45,212,191,0.05)",border:"1px solid rgba(45,212,191,0.2)",borderRadius:8,padding:10,marginBottom:12}}>
+                        <div style={{fontSize:9,color:"#2dd4bf",letterSpacing:2,marginBottom:8}}>CONVERTIR EN CC DE {c.nombre}</div>
+                        {/* Saldo actual */}
+                        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                          {MONEDAS.filter(m=>saldoCC(c)[m.id]!==0).map(m=>{
+                            const sal=saldoCC(c)[m.id];
+                            return <div key={m.id} style={{padding:"3px 8px",borderRadius:4,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                              <span style={{color:"#6b7280"}}>{m.id}: </span>
+                              <span style={{color:sal>0?"#4ade80":"#f87171",fontWeight:600}}>{m.simbolo}{fmt(Math.abs(sal))}</span>
+                            </div>;
+                          })}
+                        </div>
+                        <div style={S.grid("1fr 1fr",8)}>
+                          <div>
+                            <Lbl>De</Lbl>
+                            <MonedasSel value={convertirCC.monedaOrigen} onChange={v=>setConvertirCC(cv=>({...cv,monedaOrigen:v}))}/>
+                          </div>
+                          <div>
+                            <Lbl>A</Lbl>
+                            <MonedasSel value={convertirCC.monedaDestino} onChange={v=>setConvertirCC(cv=>({...cv,monedaDestino:v}))} exclude={convertirCC.monedaOrigen}/>
+                          </div>
+                          <div>
+                            <Lbl>Monto {convertirCC.monedaOrigen} <span style={{fontSize:9,color:"#4b5563"}}>(saldo: {fmt(Math.abs(salOrigen))})</span></Lbl>
+                            <Inp type="number" placeholder={fmt(Math.abs(salOrigen))} value={convertirCC.monto}
+                              onChange={e=>setConvertirCC(cv=>({...cv,monto:e.target.value}))}/>
+                          </div>
+                          <div>
+                            <Lbl>Cotizacion</Lbl>
+                            <Inp type="number" placeholder="1400" value={convertirCC.cotiz}
+                              onChange={e=>setConvertirCC(cv=>({...cv,cotiz:e.target.value}))}/>
+                          </div>
+                        </div>
+                        {convertirCC.cotiz&&(
+                          <div style={{marginTop:6,fontSize:10,color:"#2dd4bf",padding:"4px 8px",background:"rgba(45,212,191,0.08)",borderRadius:5}}>
+                            {fmt(montoOrigen)} {convertirCC.monedaOrigen} → {fmt(montoDestino)} {convertirCC.monedaDestino}
+                          </div>
+                        )}
+                        <button onClick={async()=>{
+                          if(!montoOrigen||!cotiz){notify("Completa monto y cotizacion",false);return;}
+                          const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          const nota="Conversion "+fmt(montoOrigen)+" "+convertirCC.monedaOrigen+" a "+fmt(montoDestino)+" "+convertirCC.monedaDestino+" (x"+fmt(cotiz)+")";
+                          // Cancelar deuda en moneda origen
+                          // Si le debemos (saldo negativo) → retiro_transf para cancelar
+                          // Si nos debe (saldo positivo) → ingreso_transf para cancelar
+                          const tipoOrigen=salOrigen<0?"retiro_transf":"ingreso_transf";
+                          const mv1={id:Date.now(),hora,fecha:hoy,tipo:tipoOrigen,moneda:convertirCC.monedaOrigen,monto:montoOrigen,nota};
+                          await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoOrigen,moneda:convertirCC.monedaOrigen,monto:montoOrigen,nota});
+                          setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
+                          // Crear deuda equivalente en moneda destino (mismo signo)
+                          const tipoDestino=salOrigen<0?"ingreso_transf":"retiro_transf";
+                          const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota};
+                          await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota});
+                          setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+                          setConvertirCC({activo:false,monedaOrigen:"USD",monedaDestino:"ARS",monto:"",cotiz:""});
+                          notify("Conversion registrada ✓");
+                        }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(45,212,191,0.1)",border:"1px solid #2dd4bf",color:"#2dd4bf",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                          ⇌ Confirmar conversion
+                        </button>
+                      </div>
+                    );
+                  })()}
+                  {/* Transferencia entre CCs */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,letterSpacing:2,color:"#a78bfa",marginBottom:5}}>ENTRE CUENTAS</div>
+                    <button onClick={()=>setTransCC(t=>({...t,activo:!t.activo}))}
+                      style={{...S.btn(transCC.activo,"#a78bfa"),width:"100%"}}>
+                      ⇄ Transferencia entre CCs
+                    </button>
+                  </div>
+                  {transCC.activo?(
+                    <div style={{background:"rgba(167,139,250,0.05)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:8,padding:10,marginBottom:10}}>
+                      <div style={{fontSize:9,color:"#a78bfa",letterSpacing:2,marginBottom:8}}>ENVIAR A OTRA CC</div>
+                      {/* Buscador CC destino */}
+                      <div style={{position:"relative",marginBottom:8}}>
+                        <Lbl>CC Destino</Lbl>
+                        {(()=>{
+                          const clDest=clientes.find(x=>x.id===Number(transCC.destino));
+                          const filtrados=clientes.filter(x=>x.id!==c.id&&(x.nombre+" "+x.apellido).toLowerCase().includes(transCC.buscar.toLowerCase()));
+                          return (
+                            <div>
+                              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                {clDest&&!transCC.buscar&&(
+                                  <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa44",fontSize:11,color:"#a78bfa",fontWeight:600}}>
+                                    {clDest.nombre} {clDest.apellido}
+                                  </div>
+                                )}
+                                <input value={transCC.buscar} onChange={e=>setTransCC(t=>({...t,buscar:e.target.value}))}
+                                  placeholder={clDest&&!transCC.buscar?"Cambiar...":"Buscar cliente..."}
+                                  style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                              </div>
+                              {transCC.buscar&&filtrados.length>0&&(
+                                <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                                  {filtrados.map(cl=>(
+                                    <div key={cl.id} onClick={()=>setTransCC(t=>({...t,destino:String(cl.id),buscar:""}))}
+                                      style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                      {cl.nombre} {cl.apellido}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div style={S.grid("80px 1fr",8)}>
+                        <div><Lbl>Moneda</Lbl><MonedasSel value={transCC.moneda} onChange={v=>setTransCC(t=>({...t,moneda:v}))}/></div>
+                        <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={transCC.monto} onChange={e=>setTransCC(t=>({...t,monto:e.target.value}))}/></div>
+                      </div>
+                      {/* Mostrar saldos de ambas CCs */}
+                      {transCC.destino&&(()=>{
+                        const clDest=clientes.find(x=>x.id===Number(transCC.destino));
+                        const salOrigen=saldoCC(c)[transCC.moneda]||0;
+                        const salDestino=clDest?saldoCC(clDest)[transCC.moneda]||0:0;
+                        const mon=MONEDAS.find(m=>m.id===transCC.moneda);
+                        return (
+                          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                            <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                              <span style={{color:"#6b7280"}}>{c.nombre}: </span>
+                              <span style={{color:salOrigen>0?"#4ade80":"#f87171",fontWeight:600}}>{mon?.simbolo}{fmt(salOrigen)}</span>
+                            </div>
+                            <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                              <span style={{color:"#6b7280"}}>{clDest?.nombre}: </span>
+                              <span style={{color:salDestino>0?"#4ade80":"#f87171",fontWeight:600}}>{mon?.simbolo}{fmt(salDestino)}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <button onClick={async()=>{
+                        const monto=parse(transCC.monto); if(!monto){notify("Ingresa un monto",false);return;}
+                        if(!transCC.destino){notify("Elegi una CC destino",false);return;}
+                        const cDestId=Number(transCC.destino);
+                        const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                        const nota="Transf. entre CCs → "+(clientes.find(x=>x.id===cDestId)?.nombre||"");
+                        const notaDest="Transf. entre CCs <- "+c.nombre+" "+c.apellido;
+                        // CC origen (ej: SALA): ingreso_transf = nos pagó (HABER = le debemos)
+                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota};
+                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota});
+                        setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
+                        // CC destino (ej: TRESOR 2): retiro_transf = nos debe más (DEBE = me debe)
+                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota:notaDest};
+                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota:notaDest});
+                        setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+                        setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS"});
+                        notify("Transferencia entre CCs registrada ✓");
+                      }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        ⇄ Confirmar transferencia
+                      </button>
+                    </div>
+                  ):(
+                    <>
                   <div style={S.grid("80px 1fr",8)}>
                     <div><Lbl>Moneda</Lbl><MonedasSel value={formCC.moneda} onChange={v=>setFormCC(f=>({...f,moneda:v}))}/></div>
                     <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={formCC.monto} onChange={e=>setFormCC(f=>({...f,monto:e.target.value}))}/></div>
@@ -1461,13 +2149,15 @@ function AppInterna({ usuario }) {
                       {formCC.impactaCaja&&<span style={{color:"#000",fontSize:11,fontWeight:900}}>✓</span>}
                     </div>
                     <div>
-                      <div style={{fontSize:11,fontWeight:600,color:formCC.impactaCaja?"#f59e0b":"#475569"}}>Impacta caja física</div>
+                      <div style={{fontSize:11,fontWeight:600,color:formCC.impactaCaja?"#f59e0b":"#475569"}}>Impacta caja fisica</div>
                       <div style={{fontSize:10,color:"#334155"}}>{formCC.impactaCaja?"Se suma/resta de tu caja":"Solo registro contable"}</div>
                     </div>
                   </div>
                   <button onClick={()=>regMovCC(c.id)} style={{width:"100%",padding:10,borderRadius:7,background:esIngCC?"#052e16":formCC.tipo==="retiro_transf"?"#0a1e2e":"#1c0a0a",border:"1px solid "+colorCC[formCC.tipo],color:colorCC[formCC.tipo],fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                     {labelBtn[formCC.tipo]}
                   </button>
+                    </>
+                  )}
                 </Card>
                 <Card sx={{maxHeight:600,overflowY:"auto"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -1514,7 +2204,7 @@ function AppInterna({ usuario }) {
                             .footer{margin-top:30px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
                           </style></head><body>`;
                           html+=`<h1>Cuenta Corriente — ${c.nombre} ${c.apellido}</h1>`;
-                          html+=`<div class="rango">Período: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS Financiera</div>`;
+                          html+=`<div class="rango">Periodo: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS Financiera</div>`;
                           monedas.forEach(monId=>{
                             const mon=MONEDAS.find(m=>m.id===monId);
                             const movsMon=movsFiltrados.filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
@@ -1525,12 +2215,12 @@ function AppInterna({ usuario }) {
                               saldo+=(ing?-mv.monto:mv.monto);
                               const debe=!ing?`<span class="debe">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
                               const haber=ing?`<span class="haber">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
-                              const sClass=saldo>=0?"saldo-pos":"saldo-neg";
+                              const sClass=saldo>-1?"saldo-pos":"saldo-neg";
                               const labelMap={ingreso_transf:"Me transfirio",ingreso_dep:"Me deposito",retiro_transf:"Le transferi",retiro_efectivo:"Retire efectivo"};
-                              html+=`<tr><td>${mv.fecha||""}</td><td>${labelMap[mv.tipo]||mv.tipo}</td><td style="color:#888">${mv.nota||""}</td><td style="text-align:right">${debe}</td><td style="text-align:right">${haber}</td><td style="text-align:right" class="${sClass}">${saldo>=0?"+":""}${mon?.simbolo||""}${saldo.toLocaleString("es-AR")}</td></tr>`;
+                              html+=`<tr><td>${mv.fecha||""}</td><td>${labelMap[mv.tipo]||mv.tipo}</td><td style="color:#888">${mv.nota||""}</td><td style="text-align:right">${debe}</td><td style="text-align:right">${haber}</td><td style="text-align:right" class="${sClass}">${saldo>-1?"+":""}${mon?.simbolo||""}${saldo.toLocaleString("es-AR")}</td></tr>`;
                             });
-                            const sClass=saldo>=0?"saldo-pos":"saldo-neg";
-                            html+=`</tbody></table><div class="saldo-final ${sClass}">Saldo final: ${saldo>=0?"Me debe":"Le debo"} ${mon?.simbolo||""}${Math.abs(saldo).toLocaleString("es-AR")} ${monId}</div>`;
+                            const sClass=saldo>-1?"saldo-pos":"saldo-neg";
+                            html+=`</tbody></table><div class="saldo-final ${sClass}">Saldo final: ${saldo>-1?"Me debe":"Le debo"} ${mon?.simbolo||""}${Math.abs(saldo).toLocaleString("es-AR")} ${monId}</div>`;
                           });
                           html+=`<div class="footer">Generado por STS Financiera · ${hoy}</div></body></html>`;
                           const w=window.open("","_blank");
@@ -1541,7 +2231,7 @@ function AppInterna({ usuario }) {
                           Generar PDF
                         </button>
                       </div>
-                      <div style={{fontSize:9,color:"#334155",marginTop:6}}>Dejá vacío para exportar todo el historial</div>
+                      <div style={{fontSize:9,color:"#334155",marginTop:6}}>Deja vacío para exportar todo el historial</div>
                     </div>
                   )}
                   {editandoMov&&(
@@ -1730,7 +2420,11 @@ function AppInterna({ usuario }) {
 
           function generarImagen() {
             const difPend=diferidos.filter(d=>!d.cobrado);
-            const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+            const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
             const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
             const COLS=MONEDAS.filter(m=>patrimonioSaldos[m.id]!==0||saldos[m.id]!==0||tots[m.id]!==0);
             const COLORES_SOCIO={"Manuel Sala":"#4ade80","Gonzalo Spadafora":"#38bdf8","Matias Speranza":"#f59e0b","STS":"#e879f9"};
@@ -1866,11 +2560,11 @@ function AppInterna({ usuario }) {
             // Evolucion vs dia anterior
             if(ultimoCierre?.total_usd&&varUSD!==null){
               hline(y,0.1); y+=16;
-              const varColor=varUSD>=0?VERDE:ROJO;
+              const varColor=varUSD>-1?VERDE:ROJO;
               rect(PAD,y-2,W-PAD*2,42,"rgba(255,255,255,0.02)",6);
               txt("PATRIMONIO HOY",PAD+12,y+12,9,DIM,"left",true);
               txt(fmtUSD(ultimoCierre.total_usd),W/2,y+12,13,"#4ade80","center",true);
-              txt((varUSD>=0?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
+              txt((varUSD>-1?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
               txt(penultimoCierre?.total_usd?"Ayer: "+fmtUSD(penultimoCierre.total_usd):"",W-PAD-12,y+26,8,GRIS,"right");
               y+=50;
             }
@@ -1882,11 +2576,11 @@ function AppInterna({ usuario }) {
             // Evolucion vs dia anterior
             if(ultimoCierre?.total_usd&&varUSD!==null){
               hline(y,0.1); y+=16;
-              const varColor=varUSD>=0?VERDE:ROJO;
+              const varColor=varUSD>-1?VERDE:ROJO;
               rect(PAD,y-2,W-PAD*2,42,"rgba(255,255,255,0.02)",6);
               txt("PATRIMONIO HOY",PAD+12,y+12,9,DIM,"left",true);
               txt(fmtUSD(ultimoCierre.total_usd),W/2,y+12,13,"#4ade80","center",true);
-              txt((varUSD>=0?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
+              txt((varUSD>-1?"+":"")+fmtUSD(varUSD)+" vs ayer",W-PAD-12,y+12,10,varColor,"right",true);
               txt(penultimoCierre?.total_usd?"Ayer: "+fmtUSD(penultimoCierre.total_usd):"",W-PAD-12,y+26,8,GRIS,"right");
               y+=50;
             }
@@ -1930,7 +2624,7 @@ function AppInterna({ usuario }) {
                     <button onClick={()=>{if(!nuevoMes.trim())return;const nf={...fact,meses:{...fact.meses,[nuevoMes.trim()]:"0"}};setFact(nf);guardarDia(null,nf,null);setNuevoMes("");}} style={{padding:"3px 7px",borderRadius:4,background:"#0a0a0a",border:"1px solid #1f2937",color:"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>+</button>
                   </div>
                   <div style={{borderTop:"1px solid #1f2937",marginTop:7,paddingTop:7}}>
-                    {[["Ganancia acum.",fmt(ganAcum),ganAcum>=0?"#4ade80":"#f87171"],["Objetivo",obj?fmt(obj):"clic","#9ca3af","__obj__"],["Resta",fmt(obj-ganAcum),obj-ganAcum<=0?"#4ade80":"#f87171"]].map(([k,v,c,ek])=>(
+                    {[["Ganancia acum.",fmt(ganAcum),ganAcum>-1?"#4ade80":"#f87171"],["Objetivo",obj?fmt(obj):"clic","#9ca3af","__obj__"],["Resta",fmt(obj-ganAcum),obj-ganAcum<=0?"#4ade80":"#f87171"]].map(([k,v,c,ek])=>(
                       <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}>
                         <span style={{fontSize:11,color:"#6b7280"}}>{k}</span>
                         {editFact==="__obj__"&&ek?(<input autoFocus type="number" value={editFactV} onChange={e=>setEditFactV(e.target.value)}
@@ -1995,7 +2689,11 @@ function AppInterna({ usuario }) {
                   <tfoot>
                     {(()=>{
                       const difPend=diferidos.filter(d=>!d.cobrado);
-                      const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+                      const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
                       // Patrimonio total = caja fisica + CCs + cheques a cobrar
                       const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
                       return (<>
@@ -2067,7 +2765,7 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#fb923c",marginBottom:4}}>HISTORIAL</div>
-              <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Analizá, editá o agregá operaciones de cualquier período</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Analiza, editá o agregá operaciones de cualquier periodo</div>
 
               {/* Filtros */}
               <Card sx={{marginBottom:16,border:"1px solid #fb923c22"}}>
@@ -2144,7 +2842,7 @@ function AppInterna({ usuario }) {
                     )}
                   </Card>
 
-                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el período seleccionado</div>}
+                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el periodo seleccionado</div>}
                   {Object.entries(porFecha).map(([fecha,fops])=>(
                     <div key={fecha} style={{marginBottom:20}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -2200,14 +2898,38 @@ function AppInterna({ usuario }) {
                       </Card>
                     );
                   })}
-                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el período</div>}
+                  {opsFiltradas.length===0&&<div style={{color:"#334155",fontSize:12,textAlign:"center",padding:32}}>Sin operaciones en el periodo</div>}
                 </div>
               )}
             </div>
           );
         })()}
 
-        {pant==="evolucion"&&(
+        {pant==="evolucion"&&(()=>{
+          const inversionBase=socios.reduce((s,x)=>s+parse(x.monto),0);
+          const patrimonioActual=ultimoCierre?.total_usd||0;
+          const gananciaVsBase=patrimonioActual-inversionBase;
+          const pctVsBase=inversionBase>0?((gananciaVsBase/inversionBase)*100):0;
+
+          // Agrupar cierres por mes
+          const porMes={};
+          [...cierres].forEach(c=>{
+            const mes=c.fecha?.slice(0,7); // YYYY-MM
+            if(!mes) return;
+            if(!porMes[mes]) porMes[mes]={mes,cierres:[],liq:null};
+            porMes[mes].cierres.push(c);
+          });
+          // Agregar liquidaciones al mes correspondiente (usar periodo si está definido)
+          liquidaciones.forEach(l=>{
+            const mes=l.periodo||l.fecha?.slice(0,7);
+            if(mes){
+              if(!porMes[mes]) porMes[mes]={mes,cierres:[],liq:null};
+              porMes[mes].liq=l;
+            }
+          });
+          const meses=Object.values(porMes).sort((a,b)=>b.mes.localeCompare(a.mes));
+
+          return (
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#4ade80",marginBottom:4}}>EVOLUCION DE LA CAJA</div>
             <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>Patrimonio total valuado en USD al cierre de cada dia</div>
@@ -2219,54 +2941,128 @@ function AppInterna({ usuario }) {
               </div>
             ):(
               <div>
-                <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
-                  {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>ULTIMO CIERRE</div>
-                    <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(ultimoCierre.total_usd)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
-                  </Card>}
-                  {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(varUSD>=0?"#4ade8033":"#f4433633"),textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
-                    <div style={{fontSize:22,fontWeight:700,color:varUSD>=0?"#4ade80":"#f87171"}}>{varUSD>=0?"+":""}{fmtUSD(varUSD)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{varUSD>=0?"Subio":"Bajo"}</div>
-                  </Card>}
-                  {cierres.length>=2&&<Card sx={{flex:"1 1 160px",border:"1px solid #38bdf833",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>DESDE EL INICIO</div>
-                    <div style={{fontSize:22,fontWeight:700,color:"#38bdf8"}}>{((cierres[cierres.length-1].total_usd/cierres[0].total_usd-1)*100).toFixed(1)}%</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{cierres.length} cierres</div>
-                  </Card>}
-                </div>
-                {grafData.length>=2&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
+                {/* KPIs principales */}
+                {(()=>{
+                  const gPos=gananciaVsBase>-1;
+                  const vPos=varUSD!==null&&varUSD>-1;
+                  return (
+                  <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
+                    {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
+                      <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioActual)}</div>
+                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
+                    </Card>}
+                    <Card sx={{flex:"1 1 160px",border:"1px solid #a78bfa33",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSION SOCIOS</div>
+                      <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
+                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
+                    </Card>
+                    <Card sx={{flex:"1 1 160px",border:"1px solid "+(gPos?"#4ade8033":"#f4433633"),textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
+                      <div style={{fontSize:22,fontWeight:700,color:gPos?"#4ade80":"#f87171"}}>{gPos?"+":""}{fmtUSD(gananciaVsBase)}</div>
+                      <div style={{fontSize:10,color:gPos?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>-1?"+":""}{pctVsBase.toFixed(1)}%</div>
+                    </Card>
+                    {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(vPos?"#4ade8033":"#f4433633"),textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
+                      <div style={{fontSize:22,fontWeight:700,color:vPos?"#4ade80":"#f87171"}}>{vPos?"+":""}{fmtUSD(varUSD)}</div>
+                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{vPos?"Subio":"Bajo"}</div>
+                    </Card>}
+                  </div>
+                  );
+                })()}
+
+                {/* Grafico */}
+                {grafData.length>1&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
                   <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRAFICO USD</div>
                   <LineChart data={grafData} color="#4ade80" height={120}/>
+                  {/* Linea de inversion base */}
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
                     <span>{fmtFecha(grafData[0].x)}</span>
+                    <span style={{color:"#a78bfa"}}>— Base: {fmtUSD(inversionBase)}</span>
                     <span>{fmtFecha(grafData[grafData.length-1].x)}</span>
                   </div>
                 </Card>}
+
+                {/* Resumen mensual */}
+                <Card sx={{marginBottom:18,border:"1px solid #6366f133"}}>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#6366f1",marginBottom:12}}>RESUMEN MENSUAL</div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
+                      <thead><tr>
+                        <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>MES</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>APERTURA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>CIERRE</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>GANANCIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#f59e0b",fontSize:9}}>SUELDO</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#c084fc",fontSize:9}}>RESERVA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#38bdf8",fontSize:9}}>NETO SOCIOS</th>
+                      </tr></thead>
+                      <tbody>
+                        {meses.map(({mes,cierres:mc,liq})=>{
+                          const sorted=[...mc].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+                          const apertura=sorted[0]?.total_usd||0;
+                          const cierre=sorted[sorted.length-1]?.total_usd||0;
+                          const ganancia=cierre-apertura;
+                          const sueldo=liq?.sueldo_empleado||0;
+                          const reserva=liq?.reserva||0;
+                          const neto=liq?.ganancia_neta||ganancia;
+                          const [y,m]=mes.split("-");
+                          const nombreMes=new Date(Number(y),Number(m)-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+                          return (
+                            <tr key={mes} style={{borderBottom:"1px solid #1a1a1a"}}>
+                              <td style={{padding:"8px 8px",color:"#9ca3af",fontWeight:600,whiteSpace:"nowrap"}}>
+                                {nombreMes}
+                                {liq&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liquidado</span>}
+                              </td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:"#6b7280",fontSize:11}}>{fmtUSD(apertura)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:"#e2e8f0",fontWeight:600}}>{fmtUSD(cierre)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:ganancia>-1?"#4ade80":"#f87171"}}>{ganancia>-1?"+":""}{fmtUSD(ganancia)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:sueldo>0?"#f59e0b":"#374151",fontSize:11}}>{sueldo>0?"-"+fmtUSD(sueldo):"—"}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:reserva>0?"#c084fc":"#374151",fontSize:11}}>{reserva>0?"-"+fmtUSD(reserva):"—"}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:neto>-1?"#38bdf8":"#f87171"}}>{neto>-1?"+":""}{fmtUSD(neto)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                {/* Historial detallado */}
                 <Card>
                   <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:12}}>HISTORIAL DE CIERRES</div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
                       <thead><tr>
                         <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>FECHA</th>
-                        {MONEDAS.map(m=><th key={m.id} style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:m.color,fontSize:9}}>{m.id}</th>)}
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>TOTAL USD</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR DIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#f59e0b",fontSize:9}}>TOMA GANANCIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#38bdf8",fontSize:9}}>FACTURACION NETA</th>
                       </tr></thead>
                       <tbody>
                         {[...cierres].reverse().map((c,i,arr)=>{
                           const prev=arr[i+1];
-                          const variacion=prev&&c.total_usd&&prev.total_usd?c.total_usd-prev.total_usd:null;
+                          const varDia=prev&&c.total_usd&&prev.total_usd?c.total_usd-prev.total_usd:null;
+                          const liqDelDia=liquidaciones.find(l=>l.fecha===c.fecha);
+                          const tomaGanancia=liqDelDia?(liqDelDia.sueldo_empleado||0)+(liqDelDia.ganancia_neta||0):null;
+                          const factNeta=tomaGanancia!==null&&c.total_usd?c.total_usd-tomaGanancia:null;
+                          const vPos=varDia!==null&&varDia>-1;
                           return (
-                            <tr key={c.fecha} style={{borderBottom:"1px solid #1a1a1a"}}>
-                              <td style={{padding:"7px 8px",color:"#9ca3af"}}>{fmtFecha(c.fecha)}</td>
-                              {MONEDAS.map(m=>{ const v=c.saldos_finales?.[m.id]||0;
-                                return <td key={m.id} style={{textAlign:"right",padding:"7px 8px",color:v!==0?"#fff":"#374151",fontSize:11}}>{v!==0?fmt(v):"—"}</td>;
-                              })}
+                            <tr key={c.fecha} style={{borderBottom:"1px solid #1a1a1a",background:liqDelDia?"rgba(99,102,241,0.05)":"transparent"}}>
+                              <td style={{padding:"7px 8px",color:"#9ca3af"}}>
+                                {fmtFecha(c.fecha)}
+                                {liqDelDia&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liq</span>}
+                              </td>
                               <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:"#4ade80"}}>{c.total_usd?fmtUSD(c.total_usd):"—"}</td>
-                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:variacion===null?"#374151":variacion>=0?"#4ade80":"#f87171",fontSize:11}}>
-                                {variacion===null?"—":(variacion>=0?"+":"")+fmtUSD(variacion)}
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:700,color:varDia===null?"#374151":vPos?"#4ade80":"#f87171",fontSize:11}}>
+                                {varDia===null?"—":(vPos?"+":"")+fmtUSD(varDia)}
+                              </td>
+                              <td style={{textAlign:"right",padding:"7px 8px",color:tomaGanancia?"#f59e0b":"#374151",fontSize:11}}>
+                                {tomaGanancia?"-"+fmtUSD(tomaGanancia):"—"}
+                              </td>
+                              <td style={{textAlign:"right",padding:"7px 8px",fontWeight:600,color:factNeta?"#38bdf8":"#374151",fontSize:11}}>
+                                {factNeta?fmtUSD(factNeta):"—"}
                               </td>
                             </tr>
                           );
@@ -2278,14 +3074,19 @@ function AppInterna({ usuario }) {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {pant==="cierre"&&(
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#94a3b8",marginBottom:18}}>CIERRE - {fechaLarga}</div>
             {(()=>{
               const difPend=diferidos.filter(d=>!d.cobrado);
-              const totalDif=difPend.reduce((s,d)=>s+(d.mFinal||d.nominal),0);
+              const totalDif=difPend.reduce((s,d)=>{
+        const te=parse(d.tasaEndoso||"0");
+        if(te>0) return s+d.nominal*(1-te/100);
+        return s+(d.mFinal||d.nominal);
+      },0);
               const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+saldoCC(c)[m.id],0)]));
               const patrimonioSaldos=Object.fromEntries(MONEDAS.map(m=>[m.id,(saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
               return (
@@ -2293,7 +3094,7 @@ function AppInterna({ usuario }) {
                   {MONEDAS.map(m=>{ const vFis=saldos[m.id]||0,vTot=patrimonioSaldos[m.id]; if(!vFis&&!vTot) return null;
                     return <div key={m.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba("+hexToRgb(m.color)+",0.2)",borderRadius:10,padding:"10px 14px",minWidth:110}}>
                       <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
-                      <div style={{fontSize:11,color:"#4b5563",marginBottom:2}}>Física: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
+                      <div style={{fontSize:11,color:"#4b5563",marginBottom:2}}>Fisica: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
                       <div style={{fontSize:12,fontWeight:700,color:"#818cf8"}}>Total: {m.simbolo}{fmt(vTot)}</div>
                     </div>;
                   })}
@@ -2426,12 +3227,80 @@ function AppInterna({ usuario }) {
                 </div>
                 <div style={{marginTop:8}}><Lbl>Fecha</Lbl><Inp type="date" value={formGasto.fecha} onChange={e=>setFormGasto(f=>({...f,fecha:e.target.value}))}/></div>
                 <div style={{marginTop:8}}><Lbl>Nota</Lbl><Inp placeholder="Descripcion..." value={formGasto.nota} onChange={e=>setFormGasto(f=>({...f,nota:e.target.value}))}/></div>
+                {/* Origen del pago */}
+                <div style={{marginTop:10,marginBottom:10}}>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#6b7280",marginBottom:6}}>SALE DE</div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setFormGasto(f=>({...f,usaCC:false}))}
+                      style={{...S.btn(!formGasto.usaCC,"#f43f5e"),flex:1}}>💵 Caja fisica</button>
+                    <button onClick={()=>setFormGasto(f=>({...f,usaCC:true}))}
+                      style={{...S.btn(formGasto.usaCC,"#a78bfa"),flex:1}}>👤 Cuenta corriente</button>
+                  </div>
+                </div>
+                {formGasto.usaCC&&(
+                  <div style={{background:"rgba(167,139,250,0.05)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:8,padding:10,marginBottom:10,position:"relative"}}>
+                    <Lbl>Quién pagó</Lbl>
+                    {(()=>{
+                      const clSel=clientes.find(x=>x.id===Number(gastoCC.clienteId));
+                      const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(gastoCC.buscar.toLowerCase()));
+                      return (
+                        <div>
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                            {clSel&&!gastoCC.buscar&&(
+                              <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa44",fontSize:11,color:"#a78bfa",fontWeight:600}}>
+                                {clSel.nombre} {clSel.apellido}
+                              </div>
+                            )}
+                            <input value={gastoCC.buscar} onChange={e=>setGastoCC(g=>({...g,buscar:e.target.value}))}
+                              placeholder={clSel&&!gastoCC.buscar?"Cambiar...":"Buscar cliente..."}
+                              style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                          </div>
+                          {gastoCC.buscar&&filtrados.length>0&&(
+                            <div style={{position:"absolute",left:10,right:10,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                              {filtrados.map(cl=>(
+                                <div key={cl.id} onClick={()=>setGastoCC(g=>({...g,clienteId:String(cl.id),buscar:""}))}
+                                  style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                  {cl.nombre} {cl.apellido}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {clSel&&(()=>{
+                            const sal=saldoCC(clSel)[formGasto.moneda]||0;
+                            const mon=MONEDAS.find(m=>m.id===formGasto.moneda);
+                            return sal!==0&&(
+                              <div style={{marginTop:6,fontSize:10,color:sal>0?"#4ade80":"#f87171"}}>
+                                Saldo actual: {sal>0?"me debe":"le debo"} {mon?.simbolo}{fmt(Math.abs(sal))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
                 <button onClick={async()=>{
                   const monto=parse(formGasto.monto); if(!monto){notify("Ingresa un monto",false);return;}
+                  if(formGasto.usaCC&&!gastoCC.clienteId){notify("Elegi un cliente",false);return;}
                   const g={categoria:formGasto.categoria,monto,moneda:formGasto.moneda,nota:formGasto.nota,fecha:formGasto.fecha};
                   const {data:ins}=await SB.from("gastos").insert(g).select().single();
                   if(ins) setGastos(p=>[ins,...p]);
+                  if(formGasto.usaCC){
+                    // El cliente pagó el gasto por nosotros → ingreso_transf en su CC (HABER = le debemos)
+                    const cId=Number(gastoCC.clienteId);
+                    const cl=clientes.find(x=>x.id===cId);
+                    const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                    const nota="Gasto: "+formGasto.categoria+(formGasto.nota?" - "+formGasto.nota:"");
+                    const mv={id:Date.now(),hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota};
+                    await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota});
+                    setClientes(p=>p.map(x=>x.id!==cId?x:{...x,movimientos:[...x.movimientos,mv]}));
+                  } else {
+                    // Sale de caja fisica
+                    const ns={...saldos,[formGasto.moneda]:saldos[formGasto.moneda]-monto};
+                    setSaldos(ns); await guardarDia(ns,null,null);
+                  }
                   setFormGasto(f=>({...f,monto:"",nota:""}));
+                  setGastoCC({activo:false,clienteId:"",buscar:""});
                   notify("Gasto registrado");
                 }} style={{marginTop:12,width:"100%",padding:10,borderRadius:7,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f87171",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                   REGISTRAR GASTO
@@ -2488,115 +3357,6 @@ function AppInterna({ usuario }) {
             })()}
           </div>
         )}
-
-        {pant==="referidores"&&(()=>{
-          // Calcular comisiones acumuladas por referidor
-          // Buscamos movimientos_cc de tipo ingreso_transf con nota que contiene "Comisión ref."
-          const todosMovs = clientes.flatMap(cl=>
-            cl.movimientos
-              .filter(mv=>mv.nota&&mv.nota.includes("Comisión ref."))
-              .map(mv=>({...mv, clienteNombre:cl.nombre+" "+cl.apellido, clienteId:cl.id}))
-          );
-
-          // Agrupar por cliente
-          const porCliente = {};
-          todosMovs.forEach(mv=>{
-            const key = mv.clienteId;
-            if(!porCliente[key]) porCliente[key]={
-              id:mv.clienteId, nombre:mv.clienteNombre,
-              totalUSD:0, ops:[]
-            };
-            porCliente[key].totalUSD += Number(mv.monto);
-            porCliente[key].ops.push(mv);
-          });
-
-          const referidores = Object.values(porCliente).sort((a,b)=>b.totalUSD-a.totalUSD);
-
-          return (
-            <div>
-              <div style={{fontSize:10,letterSpacing:3,color:"#fb923c",marginBottom:16}}>REFERIDORES — COMISIONES ACUMULADAS</div>
-
-              {referidores.length===0&&(
-                <Card sx={{textAlign:"center",padding:40}}>
-                  <div style={{fontSize:24,marginBottom:8}}>⬡</div>
-                  <div style={{color:"#374151",marginBottom:8}}>Sin comisiones registradas todavía</div>
-                  <div style={{color:"#4b5563",fontSize:11}}>Al registrar una operación con referidor, la comisión aparece acá automáticamente</div>
-                </Card>
-              )}
-
-              {referidores.map(ref=>(
-                <Card key={ref.id} sx={{marginBottom:12,border:"1px solid rgba(251,146,60,0.2)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:700,color:"#fb923c"}}>{ref.nombre}</div>
-                      <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>{ref.ops.length} operaciones</div>
-                    </div>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>USD {ref.totalUSD.toFixed(4)}</div>
-                      <div style={{fontSize:10,color:"#6b7280"}}>acumulado</div>
-                    </div>
-                  </div>
-
-                  {/* Detalle ops */}
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                      <thead>
-                        <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                          {["Fecha","Hora","Detalle","Comisión USD"].map(h=>(
-                            <th key={h} style={{padding:"5px 8px",textAlign:h==="Comisión USD"?"right":"left",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...ref.ops].sort((a,b)=>b.fecha?.localeCompare(a.fecha)).map((mv,i)=>(
-                          <tr key={mv.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:i%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
-                            <td style={{padding:"6px 8px",color:"#9ca3af"}}>{mv.fecha}</td>
-                            <td style={{padding:"6px 8px",color:"#9ca3af"}}>{mv.hora}</td>
-                            <td style={{padding:"6px 8px",color:"#e2e8f0",fontSize:10}}>{mv.nota}</td>
-                            <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#4ade80"}}>+{Number(mv.monto).toFixed(4)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
-                          <td colSpan={3} style={{padding:"7px 8px",fontSize:10,color:"#6b7280",fontWeight:600}}>TOTAL ACUMULADO</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#4ade80"}}>USD {ref.totalUSD.toFixed(4)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-
-                  {/* Botón liquidar */}
-                  <div style={{marginTop:10,display:"flex",justifyContent:"flex-end",gap:8}}>
-                    <button onClick={async()=>{
-                      if(!window.confirm(`Liquidar USD ${ref.totalUSD.toFixed(2)} a ${ref.nombre}? Se registrará un retiro en su CC.`)) return;
-                      const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                      const nota = `Liquidación comisiones referidor — USD ${ref.totalUSD.toFixed(4)}`;
-                      await SB.from("movimientos_cc").insert({cliente_id:ref.id,hora,fecha:hoy,tipo:"retiro_efectivo",moneda:"USD",monto:ref.totalUSD,nota});
-                      setClientes(p=>p.map(cl=>cl.id!==ref.id?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora,fecha:hoy,tipo:"retiro_efectivo",moneda:"USD",monto:ref.totalUSD,nota}]}));
-                      notify("Liquidación registrada");
-                    }}
-                      style={{padding:"7px 16px",borderRadius:6,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:600}}>
-                      ✓ Liquidar USD {ref.totalUSD.toFixed(2)}
-                    </button>
-                  </div>
-                </Card>
-              ))}
-
-              {/* Resumen total */}
-              {referidores.length>0&&(
-                <Card sx={{background:"rgba(251,146,60,0.04)",border:"1px solid rgba(251,146,60,0.15)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:11,color:"#6b7280",fontWeight:600}}>TOTAL A PAGAR A REFERIDORES</span>
-                    <span style={{fontSize:16,fontWeight:700,color:"#fb923c"}}>
-                      USD {referidores.reduce((s,r)=>s+r.totalUSD,0).toFixed(4)}
-                    </span>
-                  </div>
-                </Card>
-              )}
-            </div>
-          );
-        })()}
 
         {pant==="socios"&&(()=>{
           const total=socios.reduce((s,x)=>s+parse(x.monto),0);
@@ -2691,6 +3451,317 @@ function AppInterna({ usuario }) {
                   )}
                 </Card>
               </div>
+              {/* Liquidacion mensual */}
+              {socios.length>0&&ultimoCierre?.total_usd&&(()=>{
+                const patrimonioFinal=parse(liquidacion.patrimonioManual)||ultimoCierre.total_usd;
+                const inversionTotal=total;
+                const gananciaBruta=patrimonioFinal-inversionTotal;
+                const sueldoFijoUSD=parse(liquidacion.cotizSueldo)>0?parse(liquidacion.sueldoFijo)/parse(liquidacion.cotizSueldo):0;
+                const sueldoVar=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctVariable)/100):0;
+                const totalEmpleado=sueldoFijoUSD+sueldoVar;
+                const reserva=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctReserva)/100):0;
+                const gananciaNeta=gananciaBruta-totalEmpleado-reserva;
+                return (
+                  <div style={{marginTop:18}}>
+                    <button onClick={()=>setLiquidacion(l=>({...l,mostrando:!l.mostrando}))}
+                      style={{width:"100%",padding:"10px",borderRadius:8,background:liquidacion.mostrando?"rgba(99,102,241,0.1)":"rgba(255,255,255,0.02)",border:"1px solid "+(liquidacion.mostrando?"#6366f1":"rgba(255,255,255,0.08)"),color:liquidacion.mostrando?"#a5b4fc":"#475569",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+                      {liquidacion.mostrando?"▾ LIQUIDACION MENSUAL":"📊 LIQUIDACION MENSUAL"}
+                    </button>
+                    {liquidacion.mostrando&&(
+                      <Card sx={{marginTop:10,border:"1px solid #6366f133"}}>
+                        {/* Periodo */}
+                        <div style={{marginBottom:14}}>
+                          <Lbl>Periodo al que corresponde</Lbl>
+                          <Inp type="month" value={liquidacion.periodo} onChange={e=>setLiquidacion(l=>({...l,periodo:e.target.value}))}
+                            placeholder="2026-03"/>
+                          {liquidacion.periodo&&<div style={{fontSize:10,color:"#6366f1",marginTop:4}}>
+                            {new Date(liquidacion.periodo+"-01").toLocaleDateString("es-AR",{month:"long",year:"numeric"}).toUpperCase()}
+                          </div>}
+                        </div>
+                        <div style={{marginBottom:14}}>
+                          <Lbl>Fecha de impacto <span style={{color:"#4b5563",fontSize:9}}>(por defecto hoy)</span></Lbl>
+                          <Inp type="date" value={liquidacion.fechaImpacto} onChange={e=>setLiquidacion(l=>({...l,fechaImpacto:e.target.value}))}/>
+                        </div>
+                        {/* Resumen patrimonial */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RESUMEN PATRIMONIAL</div>
+                          <div style={{marginBottom:10}}>
+                            <Lbl>Monto de cierre USD <span style={{color:"#4b5563",fontSize:9}}>(por defecto ultimo cierre)</span></Lbl>
+                            <Inp type="number" placeholder={fmtUSD(ultimoCierre.total_usd)+" (ultimo cierre)"} value={liquidacion.patrimonioManual}
+                              onChange={e=>setLiquidacion(l=>({...l,patrimonioManual:e.target.value}))}/>
+                          </div>
+                          {[
+                            ["Patrimonio final",fmtUSD(patrimonioFinal),"#4ade80"],
+                            ["Inversion socios",fmtUSD(inversionTotal),"#9ca3af"],
+                            ["Ganancia bruta",fmtUSD(gananciaBruta),gananciaBruta>-1?"#4ade80":"#f87171"],
+                          ].map(([k,v,col])=>(
+                            <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
+                              <span style={{fontSize:12,color:"#6b7280"}}>{k}</span>
+                              <span style={{fontSize:12,fontWeight:700,color:col}}>{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Sueldo empleado */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>SUELDO EMPLEADO</div>
+                          <div style={S.grid("1fr 1fr",8)}>
+                            <div><Lbl>Fijo ARS</Lbl><Inp type="number" placeholder="0" value={liquidacion.sueldoFijo} onChange={e=>setLiquidacion(l=>({...l,sueldoFijo:e.target.value}))}/></div>
+                            <div><Lbl>Cotizacion</Lbl><Inp type="number" placeholder="1400" value={liquidacion.cotizSueldo} onChange={e=>setLiquidacion(l=>({...l,cotizSueldo:e.target.value}))}/></div>
+                            <div><Lbl>Variable % ganancia</Lbl><Inp type="number" placeholder="5" value={liquidacion.pctVariable} onChange={e=>setLiquidacion(l=>({...l,pctVariable:e.target.value}))}/></div>
+                            <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Total empleado</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>{fmtUSD(totalEmpleado)}</span>
+                              {sueldoFijoUSD>0&&<span style={{fontSize:10,color:"#4b5563"}}>Fijo: {fmtUSD(sueldoFijoUSD)} + Var: {fmtUSD(sueldoVar)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {/* CC del empleado */}
+                        <div style={{marginBottom:16,position:"relative"}}>
+                          <Lbl>CC del empleado <span style={{color:"#4b5563",fontSize:9}}>(acredita sueldo en su CC)</span></Lbl>
+                          {(()=>{
+                            const clEmp=clientes.find(x=>x.id===Number(liquidacion.empleadoCCId));
+                            const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((liquidacion.empleadoBuscar||"").toLowerCase()));
+                            return (
+                              <div>
+                                <div style={{display:"flex",gap:4}}>
+                                  {clEmp&&!liquidacion.empleadoBuscar&&(
+                                    <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",fontSize:11,color:"#f59e0b",fontWeight:600}}>
+                                      {clEmp.nombre} {clEmp.apellido}
+                                    </div>
+                                  )}
+                                  <input value={liquidacion.empleadoBuscar||""} onChange={e=>setLiquidacion(l=>({...l,empleadoBuscar:e.target.value}))}
+                                    placeholder={clEmp&&!liquidacion.empleadoBuscar?"Cambiar...":"Buscar empleado..."}
+                                    style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                                  {liquidacion.empleadoCCId&&<button onClick={()=>setLiquidacion(l=>({...l,empleadoCCId:"",empleadoBuscar:""}))}
+                                    style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>}
+                                </div>
+                                {liquidacion.empleadoBuscar&&filtrados.length>0&&(
+                                  <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                                    {filtrados.map(cl=>(
+                                      <div key={cl.id} onClick={()=>setLiquidacion(l=>({...l,empleadoCCId:String(cl.id),empleadoBuscar:""}))}
+                                        style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                        {cl.nombre} {cl.apellido}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        {/* Fondo de reserva */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#c084fc",marginBottom:8}}>FONDO DE RESERVA STS</div>
+                          <div style={S.grid("1fr 1fr",8)}>
+                            <div><Lbl>% sobre ganancia</Lbl><Inp type="number" placeholder="10" value={liquidacion.pctReserva} onChange={e=>setLiquidacion(l=>({...l,pctReserva:e.target.value}))}/></div>
+                            <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Reserva</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmtUSD(reserva)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Distribucion socios */}
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",marginBottom:8}}>DISTRIBUCION SOCIOS</div>
+                          <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1f2937",marginBottom:8}}>
+                            <span style={{fontSize:12,color:"#6b7280"}}>Ganancia neta a distribuir</span>
+                            <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>-1?"#4ade80":"#f87171"}}>{fmtUSD(gananciaNeta)}</span>
+                          </div>
+                          {socios.map((s,i)=>{
+                            const pct=total?parse(s.monto)/total:0;
+                            const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                            const ccId=liquidacion.sociosCCMap[s.id]||"";
+                            const busq=liquidacion.sociosBuscar[s.id]||"";
+                            const clSel=clientes.find(x=>x.id===Number(ccId));
+                            const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes(busq.toLowerCase()));
+                            return (
+                              <div key={s.id} style={{padding:"8px 0",borderBottom:"1px solid #0f0f0f"}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                    <div style={{width:8,height:8,borderRadius:"50%",background:COLORES[i%COLORES.length]}}/>
+                                    <span style={{fontSize:12,color:"#9ca3af"}}>{s.nombre}</span>
+                                    <span style={{fontSize:10,color:"#4b5563"}}>({(pct*100).toFixed(1)}%)</span>
+                                  </div>
+                                  <span style={{fontSize:12,fontWeight:700,color:COLORES[i%COLORES.length]}}>{fmtUSD(parte)}</span>
+                                </div>
+                                <div style={{position:"relative"}}>
+                                  <div style={{display:"flex",gap:4}}>
+                                    {clSel&&!busq&&(
+                                      <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f133",fontSize:10,color:"#a5b4fc",fontWeight:600}}>
+                                        {clSel.nombre} {clSel.apellido}
+                                      </div>
+                                    )}
+                                    <input value={busq} onChange={e=>setLiquidacion(l=>({...l,sociosBuscar:{...l.sociosBuscar,[s.id]:e.target.value}}))}
+                                      placeholder={clSel&&!busq?"Cambiar CC...":"Buscar CC del socio..."}
+                                      style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                    {ccId&&<button onClick={()=>setLiquidacion(l=>({...l,sociosCCMap:{...l.sociosCCMap,[s.id]:""},sociosBuscar:{...l.sociosBuscar,[s.id]:""}}))}
+                                      style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                  </div>
+                                  {busq&&filtrados.length>0&&(
+                                    <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                                      {filtrados.map(cl=>(
+                                        <div key={cl.id} onClick={()=>setLiquidacion(l=>({...l,sociosCCMap:{...l.sociosCCMap,[s.id]:String(cl.id)},sociosBuscar:{...l.sociosBuscar,[s.id]:""}}))}
+                                          style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                          {cl.nombre} {cl.apellido}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Boton confirmar */}
+                        <div style={{display:"flex",gap:8,marginBottom:8}}>
+                          <button onClick={()=>{
+                            // Generar PDF de la liquidacion
+                            const distribRows=socios.map((s,i)=>{
+                              const pct=total?parse(s.monto)/total:0;
+                              const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                              return `<tr><td>${s.nombre}</td><td style="text-align:right">${(pct*100).toFixed(1)}%</td><td style="text-align:right;color:#16a34a;font-weight:700">${fmtUSD(parte)}</td></tr>`;
+                            }).join("");
+                            const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Liquidacion ${hoy}</title><style>
+                              body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:40px;max-width:600px;}
+                              h1{font-size:20px;margin-bottom:4px;}h2{font-size:13px;color:#555;margin-top:24px;margin-bottom:8px;border-bottom:2px solid #eee;padding-bottom:4px;}
+                              table{width:100%;border-collapse:collapse;margin-bottom:12px;}
+                              th{background:#f5f5f5;text-align:left;padding:7px 10px;font-size:11px;border-bottom:2px solid #ddd;}
+                              td{padding:6px 10px;border-bottom:1px solid #eee;}
+                              .total{font-weight:700;font-size:14px;}.green{color:#16a34a;font-weight:700;}.red{color:#dc2626;font-weight:700;}
+                              .footer{margin-top:40px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
+                            </style></head><body>
+                            <h1>Liquidacion Mensual — STS Financiera</h1>
+                            <p style="color:#666;font-size:12px">${fechaLarga}</p>
+                            <h2>RESUMEN PATRIMONIAL</h2>
+                            <table><tr><td>Patrimonio final</td><td style="text-align:right" class="green">${fmtUSD(patrimonioFinal)}</td></tr>
+                            <tr><td>Inversion socios</td><td style="text-align:right">${fmtUSD(inversionTotal)}</td></tr>
+                            <tr><td class="total">Ganancia bruta</td><td style="text-align:right" class="${gananciaBruta>-1?"green":"red"} total">${fmtUSD(gananciaBruta)}</td></tr></table>
+                            <h2>DISTRIBUCION</h2>
+                            <table><tr><td>Sueldo empleado</td><td style="text-align:right">Fijo: ${fmtUSD(sueldoFijoUSD)} + Variable ${liquidacion.pctVariable}%: ${fmtUSD(sueldoVar)}</td><td style="text-align:right;font-weight:700">${fmtUSD(totalEmpleado)}</td></tr>
+                            <tr><td>Fondo reserva STS (${liquidacion.pctReserva}%)</td><td></td><td style="text-align:right;font-weight:700">${fmtUSD(reserva)}</td></tr>
+                            <tr><td class="total">Ganancia neta socios</td><td></td><td style="text-align:right" class="${gananciaNeta>-1?"green":"red"} total">${fmtUSD(gananciaNeta)}</td></tr></table>
+                            <h2>POR SOCIO</h2>
+                            <table><thead><tr><th>Socio</th><th style="text-align:right">%</th><th style="text-align:right">Corresponde</th></tr></thead><tbody>${distribRows}</tbody></table>
+                            <div class="footer">Generado por STS Financiera · ${hoy}</div>
+                            </body></html>`;
+                            const w=window.open("","_blank"); w.document.write(html); w.document.close(); setTimeout(()=>w.print(),500);
+                          }} style={{flex:1,padding:10,borderRadius:7,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f133",color:"#a5b4fc",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                            📄 Ver PDF
+                          </button>
+                        </div>
+                        <button onClick={async()=>{
+                          if(!window.confirm("Confirmar liquidacion? Se registraran los movimientos en las CCs de socios y empleado.")) return;
+                          const fechaLiq=liquidacion.fechaImpacto||hoy;
+                          const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          const movimientosIds=[];
+                          // 1. Sueldo empleado
+                          if(totalEmpleado>0){
+                            if(liquidacion.empleadoCCId){
+                              // Va a CC del empleado (ingreso_transf = la financiera le debe = HABER)
+                              const cEmpId=Number(liquidacion.empleadoCCId);
+                              const notaEmp="Liquidacion mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado)+" (Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar)+")";
+                              const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
+                              const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
+                              movimientosIds.push({tipo:"cc",id:mvEmpIns?.id,clienteId:cEmpId});
+                              setClientes(p=>p.map(cl=>cl.id!==cEmpId?cl:{...cl,movimientos:[...cl.movimientos,mvEmp]}));
+                            } else {
+                              // Sin CC: va a gastos y sale de caja
+                              const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
+                              const {data:ins}=await SB.from("gastos").insert(g).select().single();
+                              if(ins){ setGastos(p=>[ins,...p]); movimientosIds.push({tipo:"gasto",id:ins.id}); }
+                              const ns={...saldos,USD:saldos.USD-totalEmpleado};
+                              setSaldos(ns); await guardarDia(ns,null,null);
+                            }
+                          }
+                          // 2. Acreditar ganancia en CC de cada socio (usando el mapa CC seleccionado)
+                          const detalle=socios.map(s=>{
+                            const pct=total?parse(s.monto)/total:0;
+                            const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                            return {nombre:s.nombre,pct:(pct*100).toFixed(1),parte};
+                          });
+                          for(const s of socios){
+                            const pct=total?parse(s.monto)/total:0;
+                            const parte=gananciaNeta>0?gananciaNeta*pct:0;
+                            if(parte<=0) continue;
+                            const ccId=Number(liquidacion.sociosCCMap[s.id]);
+                            if(!ccId) continue; // si no eligio CC, no acreditar
+                            const nota="Liquidacion mensual "+hoy+" - Ganancia "+fmtUSD(parte);
+                            const mvHora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                            const {data:mvIns}=await SB.from("movimientos_cc").insert({cliente_id:ccId,hora:mvHora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota}).select().single();
+                            const mv={id:mvIns?.id||Date.now()+ccId,hora:mvHora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:parte,nota};
+                            movimientosIds.push({tipo:"cc",id:mvIns?.id,clienteId:ccId});
+                            setClientes(p=>p.map(cl=>cl.id!==ccId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+                          }
+                          // 3. Guardar historial de liquidacion
+                          const liq={fecha:fechaLiq,periodo:liquidacion.periodo||fechaLiq.slice(0,7),patrimonio_final:patrimonioFinal,inversion_socios:inversionTotal,ganancia_bruta:gananciaBruta,sueldo_empleado:totalEmpleado,reserva,ganancia_neta:gananciaNeta,detalle,movimientos_ids:movimientosIds};
+                          const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
+                          if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
+                          notify("Liquidacion confirmada ✓");
+                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:"",periodo:"",fechaImpacto:""}));
+                        }} disabled={gananciaBruta<=0}
+                          style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
+                          CONFIRMAR LIQUIDACION
+                        </button>
+                      </Card>
+                    )}
+                    {/* Historial de liquidaciones */}
+                    {liquidaciones.length>0&&(
+                      <Card sx={{marginTop:14,border:"1px solid rgba(255,255,255,0.06)"}}>
+                        <div style={{fontSize:10,letterSpacing:2,color:"#6b7280",marginBottom:12}}>HISTORIAL DE LIQUIDACIONES</div>
+                        {liquidaciones.map(liq=>(
+                          <div key={liq.id} style={{borderBottom:"1px solid #1a1a1a",padding:"10px 0"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                              <div>
+                              <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>{fmtFecha(liq.fecha)}</span>
+                              {liq.periodo&&liq.periodo!==liq.fecha?.slice(0,7)&&(
+                                <span style={{marginLeft:8,fontSize:10,padding:"1px 6px",borderRadius:4,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>
+                                  periodo: {new Date(liq.periodo+"-01").toLocaleDateString("es-AR",{month:"long",year:"numeric"})}
+                                </span>
+                              )}
+                            </div>
+                              <span style={{fontSize:12,fontWeight:700,color:liq.ganancia_neta>-1?"#4ade80":"#f87171"}}>Neto: {fmtUSD(liq.ganancia_neta)}</span>
+                            </div>
+                            <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#6b7280"}}>
+                              <span>Patrimonio: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.patrimonio_final)}</strong></span>
+                              <span>Ganancia bruta: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.ganancia_bruta)}</strong></span>
+                              <span>Empleado: <strong style={{color:"#f59e0b"}}>{fmtUSD(liq.sueldo_empleado)}</strong></span>
+                              <span>Reserva: <strong style={{color:"#c084fc"}}>{fmtUSD(liq.reserva)}</strong></span>
+                            </div>
+                            {liq.detalle&&liq.detalle.length>0&&(
+                              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+                                {liq.detalle.map((d,i)=>(
+                                  <span key={i} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"rgba(74,222,128,0.08)",color:"#4ade80"}}>
+                                    {d.nombre}: {fmtUSD(d.parte)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <button onClick={async()=>{
+                              if(!window.confirm("Revertir esta liquidacion? Se borraran los movimientos de CC y gastos generados.")) return;
+                              // Borrar movimientos CC y gastos
+                              const ids=liq.movimientos_ids||[];
+                              for(const m of ids){
+                                if(m.tipo==="cc"){
+                                  await SB.from("movimientos_cc").delete().eq("id",m.id);
+                                  setClientes(p=>p.map(cl=>cl.id!==m.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(mv=>mv.id!==m.id)}));
+                                } else if(m.tipo==="gasto"){
+                                  await SB.from("gastos").delete().eq("id",m.id);
+                                  setGastos(p=>p.filter(g=>g.id!==m.id));
+                                }
+                              }
+                              await SB.from("liquidaciones").delete().eq("id",liq.id);
+                              setLiquidaciones(p=>p.filter(x=>x.id!==liq.id));
+                              notify("Liquidacion revertida ✓");
+                            }} style={{marginTop:8,padding:"4px 10px",borderRadius:5,background:"rgba(244,63,94,0.08)",border:"1px solid #f43f5e44",color:"#f87171",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+                              Revertir
+                            </button>
+                          </div>
+                        ))}
+                      </Card>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
@@ -2719,7 +3790,7 @@ export default function CajaFinanciera() {
     <div style={{minHeight:"100vh",background:"#07090f",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
         <div style={{width:52,height:52,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace"}}>S</div>
-        <div style={{color:"#334155",fontSize:12}}>Verificando sesión...</div>
+        <div style={{color:"#334155",fontSize:12}}>Verificando sesion...</div>
       </div>
     </div>
   );
