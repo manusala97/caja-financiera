@@ -459,7 +459,7 @@ function AppInterna({ usuario }) {
   const dragSrcId = useRef(null);
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
-  const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:""});
+  const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
 
   const notify = useCallback((msg,ok=true)=>{ setToast({msg,ok}); setTimeout(()=>setToast(null),2800); },[]);
@@ -675,23 +675,24 @@ function AppInterna({ usuario }) {
     const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo,datos:opData}).select().single();
     if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
 
-    // Registrar comisión de referidor si corresponde
-    if (refForm.activo && refForm.clienteId && refForm.cotizRef && (tipo==="compra"||tipo==="venta")) {
-      const cotizRef = parse(refForm.cotizRef);
-      const cotizOp  = parse(form.cotizacion);
-      const cantUSD  = parse(form.cantidad);
-      if (cotizRef > 0 && cotizOp > 0 && cantUSD > 0) {
-        const difCotiz = Math.abs(cotizRef - cotizOp);
-        const comisionUSD = (difCotiz * cantUSD) / cotizOp;
-        if (comisionUSD > 0) {
+    // Registrar comisión de referidor en ARS
+    if (refForm.activo && refForm.clienteId && refForm.cotizRef && refForm.cotizTuya && (tipo==="compra"||tipo==="venta")) {
+      const cotizRef  = parse(refForm.cotizRef);  // cotiz que cobró el referidor al cliente
+      const cotizTuya = parse(refForm.cotizTuya); // tu cotización real
+      const cantUSD   = parse(form.monto);
+      if (cotizRef > 0 && cotizTuya > 0 && cantUSD > 0) {
+        const comisionARS = Math.abs(cotizRef - cotizTuya) * cantUSD;
+        if (comisionARS > 0) {
           const cRefId = Number(refForm.clienteId);
-          const notaRef = `Comisión ref. ${tipo} ${fmt(cantUSD)} USD ($${fmt(cotizOp)}→$${fmt(cotizRef)}) = USD ${comisionUSD.toFixed(4)}`;
-          const mvRef = {id:Date.now(), hora, fecha:hoy, tipo:"ingreso_transf", moneda:"USD", monto:comisionUSD, nota:notaRef};
-          await SB.from("movimientos_cc").insert({cliente_id:cRefId, hora, fecha:hoy, tipo:"ingreso_transf", moneda:"USD", monto:comisionUSD, nota:notaRef});
+          const notaRef = `Comisión ref. ${tipo} ${fmt(cantUSD)} USD ($${fmt(cotizTuya)}→$${fmt(cotizRef)}) = $${fmt(Math.round(comisionARS))} ARS`;
+          const mvRef = {id:Date.now(), hora, fecha:hoy, tipo:"ingreso_transf", moneda:"ARS", monto:comisionARS, nota:notaRef};
+          await SB.from("movimientos_cc").insert({cliente_id:cRefId, hora, fecha:hoy, tipo:"ingreso_transf", moneda:"ARS", monto:comisionARS, nota:notaRef});
           setClientes(p=>p.map(cl=>cl.id!==cRefId?cl:{...cl,movimientos:[...cl.movimientos,mvRef]}));
         }
+        // Sobreescribir cotización de la operación con la tuya (no la del referidor)
+        if (opData) { opData.cotizacion = cotizTuya; }
       }
-      setRefForm({activo:false,clienteId:"",buscar:"",cotizRef:""});
+      setRefForm({activo:false,clienteId:"",buscar:"",cotizRef:"",cotizTuya:""});
     }
 
     await guardarDia(ns,null,null);
@@ -1168,8 +1169,8 @@ function AppInterna({ usuario }) {
                       const filtRef = clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((refForm.buscar||"").trim().toLowerCase()));
                       const cotizRef = parse(refForm.cotizRef);
                       const cotizOp  = parse(form.cotizacion);
-                      const cantUSD  = parse(form.cantidad);
-                      const comUSD   = cotizRef>0&&cotizOp>0&&cantUSD>0 ? (Math.abs(cotizRef-cotizOp)*cantUSD/cotizOp) : 0;
+                      const cantUSD  = parse(form.monto);
+                      const comARS   = cotizRef>0&&cotizTuya>0&&cantUSD>0 ? Math.abs(cotizRef-cotizTuya)*cantUSD : 0;
                       return (
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                           <div style={{position:"relative"}}>
@@ -1191,16 +1192,22 @@ function AppInterna({ usuario }) {
                             )}
                           </div>
                           <div>
-                            <Lbl>Cotiz. referidor</Lbl>
+                            <Lbl>Cotiz. referidor cobró</Lbl>
                             <input type="number" value={refForm.cotizRef||""} onChange={e=>setRefForm(p=>({...p,cotizRef:e.target.value}))}
-                              placeholder={form.cotizacion||"$"}
+                              placeholder="ej: 1430"
                               style={{width:"100%",background:"#0a0a0a",border:"1px solid #fb923c44",borderRadius:5,padding:"5px 8px",color:"#fb923c",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
                           </div>
-                          {comUSD>0&&(
-                            <div style={{gridColumn:"1/-1",background:"rgba(251,146,60,0.08)",border:"1px solid rgba(251,146,60,0.2)",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                              <span style={{color:"#6b7280"}}>Comisión: <strong style={{color:"#fb923c"}}>USD {comUSD.toFixed(4)}</strong></span>
-                              <span style={{color:"#6b7280",fontSize:10}}>({fmt(cantUSD)} USD × (${fmt(cotizRef)}-${fmt(cotizOp)}) / ${fmt(cotizOp)})</span>
-                              <span style={{color:"#fb923c",fontSize:10}}>→ CC {clRef?clRef.nombre:"referidor"}</span>
+                          <div>
+                            <Lbl>Tu cotización real</Lbl>
+                            <input type="number" value={refForm.cotizTuya||""} onChange={e=>setRefForm(p=>({...p,cotizTuya:e.target.value}))}
+                              placeholder="ej: 1420"
+                              style={{width:"100%",background:"#0a0a0a",border:"1px solid #38bdf844",borderRadius:5,padding:"5px 8px",color:"#38bdf8",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                          </div>
+                          {comARS>0&&(
+                            <div style={{gridColumn:"1/-1",background:"rgba(251,146,60,0.08)",border:"1px solid rgba(251,146,60,0.2)",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
+                              <span style={{color:"#6b7280"}}>Comisión: <strong style={{color:"#fb923c"}}>${fmt(Math.round(comARS))} ARS</strong></span>
+                              <span style={{color:"#4b5563",fontSize:10}}>{fmt(cantUSD)} USD × (${fmt(cotizRef)}-${fmt(cotizTuya)}) — op a ${fmt(cotizTuya)}</span>
+                              <span style={{color:"#fb923c",fontSize:10,fontWeight:600}}>→ CC {clRef?clRef.nombre:"referidor"}</span>
                             </div>
                           )}
                         </div>
@@ -2460,7 +2467,7 @@ function AppInterna({ usuario }) {
                       <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>{ref.ops.length} operaciones</div>
                     </div>
                     <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>USD {ref.totalUSD.toFixed(4)}</div>
+                      <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>${fmt(Math.round(ref.totalARS))} ARS</div>
                       <div style={{fontSize:10,color:"#6b7280"}}>acumulado</div>
                     </div>
                   </div>
@@ -2481,14 +2488,14 @@ function AppInterna({ usuario }) {
                             <td style={{padding:"6px 8px",color:"#9ca3af"}}>{mv.fecha}</td>
                             <td style={{padding:"6px 8px",color:"#9ca3af"}}>{mv.hora}</td>
                             <td style={{padding:"6px 8px",color:"#e2e8f0",fontSize:10}}>{mv.nota}</td>
-                            <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#4ade80"}}>+{Number(mv.monto).toFixed(4)}</td>
+                            <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#4ade80"}}>${fmt(Math.round(Number(mv.monto)))}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
                           <td colSpan={3} style={{padding:"7px 8px",fontSize:10,color:"#6b7280",fontWeight:600}}>TOTAL ACUMULADO</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#4ade80"}}>USD {ref.totalUSD.toFixed(4)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#4ade80"}}>${fmt(Math.round(ref.totalARS))} ARS</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -2497,15 +2504,15 @@ function AppInterna({ usuario }) {
                   {/* Botón liquidar */}
                   <div style={{marginTop:10,display:"flex",justifyContent:"flex-end",gap:8}}>
                     <button onClick={async()=>{
-                      if(!window.confirm(`Liquidar USD ${ref.totalUSD.toFixed(2)} a ${ref.nombre}? Se registrará un retiro en su CC.`)) return;
+                      if(!window.confirm(`Liquidar ${fmt(Math.round(ref.totalARS))} ARS a ${ref.nombre}? Se registrará un retiro en su CC.`)) return;
                       const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                      const nota = `Liquidación comisiones referidor — USD ${ref.totalUSD.toFixed(4)}`;
-                      await SB.from("movimientos_cc").insert({cliente_id:ref.id,hora,fecha:hoy,tipo:"retiro_efectivo",moneda:"USD",monto:ref.totalUSD,nota});
-                      setClientes(p=>p.map(cl=>cl.id!==ref.id?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora,fecha:hoy,tipo:"retiro_efectivo",moneda:"USD",monto:ref.totalUSD,nota}]}));
+                      const nota = `Liquidación comisiones referidor — $${fmt(Math.round(ref.totalARS))} ARS`;
+                      await SB.from("movimientos_cc").insert({cliente_id:ref.id,hora,fecha:hoy,tipo:"retiro_efectivo",moneda:"ARS",monto:ref.totalARS,nota});
+                      setClientes(p=>p.map(cl=>cl.id!==ref.id?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora,fecha:hoy,tipo:"retiro_efectivo",moneda:"ARS",monto:ref.totalARS,nota}]}));
                       notify("Liquidación registrada");
                     }}
                       style={{padding:"7px 16px",borderRadius:6,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:600}}>
-                      ✓ Liquidar USD {ref.totalUSD.toFixed(2)}
+                      ✓ Liquidar ${fmt(Math.round(ref.totalARS))} ARS
                     </button>
                   </div>
                 </Card>
@@ -2517,7 +2524,7 @@ function AppInterna({ usuario }) {
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:11,color:"#6b7280",fontWeight:600}}>TOTAL A PAGAR A REFERIDORES</span>
                     <span style={{fontSize:16,fontWeight:700,color:"#fb923c"}}>
-                      USD {referidores.reduce((s,r)=>s+r.totalUSD,0).toFixed(4)}
+                      ${fmt(Math.round(referidores.reduce((s,r)=>s+r.totalARS,0)))} ARS
                     </span>
                   </div>
                 </Card>
