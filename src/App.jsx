@@ -1200,7 +1200,7 @@ function AppInterna({ usuario }) {
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
-  const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId|"op_simultanea", monto:"", impactaCaja:true, cotizSim:"", clienteSim:""}]
+  const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId|"op_simultanea", monto:"", impactaCaja:true, cotizSim:"", clienteSim:"", monedaSim:"USD", impactaCajaSim:true, clienteSimId:"", clienteSimBuscar:""}]
   const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
@@ -1485,37 +1485,51 @@ function AppInterna({ usuario }) {
             // Efectivo siempre impacta caja
             tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
           } else if (d.tipo==="op_simultanea") {
-            // Operación simultánea: genera una op de compra/venta inversa automáticamente
+            // Operación simultánea mejorada — moneda configurable + impacta caja o CC
             const cotizSim = parse(d.cotizSim) || parse(form.cotizacion);
             if (!cotizSim) continue;
-            const usdSim = dm / cotizSim; // USD que se mueven en la op simultánea
+            const monSim = d.monedaSim || form.moneda; // moneda que se vende/compra
+            const cantSim = dm / cotizSim; // cantidad de monSim que se mueven
             const horaSim = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-            // Si la op principal es COMPRA → la simultánea es VENTA (le vendemos USD al cliente)
-            // Si la op principal es VENTA → la simultánea es COMPRA (le compramos USD al cliente)
             const tipoSim = tipo==="compra" ? "venta" : "compra";
-            // Impacto en caja:
-            // Compra principal + venta simultánea: los ARS entran a caja (los paga el cliente), los USD salen
-            // Venta principal + compra simultánea: los ARS salen de caja (los pagamos), los USD entran
+            const impactaCajaSim = d.impactaCajaSim !== false; // default true
+
             if (tipo==="compra") {
-              // Cliente nos da ARS → entran a caja para financiar la compra
-              ns[form.moneda2] += dm;    // ARS entran
-              ns[form.moneda] -= usdSim; // USD salen (se los damos al cliente)
+              // Op principal es COMPRA → simultánea es VENTA de monSim
+              // ARS entran a caja (financian la compra)
+              ns[form.moneda2] += dm;
+              // monSim sale de caja o de CC del cliente
+              if (impactaCajaSim) {
+                ns[monSim] = (ns[monSim]||0) - cantSim;
+              } else if (d.clienteSimId) {
+                // Va a CC del cliente — registrar deuda
+                const cSimId = Number(d.clienteSimId);
+                const notaCC = `Op. simultánea — venta ${fmt(cantSim)} ${monSim} vinculada a compra ${fmt(m)} ${form.moneda}`;
+                await SB.from("movimientos_cc").insert({cliente_id:cSimId,hora:horaSim,fecha:hoy,tipo:"retiro_transf",moneda:monSim,monto:cantSim,nota:notaCC});
+                setClientes(p=>p.map(cl=>cl.id!==cSimId?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora:horaSim,fecha:hoy,tipo:"retiro_transf",moneda:monSim,monto:cantSim,nota:notaCC}]}));
+              }
             } else {
-              // Cliente nos da USD → entran a caja
-              ns[form.moneda] += usdSim; // USD entran
-              ns[form.moneda2] -= dm;    // ARS salen (se los damos al cliente)
+              // Op principal es VENTA → simultánea es COMPRA de monSim
+              // ARS salen de caja
+              ns[form.moneda2] -= dm;
+              // monSim entra a caja o a CC del cliente
+              if (impactaCajaSim) {
+                ns[monSim] = (ns[monSim]||0) + cantSim;
+              } else if (d.clienteSimId) {
+                const cSimId = Number(d.clienteSimId);
+                const notaCC = `Op. simultánea — compra ${fmt(cantSim)} ${monSim} vinculada a venta ${fmt(m)} ${form.moneda}`;
+                await SB.from("movimientos_cc").insert({cliente_id:cSimId,hora:horaSim,fecha:hoy,tipo:"ingreso_transf",moneda:monSim,monto:cantSim,nota:notaCC});
+                setClientes(p=>p.map(cl=>cl.id!==cSimId?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora:horaSim,fecha:hoy,tipo:"ingreso_transf",moneda:monSim,monto:cantSim,nota:notaCC}]}));
+              }
             }
             // Registrar la op simultánea en operaciones
             const opSimData = {
-              tipo: tipoSim,
-              hora: horaSim,
-              moneda: form.moneda,
-              monto: usdSim,
-              moneda2: form.moneda2,
-              monto2: dm,
+              tipo: tipoSim, hora: horaSim,
+              moneda: monSim, monto: cantSim,
+              moneda2: form.moneda2, monto2: dm,
               cotizacion: cotizSim,
               cliente: d.clienteSim || "",
-              nota: "Op. simultánea vinculada a " + (tipo==="compra"?"compra":"venta") + " " + fmt(m) + " " + form.moneda,
+              nota: "Op. simultánea — " + tipoSim + " " + fmt(cantSim) + " " + monSim + " a $" + fmt(cotizSim) + (impactaCajaSim?" (caja)":" (CC)"),
             };
             const {data:insSim} = await SB.from("operaciones").insert({
               dia_id: hoy, fecha: hoy, hora: horaSim, tipo: tipoSim, datos: opSimData
@@ -2195,7 +2209,7 @@ function AppInterna({ usuario }) {
                                             style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
                                             💵 Efectivo
                                           </div>
-                                          <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"op_simultanea",cotizSim:"",clienteSim:""}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                          <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"op_simultanea",cotizSim:"",clienteSim:"",monedaSim:"USD",impactaCajaSim:true,clienteSimId:"",clienteSimBuscar:""}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
                                             style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#f59e0b",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
                                             ⇄ Op. simultánea
                                           </div>
@@ -2218,29 +2232,71 @@ function AppInterna({ usuario }) {
                                 sx={{flex:2,minWidth:100}}/>
                               {/* Campos extra para op simultánea */}
                               {d.tipo==="op_simultanea"&&(
-                                <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0,minWidth:160}}>
+                                <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,minWidth:220,background:"rgba(245,158,11,0.04)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:7,padding:8}}>
+                                  <div style={{fontSize:9,color:"#f59e0b",fontWeight:700,letterSpacing:1}}>⇄ OP. SIMULTÁNEA</div>
+                                  {/* Moneda que se vende/compra */}
                                   <div>
-                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>COTIZ. SIMULTÁNEA</div>
-                                    <input type="number"
-                                      placeholder={form.cotizacion||"cotiz."}
-                                      value={d.cotizSim||""}
+                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>MONEDA</div>
+                                    <select value={d.monedaSim||"USD"} onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monedaSim:e.target.value}))}
+                                      style={{width:"100%",background:"#0a0a0a",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:11,outline:"none"}}>
+                                      {MONEDAS.map(m=><option key={m.id} value={m.id}>{m.id} — {m.label}</option>)}
+                                    </select>
+                                  </div>
+                                  {/* Cotización */}
+                                  <div>
+                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>COTIZACIÓN</div>
+                                    <input type="number" placeholder="cotiz." value={d.cotizSim||""}
                                       onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,cotizSim:e.target.value}))}
-                                      style={{width:"100%",background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                                      style={{width:"100%",background:"#0a0a0a",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
                                   </div>
+                                  {/* Cliente — buscador CC o texto libre */}
+                                  <div style={{position:"relative"}}>
+                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>CLIENTE</div>
+                                    <div style={{display:"flex",gap:4}}>
+                                      {d.clienteSimId&&!d.clienteSimBuscar&&(()=>{
+                                        const cl=clientes.find(x=>x.id===Number(d.clienteSimId));
+                                        return cl?<div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",fontSize:10,color:"#f59e0b",fontWeight:600}}>{cl.nombre} {cl.apellido}</div>:null;
+                                      })()}
+                                      <input type="text"
+                                        placeholder={d.clienteSimId&&!d.clienteSimBuscar?"Cambiar...":"Buscar CC o escribir..."}
+                                        value={d.clienteSimBuscar||d.clienteSim||""}
+                                        onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteSimBuscar:e.target.value,clienteSim:e.target.value,clienteSimId:""}))}
+                                        style={{flex:1,background:"#0a0a0a",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                    </div>
+                                    {d.clienteSimBuscar&&(()=>{
+                                      const filtSim=clientes.filter(cl=>(cl.nombre+" "+cl.apellido).toLowerCase().includes(d.clienteSimBuscar.toLowerCase()));
+                                      return filtSim.length>0?(
+                                        <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:300,maxHeight:100,overflowY:"auto",marginTop:2}}>
+                                          {filtSim.map(cl=>(
+                                            <div key={cl.id} onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteSimId:String(cl.id),clienteSim:cl.nombre+" "+cl.apellido,clienteSimBuscar:""}))}
+                                              style={{padding:"5px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>
+                                          ))}
+                                        </div>
+                                      ):null;
+                                    })()}
+                                  </div>
+                                  {/* Impacta caja o va a CC */}
                                   <div>
-                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>CLIENTE (opcional)</div>
-                                    <input type="text"
-                                      placeholder="Nombre libre..."
-                                      value={d.clienteSim||""}
-                                      onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteSim:e.target.value}))}
-                                      style={{width:"100%",background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",borderRadius:5,padding:"4px 8px",color:"#f59e0b",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>{d.monedaSim||"USD"} VA A</div>
+                                    <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid #1f2937"}}>
+                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCajaSim:true}))}
+                                        style={{flex:1,padding:"5px",background:d.impactaCajaSim!==false?"rgba(245,158,11,0.12)":"transparent",color:d.impactaCajaSim!==false?"#f59e0b":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937"}}>
+                                        💵 Caja física
+                                      </button>
+                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCajaSim:false}))}
+                                        style={{flex:1,padding:"5px",background:d.impactaCajaSim===false?"rgba(99,102,241,0.12)":"transparent",color:d.impactaCajaSim===false?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer"}}>
+                                        👤 CC cliente
+                                      </button>
+                                    </div>
                                   </div>
-                                  {d.monto&&(d.cotizSim||form.cotizacion)&&(()=>{
-                                    const cotiz = parse(d.cotizSim)||parse(form.cotizacion);
-                                    const usdSim = parse(d.monto)/cotiz;
-                                    const tipoSim = form.tipo==="compra"?"Venta":"Compra";
-                                    return <div style={{fontSize:10,color:"#f59e0b",padding:"3px 6px",background:"rgba(245,158,11,0.08)",borderRadius:4}}>
-                                      → {tipoSim} USD {fmt(usdSim)} a ${fmt(cotiz)}
+                                  {/* Preview */}
+                                  {d.monto&&d.cotizSim&&(()=>{
+                                    const cotiz=parse(d.cotizSim);
+                                    const monSim=d.monedaSim||"USD";
+                                    const cantSim=parse(d.monto)/cotiz;
+                                    const tipoSim=form.tipo==="compra"?"Venta":"Compra";
+                                    return <div style={{fontSize:10,color:"#f59e0b",padding:"4px 7px",background:"rgba(245,158,11,0.08)",borderRadius:4,fontWeight:600}}>
+                                      → {tipoSim} {fmt(cantSim)} {monSim} a ${fmt(cotiz)} {d.impactaCajaSim===false?"(→ CC)":"(→ caja)"}
                                     </div>;
                                   })()}
                                 </div>
