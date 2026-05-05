@@ -1518,8 +1518,9 @@ function AppInterna({ usuario }) {
               } else if (d.clienteSimId) {
                 const cSimId = Number(d.clienteSimId);
                 const notaCC = `Op. simultánea — compra ${fmt(cantSim)} ${monSim} vinculada a venta ${fmt(m)} ${form.moneda}`;
-                await SB.from("movimientos_cc").insert({cliente_id:cSimId,hora:horaSim,fecha:hoy,tipo:"ingreso_transf",moneda:monSim,monto:cantSim,nota:notaCC});
-                setClientes(p=>p.map(cl=>cl.id!==cSimId?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora:horaSim,fecha:hoy,tipo:"ingreso_transf",moneda:monSim,monto:cantSim,nota:notaCC}]}));
+                // retiro_transf → saldo positivo = el cliente nos debe la monSim
+                await SB.from("movimientos_cc").insert({cliente_id:cSimId,hora:horaSim,fecha:hoy,tipo:"retiro_transf",moneda:monSim,monto:cantSim,nota:notaCC});
+                setClientes(p=>p.map(cl=>cl.id!==cSimId?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora:horaSim,fecha:hoy,tipo:"retiro_transf",moneda:monSim,monto:cantSim,nota:notaCC}]}));
               }
             }
             // Registrar la op simultánea en operaciones
