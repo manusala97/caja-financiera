@@ -1495,23 +1495,24 @@ function AppInterna({ usuario }) {
             const impactaCajaSim = d.impactaCajaSim !== false; // default true
 
             if (tipo==="compra") {
-              // Op principal es COMPRA → simultánea es VENTA de monSim
-              // ARS entran a caja (financian la compra)
-              ns[form.moneda2] += dm;
-              // monSim sale de caja o de CC del cliente
+              // Op principal es COMPRA → simultánea es VENTA de monSim al cliente
+              // Los ARS del cliente financian la compra principal — NO van a caja física
+              // Solo se mueve la monSim (sale de caja o queda pendiente en CC)
               if (impactaCajaSim) {
+                // Sale de caja física
                 ns[monSim] = (ns[monSim]||0) - cantSim;
               } else if (d.clienteSimId) {
-                // Va a CC del cliente — registrar deuda
+                // Queda pendiente en CC — nosotros le debemos la monSim
+                // ingreso_transf → saldo negativo = le debemos
                 const cSimId = Number(d.clienteSimId);
-                const notaCC = `Op. simultánea — venta ${fmt(cantSim)} ${monSim} vinculada a compra ${fmt(m)} ${form.moneda}`;
-                await SB.from("movimientos_cc").insert({cliente_id:cSimId,hora:horaSim,fecha:hoy,tipo:"retiro_transf",moneda:monSim,monto:cantSim,nota:notaCC});
-                setClientes(p=>p.map(cl=>cl.id!==cSimId?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora:horaSim,fecha:hoy,tipo:"retiro_transf",moneda:monSim,monto:cantSim,nota:notaCC}]}));
+                const notaCC = `Op. simultánea — venta ${fmt(cantSim)} ${monSim} pendiente entrega a $${fmt(cotizSim)}, vinculada a compra ${fmt(m)} ${form.moneda}`;
+                await SB.from("movimientos_cc").insert({cliente_id:cSimId,hora:horaSim,fecha:hoy,tipo:"ingreso_transf",moneda:monSim,monto:cantSim,nota:notaCC});
+                setClientes(p=>p.map(cl=>cl.id!==cSimId?cl:{...cl,movimientos:[...cl.movimientos,{id:Date.now(),hora:horaSim,fecha:hoy,tipo:"ingreso_transf",moneda:monSim,monto:cantSim,nota:notaCC}]}));
               }
             } else {
               // Op principal es VENTA → simultánea es COMPRA de monSim
-              // ARS salen de caja
-              ns[form.moneda2] -= dm;
+              // Los ARS van al cliente por transferencia — NO tocan caja física
+              // Solo se mueve la monSim (entra a caja o queda en CC)
               // monSim entra a caja o a CC del cliente
               if (impactaCajaSim) {
                 ns[monSim] = (ns[monSim]||0) + cantSim;
