@@ -3117,7 +3117,7 @@ function AppInterna({ usuario }) {
                             .footer{margin-top:30px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
                           </style></head><body>`;
                           html+=`<h1>Cuenta Corriente — ${c.nombre} ${c.apellido}</h1>`;
-                          html+=`<div class="rango">Periodo: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS Financiera</div>`;
+                          html+=`<div class="rango">Periodo: ${exportCC.desde||"inicio"} al ${exportCC.hasta||"hoy"} · STS</div>`;
                           monedas.forEach(monId=>{
                             const mon=MONEDAS.find(m=>m.id===monId);
                             const movsMon=movsFiltrados.filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
@@ -3142,13 +3142,13 @@ function AppInterna({ usuario }) {
                               const debe=!ing?`<span class="debe">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
                               const haber=ing?`<span class="haber">${mon?.simbolo||""}${mv.monto.toLocaleString("es-AR")}</span>`:"";
                               const sClass=saldo>-1?"saldo-pos":"saldo-neg";
-                              const labelMap={ingreso_transf:"Me transfirio",ingreso_dep:"Me deposito",retiro_transf:"Le transferi",retiro_efectivo:"Retire efectivo"};
+                              const labelMap={ingreso_transf:"Depósito",ingreso_dep:"Depósito",retiro_transf:"Retiro",retiro_efectivo:"Retiro efectivo"};
                               html+=`<tr><td>${mv.fecha||""}</td><td>${labelMap[mv.tipo]||mv.tipo}</td><td style="color:#888">${mv.nota||""}</td><td style="text-align:right">${debe}</td><td style="text-align:right">${haber}</td><td style="text-align:right" class="${sClass}">${saldo>-1?"+":""}${mon?.simbolo||""}${saldo.toLocaleString("es-AR")}</td></tr>`;
                             });
                             const sClass=saldo>-1?"saldo-pos":"saldo-neg";
                             html+=`</tbody></table><div class="saldo-final ${sClass}">Saldo final: ${saldo>-1?"Me debe":"Le debo"} ${mon?.simbolo||""}${Math.abs(saldo).toLocaleString("es-AR")} ${monId}</div>`;
                           });
-                          html+=`<div class="footer">Generado por STS Financiera · ${hoy}</div></body></html>`;
+                          html+=`<div class="footer">Generado por STS · ${hoy}</div></body></html>`;
                           const w=window.open("","_blank");
                           w.document.write(html);
                           w.document.close();
@@ -3425,7 +3425,7 @@ function AppInterna({ usuario }) {
 
             // Footer
             hline(y,0.05); y+=14;
-            txt("Generado por STS Financiera  •  "+hoy,W/2,y,8,GRIS,"center");
+            txt("Generado por STS  •  "+hoy,W/2,y,8,GRIS,"center");
 
             // Evolucion vs dia anterior
             if(ultimoCierre?.total_usd&&varUSD!==null){
@@ -3441,7 +3441,7 @@ function AppInterna({ usuario }) {
 
             // Footer
             hline(y,0.05); y+=14;
-            txt("Generado por STS Financiera  •  "+hoy,W/2,y,8,GRIS,"center");
+            txt("Generado por STS  •  "+hoy,W/2,y,8,GRIS,"center");
 
             const link=document.createElement("a");
             link.download="STS-resumen-"+hoy+".png";
@@ -4568,7 +4568,7 @@ function AppInterna({ usuario }) {
                               .total{font-weight:700;font-size:14px;}.green{color:#16a34a;font-weight:700;}.red{color:#dc2626;font-weight:700;}
                               .footer{margin-top:40px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;}
                             </style></head><body>
-                            <h1>Liquidacion Mensual — STS Financiera</h1>
+                            <h1>Liquidacion Mensual — STS</h1>
                             <p style="color:#666;font-size:12px">${fechaLarga}</p>
                             <h2>RESUMEN PATRIMONIAL</h2>
                             <table><tr><td>Patrimonio final</td><td style="text-align:right" class="green">${fmtUSD(patrimonioFinal)}</td></tr>
@@ -4580,7 +4580,7 @@ function AppInterna({ usuario }) {
                             <tr><td class="total">Ganancia neta socios</td><td></td><td style="text-align:right" class="${gananciaNeta>-1?"green":"red"} total">${fmtUSD(gananciaNeta)}</td></tr></table>
                             <h2>POR SOCIO</h2>
                             <table><thead><tr><th>Socio</th><th style="text-align:right">%</th><th style="text-align:right">Corresponde</th></tr></thead><tbody>${distribRows}</tbody></table>
-                            <div class="footer">Generado por STS Financiera · ${hoy}</div>
+                            <div class="footer">Generado por STS · ${hoy}</div>
                             </body></html>`;
                             const w=window.open("","_blank"); w.document.write(html); w.document.close(); setTimeout(()=>w.print(),500);
                           }} style={{flex:1,padding:10,borderRadius:7,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f133",color:"#a5b4fc",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
