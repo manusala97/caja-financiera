@@ -3063,8 +3063,21 @@ function AppInterna({ usuario }) {
                           monedas.forEach(monId=>{
                             const mon=MONEDAS.find(m=>m.id===monId);
                             const movsMon=movsFiltrados.filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
-                            let saldo=0;
+                            // Calcular saldo histórico PREVIO al rango seleccionado
+                            const movsHistoricos=exportCC.desde
+                              ? c.movimientos.filter(mv=>mv.moneda===monId&&mv.fecha&&mv.fecha<exportCC.desde)
+                              : [];
+                            let saldo=movsHistoricos.reduce((s,mv)=>{
+                              const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+                              return s+(ing?-Number(mv.monto):Number(mv.monto));
+                            },0);
+                            const saldoInicial=saldo;
                             html+=`<h2>${monId}</h2><table><thead><tr><th>FECHA</th><th>CONCEPTO</th><th>NOTA</th><th style="text-align:right">DEBE</th><th style="text-align:right">HABER</th><th style="text-align:right">SALDO</th></tr></thead><tbody>`;
+                            // Fila de saldo inicial si hay rango
+                            if(exportCC.desde&&saldoInicial!==0){
+                              const sc=saldoInicial>-1?"saldo-pos":"saldo-neg";
+                              html+=`<tr style="background:#f9f9f9"><td colspan="5" style="color:#888;font-style:italic">Saldo anterior al ${exportCC.desde}</td><td style="text-align:right" class="${sc}">${saldoInicial>-1?"+":""}${mon?.simbolo||""}${saldoInicial.toLocaleString("es-AR")}</td></tr>`;
+                            }
                             movsMon.forEach(mv=>{
                               const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
                               saldo+=(ing?-mv.monto:mv.monto);
