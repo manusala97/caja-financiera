@@ -1214,6 +1214,8 @@ function AppInterna({ usuario }) {
     periodo:"", fechaImpacto:""
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
+  const [inversiones, setInversiones] = useState([]); // [{id, clienteId, clienteNombre, monto, tasa, fechaInicio, bloqueoDias, nota, activa}]
+  const [nuevaInv, setNuevaInv] = useState({clienteId:"",clienteBuscar:"",monto:"",tasa:"8",bloqueoDias:"30",nota:""});
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
   const [editMovV, setEditMovV] = useState({monto:"",nota:"",tipo:"",moneda:"ARS"});
   const SOCIOS_FIJOS=["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"];
@@ -1335,6 +1337,8 @@ function AppInterna({ usuario }) {
         // Liquidaciones
         const {data:liqData} = await SB.from("liquidaciones").select("*").order("fecha",{ascending:false}).limit(12);
         if (liqData) setLiquidaciones(liqData);
+        const {data:invData} = await SB.from("inversiones").select("*").order("fecha_inicio",{ascending:false});
+        if (invData) setInversiones(invData.map(x=>({...x,clienteNombre:x.cliente_nombre||""})));
         // Cierres
         const {data:ciData} = await SB.from("cierres").select("*").order("fecha",{ascending:true});
         if (ciData) setCierres(ciData);
@@ -1840,6 +1844,7 @@ function AppInterna({ usuario }) {
     {id:"gastos",label:"Gastos",c:"#f43f5e"},
     {id:"socios",label:"Socios",c:"#a78bfa"},
     {id:"referidores",label:"Referidores",c:"#fb923c"},
+    {id:"inversiones",label:"Inversiones",c:"#2dd4bf"},
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ];
@@ -4292,6 +4297,293 @@ function AppInterna({ usuario }) {
                   </div>
                 </Card>
               )}
+            </div>
+          );
+        })()}
+
+        {pant==="inversiones"&&(()=>{
+          // Calcular interés compuesto diario
+          function calcInteres(monto, tasaAnual, dias) {
+            return monto * (Math.pow(1 + tasaAnual/100, dias/365) - 1);
+          }
+          function diasEntreFechas(f1, f2) {
+            return Math.floor((new Date(f2) - new Date(f1)) / 86400000);
+          }
+          const hoyDate = hoy;
+          const invsActivas = inversiones.filter(x=>x.activa!==false);
+
+          // Generar PDF para una inversión
+          async function generarPDFInversion(inv) {
+            const dias = diasEntreFechas(inv.fecha_inicio, hoyDate);
+            const interes = calcInteres(inv.monto, inv.tasa, dias);
+            const total = inv.monto + interes;
+            const bloqueado = dias < inv.bloqueo_dias;
+            const diasRestantes = inv.bloqueo_dias - dias;
+            const cl = clientes.find(c=>c.id===Number(inv.cliente_id));
+            const nombre = cl ? cl.nombre+" "+cl.apellido : inv.cliente_nombre||"Cliente";
+
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+            <style>
+              body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;color:#1a1a2e;background:#fff;}
+              .header{text-align:center;border-bottom:3px solid #2dd4bf;padding-bottom:20px;margin-bottom:30px;}
+              .logo{font-size:28px;font-weight:900;color:#2dd4bf;letter-spacing:3px;}
+              .sub{font-size:11px;color:#6b7280;letter-spacing:2px;margin-top:4px;}
+              .title{font-size:18px;font-weight:700;margin:20px 0 6px;}
+              .fecha{font-size:11px;color:#6b7280;}
+              .card{background:#f8fafc;border-radius:10px;padding:20px;margin:16px 0;border:1px solid #e2e8f0;}
+              .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0;font-size:13px;}
+              .row:last-child{border-bottom:none;}
+              .label{color:#6b7280;}
+              .value{font-weight:600;color:#1a1a2e;}
+              .highlight{font-size:22px;font-weight:900;color:#2dd4bf;text-align:center;margin:20px 0;}
+              .status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;}
+              .bloqueado{background:#fef3c7;color:#92400e;}
+              .disponible{background:#d1fae5;color:#065f46;}
+              .footer{text-align:center;margin-top:40px;font-size:10px;color:#9ca3af;border-top:1px solid #e2e8f0;padding-top:16px;}
+              .bar-bg{background:#e2e8f0;border-radius:10px;height:8px;margin:8px 0;}
+              .bar-fill{background:#2dd4bf;border-radius:10px;height:8px;}
+            </style></head><body>
+            <div class="header">
+              <div class="logo">STS</div>
+              <div class="sub">ESTADO DE INVERSIÓN</div>
+            </div>
+            <div class="title">Estimado/a ${nombre}</div>
+            <div class="fecha">Reporte generado el ${new Date().toLocaleDateString("es-AR",{day:"2-digit",month:"long",year:"numeric"})}</div>
+            <div class="card">
+              <div class="row"><span class="label">Capital invertido</span><span class="value">USD ${inv.monto.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div class="row"><span class="label">Tasa anual</span><span class="value">${inv.tasa}% interés compuesto</span></div>
+              <div class="row"><span class="label">Fecha de inicio</span><span class="value">${new Date(inv.fecha_inicio+"T12:00:00").toLocaleDateString("es-AR",{day:"2-digit",month:"long",year:"numeric"})}</span></div>
+              <div class="row"><span class="label">Días transcurridos</span><span class="value">${dias} días</span></div>
+              <div class="row"><span class="label">Estado</span><span class="value"><span class="status ${bloqueado?"bloqueado":"disponible"}">${bloqueado?"🔒 Bloqueado ("+diasRestantes+" días restantes)":"✓ Disponible para retiro"}</span></span></div>
+            </div>
+            <div class="highlight">USD ${total.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+            <div style="text-align:center;font-size:12px;color:#6b7280;">Capital + Intereses acumulados al día de hoy</div>
+            <div class="card">
+              <div class="row"><span class="label">Capital</span><span class="value">USD ${inv.monto.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div class="row"><span class="label">Intereses generados</span><span class="value" style="color:#2dd4bf">+ USD ${interes.toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div class="row"><span class="label">Rentabilidad actual</span><span class="value" style="color:#2dd4bf">${((interes/inv.monto)*100).toFixed(3)}%</span></div>
+              ${inv.nota?`<div class="row"><span class="label">Nota</span><span class="value">${inv.nota}</span></div>`:""}
+            </div>
+            <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(100,(dias/365)*100)}%"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;"><span>Inicio</span><span>365 días (1 año)</span></div>
+            <div class="footer">STS · Este reporte es informativo · Los valores se calculan sobre la base de interés compuesto anual del ${inv.tasa}%</div>
+            </body></html>`;
+
+            const w = window.open("","_blank");
+            w.document.write(html);
+            w.document.close();
+            setTimeout(()=>w.print(), 500);
+          }
+
+          return (
+            <div>
+              <div style={{fontSize:10,letterSpacing:3,color:"#2dd4bf",marginBottom:4}}>INVERSIONES</div>
+              <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Seguimiento de inversiones con tasa en USD</div>
+
+              {/* Formulario nueva inversión */}
+              <Card sx={{marginBottom:16,border:"1px solid #2dd4bf33"}}>
+                <div style={{fontSize:10,letterSpacing:2,color:"#2dd4bf",marginBottom:12}}>NUEVA INVERSIÓN</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  {/* Cliente */}
+                  <div style={{position:"relative",gridColumn:"1/-1"}}>
+                    <Lbl>Cliente</Lbl>
+                    <div style={{display:"flex",gap:4}}>
+                      {nuevaInv.clienteId&&!nuevaInv.clienteBuscar&&(()=>{
+                        const cl=clientes.find(x=>x.id===Number(nuevaInv.clienteId));
+                        return cl?<div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(45,212,191,0.08)",border:"1px solid #2dd4bf44",fontSize:10,color:"#2dd4bf",fontWeight:600}}>{cl.nombre} {cl.apellido}</div>:null;
+                      })()}
+                      <input value={nuevaInv.clienteBuscar||""} onChange={e=>setNuevaInv(p=>({...p,clienteBuscar:e.target.value,clienteId:""}))}
+                        placeholder={nuevaInv.clienteId&&!nuevaInv.clienteBuscar?"Cambiar...":"Buscar cliente..."}
+                        style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                    </div>
+                    {nuevaInv.clienteBuscar&&(()=>{
+                      const filt=clientes.filter(c=>(c.nombre+" "+c.apellido).toLowerCase().includes(nuevaInv.clienteBuscar.toLowerCase()));
+                      return filt.length>0?(
+                        <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                          {filt.map(cl=>(
+                            <div key={cl.id} onClick={()=>setNuevaInv(p=>({...p,clienteId:String(cl.id),clienteBuscar:""}))}
+                              style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>
+                          ))}
+                        </div>
+                      ):null;
+                    })()}
+                  </div>
+                  <div><Lbl>Monto USD</Lbl><Inp type="number" placeholder="10000" value={nuevaInv.monto} onChange={e=>setNuevaInv(p=>({...p,monto:e.target.value}))}/></div>
+                  <div><Lbl>Tasa anual %</Lbl><Inp type="number" placeholder="8" value={nuevaInv.tasa} onChange={e=>setNuevaInv(p=>({...p,tasa:e.target.value}))}/></div>
+                  <div><Lbl>Bloqueo mínimo (días)</Lbl><Inp type="number" placeholder="30" value={nuevaInv.bloqueoDias} onChange={e=>setNuevaInv(p=>({...p,bloqueoDias:e.target.value}))}/></div>
+                  <div><Lbl>Fecha inicio</Lbl><Inp type="date" value={nuevaInv.fechaInicio||hoy} onChange={e=>setNuevaInv(p=>({...p,fechaInicio:e.target.value}))}/></div>
+                  <div style={{gridColumn:"1/-1"}}><Lbl>Nota (opcional)</Lbl><Inp placeholder="..." value={nuevaInv.nota} onChange={e=>setNuevaInv(p=>({...p,nota:e.target.value}))}/></div>
+                </div>
+                {/* Preview */}
+                {nuevaInv.monto&&nuevaInv.tasa&&(()=>{
+                  const m=parse(nuevaInv.monto), t=parse(nuevaInv.tasa);
+                  const int30=calcInteres(m,t,30), int90=calcInteres(m,t,90), int365=calcInteres(m,t,365);
+                  return (
+                    <div style={{background:"rgba(45,212,191,0.05)",border:"1px solid rgba(45,212,191,0.2)",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:11}}>
+                      <div style={{color:"#2dd4bf",fontWeight:700,marginBottom:6}}>Proyección interés compuesto:</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                        {[[30,int30],[90,int90],[365,int365]].map(([d,i])=>(
+                          <div key={d} style={{textAlign:"center",background:"rgba(45,212,191,0.06)",borderRadius:6,padding:"6px"}}>
+                            <div style={{fontSize:9,color:"#6b7280"}}>{d} días</div>
+                            <div style={{fontWeight:700,color:"#2dd4bf"}}>+USD {i.toFixed(2)}</div>
+                            <div style={{fontSize:9,color:"#4b5563"}}>Total {(m+i).toFixed(2)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <button onClick={async()=>{
+                  const m=parse(nuevaInv.monto), t=parse(nuevaInv.tasa), bl=parse(nuevaInv.bloqueoDias)||30;
+                  if(!nuevaInv.clienteId||!m||!t){notify("Completá cliente, monto y tasa",false);return;}
+                  const cl=clientes.find(x=>x.id===Number(nuevaInv.clienteId));
+                  const fInicio=nuevaInv.fechaInicio||hoy;
+                  const invData={cliente_id:Number(nuevaInv.clienteId),cliente_nombre:cl?cl.nombre+" "+cl.apellido:"",monto:m,tasa:t,bloqueo_dias:bl,fecha_inicio:fInicio,nota:nuevaInv.nota||"",activa:true};
+                  const {data:ins}=await SB.from("inversiones").insert(invData).select().single();
+                  if(ins){
+                    setInversiones(p=>[{...ins},...p]);
+                    // Registrar en CC del cliente como ingreso (nos deposita USD)
+                    const hora2=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                    const notaCC=`Inversión ${t}% anual — ${bl} días bloqueo — USD ${fmt(m)}`;
+                    await SB.from("movimientos_cc").insert({cliente_id:Number(nuevaInv.clienteId),hora:hora2,fecha:fInicio,tipo:"ingreso_transf",moneda:"USD",monto:m,nota:notaCC});
+                    setClientes(p=>p.map(cl2=>cl2.id!==Number(nuevaInv.clienteId)?cl2:{...cl2,movimientos:[...cl2.movimientos,{id:Date.now(),hora:hora2,fecha:fInicio,tipo:"ingreso_transf",moneda:"USD",monto:m,nota:notaCC}]}));
+                    setNuevaInv({clienteId:"",clienteBuscar:"",monto:"",tasa:"8",bloqueoDias:"30",nota:""});
+                    notify("Inversión registrada ✓");
+                  }
+                }}
+                  style={{width:"100%",padding:10,borderRadius:7,background:"rgba(45,212,191,0.08)",border:"1px solid #2dd4bf",color:"#2dd4bf",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  + REGISTRAR INVERSIÓN
+                </button>
+              </Card>
+
+              {/* Lista de inversiones activas */}
+              {invsActivas.length===0&&(
+                <Card sx={{textAlign:"center",padding:40}}>
+                  <div style={{fontSize:24,marginBottom:8}}>💎</div>
+                  <div style={{color:"#374151"}}>Sin inversiones activas</div>
+                </Card>
+              )}
+
+              {invsActivas.map(inv=>{
+                const dias=diasEntreFechas(inv.fecha_inicio,hoyDate);
+                const interes=calcInteres(inv.monto,inv.tasa,dias);
+                const total=inv.monto+interes;
+                const bloqueado=dias<inv.bloqueo_dias;
+                const pctCompletado=Math.min(100,(dias/365)*100);
+                const cl=clientes.find(c=>c.id===Number(inv.cliente_id));
+                const nombre=cl?cl.nombre+" "+cl.apellido:inv.cliente_nombre||"—";
+                return (
+                  <Card key={inv.id} sx={{marginBottom:12,border:"1px solid "+(bloqueado?"rgba(245,158,11,0.3)":"rgba(45,212,191,0.3)")}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{nombre}</div>
+                        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Inicio: {inv.fecha_inicio} · Tasa: {inv.tasa}% anual · Bloqueo: {inv.bloqueo_dias} días</div>
+                        {inv.nota&&<div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{inv.nota}</div>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:18,fontWeight:900,color:"#2dd4bf"}}>USD {total.toFixed(2)}</div>
+                        <div style={{fontSize:10,color:"#4ade80"}}>+USD {interes.toFixed(4)} intereses</div>
+                        <div style={{marginTop:4}}>
+                          <span style={{fontSize:9,padding:"2px 8px",borderRadius:10,fontWeight:700,background:bloqueado?"rgba(245,158,11,0.15)":"rgba(45,212,191,0.15)",color:bloqueado?"#f59e0b":"#2dd4bf"}}>
+                            {bloqueado?`🔒 ${inv.bloqueo_dias-dias} días para desbloquear`:"✓ Disponible"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Barra de progreso */}
+                    <div style={{background:"rgba(255,255,255,0.05)",borderRadius:10,height:6,marginBottom:10}}>
+                      <div style={{background:bloqueado?"#f59e0b":"#2dd4bf",borderRadius:10,height:6,width:pctCompletado+"%",transition:"width 0.3s"}}/>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#6b7280",marginBottom:12}}>
+                      <span>{dias} días transcurridos</span>
+                      <span>{pctCompletado.toFixed(1)}% del año</span>
+                    </div>
+                    {/* Detalles */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:12}}>
+                      {[[`Capital`,`USD ${fmt(inv.monto)}`,"#e2e8f0"],[`Intereses`,`+USD ${interes.toFixed(4)}`,"#4ade80"],[`Rentabilidad`,`${((interes/inv.monto)*100).toFixed(3)}%`,"#2dd4bf"]].map(([l,v,c])=>(
+                        <div key={l} style={{background:"rgba(255,255,255,0.02)",borderRadius:6,padding:"8px",textAlign:"center"}}>
+                          <div style={{fontSize:9,color:"#6b7280",marginBottom:2}}>{l}</div>
+                          <div style={{fontSize:11,fontWeight:700,color:c}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Acciones */}
+                    <div style={{display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+                      <button onClick={()=>generarPDFInversion(inv)}
+                        style={{padding:"6px 14px",borderRadius:6,background:"rgba(99,102,241,0.08)",border:"1px solid #6366f1",color:"#a5b4fc",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                        📄 Enviar estado
+                      </button>
+                      {!bloqueado&&(
+                        <button onClick={async()=>{
+                          if(!window.confirm(`Liquidar inversión de ${nombre}?
+Capital: USD ${fmt(inv.monto)}
+Intereses: USD ${interes.toFixed(4)}
+Total: USD ${total.toFixed(2)}`)) return;
+                          const hora2=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          // Registrar devolución capital en CC
+                          const notaK=`Liquidación inversión — capital USD ${fmt(inv.monto)}`;
+                          await SB.from("movimientos_cc").insert({cliente_id:inv.cliente_id,hora:hora2,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:inv.monto,nota:notaK});
+                          // Registrar intereses en CC
+                          const notaI=`Liquidación inversión — intereses ${inv.tasa}% anual por ${dias} días = USD ${interes.toFixed(4)}`;
+                          await SB.from("movimientos_cc").insert({cliente_id:inv.cliente_id,hora:hora2,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:interes,nota:notaI});
+                          // Marcar inversión como inactiva
+                          await SB.from("inversiones").update({activa:false}).eq("id",inv.id);
+                          setInversiones(p=>p.map(x=>x.id!==inv.id?x:{...x,activa:false}));
+                          setClientes(p=>p.map(cl2=>{
+                            if(cl2.id!==Number(inv.cliente_id)) return cl2;
+                            return {...cl2,movimientos:[...cl2.movimientos,
+                              {id:Date.now(),hora:hora2,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:inv.monto,nota:notaK},
+                              {id:Date.now()+1,hora:hora2,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:interes,nota:notaI}
+                            ]};
+                          }));
+                          notify("Inversión liquidada ✓");
+                        }}
+                          style={{padding:"6px 14px",borderRadius:6,background:"rgba(45,212,191,0.08)",border:"1px solid #2dd4bf",color:"#2dd4bf",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                          ✓ Liquidar USD {total.toFixed(2)}
+                        </button>
+                      )}
+                      {bloqueado&&(
+                        <button onClick={async()=>{
+                          if(!window.confirm(`Retiro anticipado de ${nombre}?
+SIN INTERESES — solo capital USD ${fmt(inv.monto)}
+¿Confirmar?`)) return;
+                          const hora2=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          const notaK=`Retiro anticipado inversión (sin intereses) — capital USD ${fmt(inv.monto)}`;
+                          await SB.from("movimientos_cc").insert({cliente_id:inv.cliente_id,hora:hora2,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:inv.monto,nota:notaK});
+                          await SB.from("inversiones").update({activa:false}).eq("id",inv.id);
+                          setInversiones(p=>p.map(x=>x.id!==inv.id?x:{...x,activa:false}));
+                          setClientes(p=>p.map(cl2=>{
+                            if(cl2.id!==Number(inv.cliente_id)) return cl2;
+                            return {...cl2,movimientos:[...cl2.movimientos,{id:Date.now(),hora:hora2,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:inv.monto,nota:notaK}]};
+                          }));
+                          notify("Retiro anticipado registrado");
+                        }}
+                          style={{padding:"6px 14px",borderRadius:6,background:"rgba(248,113,113,0.08)",border:"1px solid #f87171",color:"#f87171",fontFamily:"inherit",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                          ⚠ Retiro anticipado (sin intereses)
+                        </button>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+
+              {/* Resumen total */}
+              {invsActivas.length>0&&(()=>{
+                const totalCapital=invsActivas.reduce((s,inv)=>s+inv.monto,0);
+                const totalIntereses=invsActivas.reduce((s,inv)=>s+calcInteres(inv.monto,inv.tasa,diasEntreFechas(inv.fecha_inicio,hoyDate)),0);
+                return (
+                  <Card sx={{background:"rgba(45,212,191,0.04)",border:"1px solid rgba(45,212,191,0.2)"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                      {[["Inversiones activas",invsActivas.length+" clientes","#e2e8f0"],["Capital total","USD "+fmt(Math.round(totalCapital)),"#e2e8f0"],["Intereses acumulados","+USD "+totalIntereses.toFixed(2),"#4ade80"]].map(([l,v,c])=>(
+                        <div key={l} style={{textAlign:"center"}}>
+                          <div style={{fontSize:9,color:"#6b7280",marginBottom:4}}>{l}</div>
+                          <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                );
+              })()}
             </div>
           );
         })()}
