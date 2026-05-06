@@ -1210,7 +1210,7 @@ function AppInterna({ usuario }) {
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
-    patrimonioManual:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{},
+    patrimonioManual:"", reservaAcumulada:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{},
     periodo:"", fechaImpacto:""
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -4393,12 +4393,16 @@ function AppInterna({ usuario }) {
               {socios.length>0&&ultimoCierre?.total_usd&&(()=>{
                 const patrimonioFinal=parse(liquidacion.patrimonioManual)||ultimoCierre.total_usd;
                 const inversionTotal=total;
-                const gananciaBruta=patrimonioFinal-inversionTotal;
+                const reservaAcumAnterior=parse(liquidacion.reservaAcumulada)||0;
+                // Ganancia real = patrimonio final - inversión - reservas acumuladas de meses anteriores
+                const gananciaBruta=patrimonioFinal-inversionTotal-reservaAcumAnterior;
                 const sueldoFijoUSD=parse(liquidacion.cotizSueldo)>0?parse(liquidacion.sueldoFijo)/parse(liquidacion.cotizSueldo):0;
                 const sueldoVar=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctVariable)/100):0;
                 const totalEmpleado=sueldoFijoUSD+sueldoVar;
-                const reserva=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctReserva)/100):0;
-                const gananciaNeta=gananciaBruta-totalEmpleado-reserva;
+                const nuevaReserva=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctReserva)/100):0;
+                const reserva=nuevaReserva; // para compatibilidad con el resto
+                const reservaTotalAcum=reservaAcumAnterior+nuevaReserva;
+                const gananciaNeta=gananciaBruta-totalEmpleado-nuevaReserva;
                 return (
                   <div style={{marginTop:18}}>
                     <button onClick={()=>setLiquidacion(l=>({...l,mostrando:!l.mostrando}))}
@@ -4427,6 +4431,14 @@ function AppInterna({ usuario }) {
                             <Lbl>Monto de cierre USD <span style={{color:"#4b5563",fontSize:9}}>(por defecto ultimo cierre)</span></Lbl>
                             <Inp type="number" placeholder={fmtUSD(ultimoCierre.total_usd)+" (ultimo cierre)"} value={liquidacion.patrimonioManual}
                               onChange={e=>setLiquidacion(l=>({...l,patrimonioManual:e.target.value}))}/>
+                          </div>
+                          <div style={{marginBottom:10}}>
+                            <Lbl>Reserva acumulada meses anteriores (USD) <span style={{color:"#4b5563",fontSize:9}}>se resta de la ganancia</span></Lbl>
+                            <Inp type="number" placeholder="0" value={liquidacion.reservaAcumulada}
+                              onChange={e=>setLiquidacion(l=>({...l,reservaAcumulada:e.target.value}))}/>
+                            {reservaAcumAnterior>0&&<div style={{fontSize:10,color:"#6366f1",marginTop:3}}>
+                              Ganancia ajustada: USD {fmt(Math.round(gananciaBruta))} (sin las reservas previas)
+                            </div>}
                           </div>
                           {[
                             ["Patrimonio final",fmtUSD(patrimonioFinal),"#4ade80"],
