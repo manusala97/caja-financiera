@@ -1579,10 +1579,11 @@ function AppInterna({ usuario }) {
         const montoPend2=parse(form.monto);
         const horaPend2=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
         const notaPend2=(tipo==="compra"?"Compra":"Venta")+" "+fmt(montoPend2)+" "+form.moneda+" - pendiente entrega";
-        // compra: cliente nos debe los USD → retiro_transf (nos debe)
-        // venta: cliente nos debe los ARS → retiro_transf (nos debe)  
-        const mvPend2={id:Date.now()+998,hora:horaPend2,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend2,nota:notaPend2};
-        await SB.from("movimientos_cc").insert({cliente_id:cPendId2,hora:horaPend2,fecha:hoy,tipo:"retiro_transf",moneda:form.moneda,monto:montoPend2,nota:notaPend2});
+        // compra: cliente nos debe los USD → retiro_transf (DEBE = nos debe)
+        // venta: nosotros le debemos los USD al cliente → ingreso_transf (HABER = le debemos)
+        const tipoPend2=tipo==="compra"?"retiro_transf":"ingreso_transf";
+        const mvPend2={id:Date.now()+998,hora:horaPend2,fecha:hoy,tipo:tipoPend2,moneda:form.moneda,monto:montoPend2,nota:notaPend2};
+        await SB.from("movimientos_cc").insert({cliente_id:cPendId2,hora:horaPend2,fecha:hoy,tipo:tipoPend2,moneda:form.moneda,monto:montoPend2,nota:notaPend2});
         setClientes(p=>p.map(cl=>cl.id!==cPendId2?cl:{...cl,movimientos:[...cl.movimientos,mvPend2]}));
       }
       // Procesar USD pendiente de entrega (desglose)
@@ -1673,8 +1674,10 @@ function AppInterna({ usuario }) {
     // Revertir el impacto en saldos
     const ns={...saldos};
     const t=op.tipo;
-    if (t==="compra")    { ns[op.moneda]-=op.monto; ns[op.moneda2]+=op.monto2; }
-    else if (t==="venta"){ ns[op.moneda]+=op.monto; ns[op.moneda2]-=op.monto2; }
+    const imp2=op.impactoReal2!==undefined?op.impactoReal2:op.monto2;
+    const baseImpacto=op.baseImpactaCaja!=="no";
+    if (t==="compra")    { if(baseImpacto) ns[op.moneda]-=op.monto; ns[op.moneda2]+=imp2; }
+    else if (t==="venta"){ if(baseImpacto) ns[op.moneda]+=op.monto; ns[op.moneda2]-=imp2; }
     else if (t==="cheque_dia") { ns.ARS-=op.cn; }
     else if (t==="cheque_dif") { ns.ARS+=op.montoFinal||op.monto; }
     else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
@@ -1684,10 +1687,21 @@ function AppInterna({ usuario }) {
     await SB.from("operaciones").delete().eq("id",op.id);
     setOps(p=>p.filter(o=>o.id!==op.id));
 
-    // Borrar movimientos CC vinculados
+    // Borrar movimientos CC vinculados (Op. vinculada)
     for(const mv of movsVinculados){
       await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
       setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
+    }
+    // Borrar tambien movimientos de transferencia entre CCs si la nota coincide
+    const esTransCC = op.nota && (op.nota.includes("Transf. entre CCs") || op.nota.includes("entre CCs"));
+    if(esTransCC || op.tipo==="transf_cc"){
+      clientes.forEach(cl=>{
+        cl.movimientos.forEach(mv=>{
+          if(mv.nota&&mv.nota.includes("Transf. entre CCs")&&mv.fecha===op.fecha&&mv.hora===op.hora&&!movsVinculados.find(x=>x.mvId===mv.id)){
+            movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+cl.apellido});
+          }
+        });
+      });
     }
 
     await guardarDia(ns,null,null);
@@ -3249,10 +3263,30 @@ function AppInterna({ usuario }) {
                                       <td style={{padding:"6px 4px",whiteSpace:"nowrap"}}>
                                         <button onClick={()=>{setEditandoMov(mv.id);setEditMovV({tipo:mv.tipo,monto:String(mv.monto),nota:mv.nota||"",moneda:mv.moneda});}} style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",cursor:"pointer",fontFamily:"inherit",marginRight:3}}>editar</button>
                                         <button onClick={async()=>{
-                                          if(!window.confirm("Eliminar este movimiento?")) return;
-                                          await SB.from("movimientos_cc").delete().eq("id",mv.id);
-                                          setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
-                                          notify("Eliminado");
+                                          const esTransCC2=mv.nota&&mv.nota.includes("Transf. entre CCs");
+                                          if(esTransCC2){
+                                            if(!window.confirm("Es una transferencia entre CCs. Se van a borrar los movimientos de AMBAS cuentas. Continuar?")) return;
+                                            // Buscar espejo en otras CCs (misma hora, fecha y monto)
+                                            let borrados=0;
+                                            for(const cl2 of clientes){
+                                              if(cl2.id===clienteActivo) continue;
+                                              for(const mv2 of cl2.movimientos){
+                                                if(mv2.nota&&mv2.nota.includes("Transf. entre CCs")&&mv2.fecha===mv.fecha&&mv2.hora===mv.hora&&Number(mv2.monto)===Number(mv.monto)){
+                                                  await SB.from("movimientos_cc").delete().eq("id",mv2.id);
+                                                  setClientes(p=>p.map(x=>x.id!==cl2.id?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv2.id)}));
+                                                  borrados++;
+                                                }
+                                              }
+                                            }
+                                            await SB.from("movimientos_cc").delete().eq("id",mv.id);
+                                            setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
+                                            notify("Transf. entre CCs revertida en "+(borrados+1)+" cuentas");
+                                          } else {
+                                            if(!window.confirm("Eliminar este movimiento?")) return;
+                                            await SB.from("movimientos_cc").delete().eq("id",mv.id);
+                                            setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
+                                            notify("Eliminado");
+                                          }
                                         }} style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f43f5e",cursor:"pointer",fontFamily:"inherit"}}>borrar</button>
                                       </td>
                                     </tr>
