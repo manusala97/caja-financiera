@@ -1656,7 +1656,6 @@ function AppInterna({ usuario }) {
   }
 
   async function eliminarOpHoy(op) {
-    // Buscar movimientos CC vinculados a esta operacion (por nota "Op. vinculada")
     const movsVinculados=[];
     clientes.forEach(cl=>{
       cl.movimientos.forEach(mv=>{
@@ -1665,17 +1664,34 @@ function AppInterna({ usuario }) {
         }
       });
     });
-    // Confirm con detalle de qué se va a borrar
     const detalleCC=movsVinculados.length>0
       ? "\n\nTambien se van a borrar movimientos CC de:\n"+[...new Set(movsVinculados.map(x=>x.nombre))].join(", ")
       : "";
-    if (!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
-
-    // Revertir el impacto en saldos
+    let baseImpacto=true;
+    if(op.tipo==="compra"||op.tipo==="venta"){
+      if(op.baseImpactaCaja!==undefined){
+        baseImpacto=op.baseImpactaCaja!=="no";
+        if(!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
+      } else {
+        const monBase=op.moneda||"USD";
+        const siImpacto=window.confirm(
+          "Eliminar esta operacion?\n\n"+monBase+" impacto en tu caja fisica?\n\n"+
+          "OK = Si (se revierte la caja)\nCancelar = No (no se toca la caja)"+detalleCC
+        );
+        if(siImpacto){
+          baseImpacto=true;
+        } else {
+          const continuar=window.confirm("No se revierte la caja de "+monBase+". Confirmar eliminacion?");
+          if(!continuar) return;
+          baseImpacto=false;
+        }
+      }
+    } else {
+      if(!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
+    }
     const ns={...saldos};
     const t=op.tipo;
     const imp2=op.impactoReal2!==undefined?op.impactoReal2:op.monto2;
-    const baseImpacto=op.baseImpactaCaja!=="no";
     if (t==="compra")    { if(baseImpacto) ns[op.moneda]-=op.monto; ns[op.moneda2]+=imp2; }
     else if (t==="venta"){ if(baseImpacto) ns[op.moneda]+=op.monto; ns[op.moneda2]-=imp2; }
     else if (t==="cheque_dia") { ns.ARS-=op.cn; }
@@ -1686,24 +1702,10 @@ function AppInterna({ usuario }) {
     setSaldos(ns);
     await SB.from("operaciones").delete().eq("id",op.id);
     setOps(p=>p.filter(o=>o.id!==op.id));
-
-    // Borrar movimientos CC vinculados (Op. vinculada)
     for(const mv of movsVinculados){
       await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
       setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
     }
-    // Borrar tambien movimientos de transferencia entre CCs si la nota coincide
-    const esTransCC = op.nota && (op.nota.includes("Transf. entre CCs") || op.nota.includes("entre CCs"));
-    if(esTransCC || op.tipo==="transf_cc"){
-      clientes.forEach(cl=>{
-        cl.movimientos.forEach(mv=>{
-          if(mv.nota&&mv.nota.includes("Transf. entre CCs")&&mv.fecha===op.fecha&&mv.hora===op.hora&&!movsVinculados.find(x=>x.mvId===mv.id)){
-            movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+cl.apellido});
-          }
-        });
-      });
-    }
-
     await guardarDia(ns,null,null);
     notify("Eliminada"+(movsVinculados.length>0?" y movimientos CC revertidos":"")+" ✓");
   }
