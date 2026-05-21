@@ -2565,11 +2565,87 @@ function AppInterna({ usuario }) {
                     ))}
                   </div>}
                 </div>)}
-                {form.tipo==="transferencia"&&(<div style={S.grid("1fr 1fr",8)}>
-                  <div><Lbl>Monto</Lbl><Inp type="number" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
-                  <div><Lbl>Comision %</Lbl><Inp type="number" value={form.tpct} onChange={e=>setF("tpct",e.target.value)}/></div>
-                  {form.tn&&form.tpct&&<div style={{gridColumn:"1/-1",background:"#0a1a0a",borderRadius:6,padding:"8px",fontSize:12}}>Ingresa: <strong style={{color:"#4ade80"}}>${fmt(parse(form.tn)*parse(form.tpct)/100)}</strong></div>}
-                </div>)}
+                {form.tipo==="transferencia"&&(()=>{
+                  const tn=parse(form.tn),com=parse(form.tcomFijo)||0,neto=tn-com;
+                  const clOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId));
+                  const clDestino=clientes.find(x=>x.id===Number(form.ccDestinoId));
+                  const filtOrigen=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccOrigenBuscar||"").toLowerCase()));
+                  const filtDestino=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccDestinoBuscar||"").toLowerCase()));
+                  return (
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={S.grid("1fr 1fr",8)}>
+                        <div><Lbl>Monto enviado</Lbl><Inp type="number" placeholder="0" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
+                        <div><Lbl>Comision $</Lbl><Inp type="number" placeholder="0" value={form.tcomFijo||""} onChange={e=>setF("tcomFijo",e.target.value)}/></div>
+                      </div>
+                      {tn>0&&(
+                        <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:11}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                            <span style={{color:"#6b7280"}}>Origen paga (HABER):</span>
+                            <strong style={{color:"#f87171"}}>${fmt(neto)}</strong>
+                          </div>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:com>0?4:0}}>
+                            <span style={{color:"#6b7280"}}>Destino recibe (DEBE):</span>
+                            <strong style={{color:"#4ade80"}}>${fmt(tn)}</strong>
+                          </div>
+                          {com>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:4}}>
+                            <span style={{color:"#6b7280"}}>Ganancia financiera:</span>
+                            <strong style={{color:"#f59e0b"}}>${fmt(com)} ({((com/tn)*100).toFixed(2)}%)</strong>
+                          </div>}
+                        </div>
+                      )}
+                      {/* CC Origen */}
+                      <div style={{position:"relative"}}>
+                        <Lbl>CC Origen (quien envia)</Lbl>
+                        <div style={{display:"flex",gap:4}}>
+                          {clOrigen&&!form.ccOrigenBuscar&&(
+                            <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",fontSize:10,color:"#f87171",fontWeight:600}}>
+                              {clOrigen.nombre} {clOrigen.apellido}
+                            </div>
+                          )}
+                          <input value={form.ccOrigenBuscar||""} onChange={e=>setF("ccOrigenBuscar",e.target.value)}
+                            placeholder={clOrigen&&!form.ccOrigenBuscar?"Cambiar...":"Buscar origen..."}
+                            style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                          {form.ccOrigenId&&<button onClick={()=>setF("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
+                        </div>
+                        {form.ccOrigenBuscar&&filtOrigen.length>0&&(
+                          <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                            {filtOrigen.map(cl=>(
+                              <div key={cl.id} onClick={()=>{setF("ccOrigenId",String(cl.id));setF("ccOrigenBuscar","");}}
+                                style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                {cl.nombre} {cl.apellido}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {/* CC Destino */}
+                      <div style={{position:"relative"}}>
+                        <Lbl>CC Destino (quien recibe)</Lbl>
+                        <div style={{display:"flex",gap:4}}>
+                          {clDestino&&!form.ccDestinoBuscar&&(
+                            <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>
+                              {clDestino.nombre} {clDestino.apellido}
+                            </div>
+                          )}
+                          <input value={form.ccDestinoBuscar||""} onChange={e=>setF("ccDestinoBuscar",e.target.value)}
+                            placeholder={clDestino&&!form.ccDestinoBuscar?"Cambiar...":"Buscar destino..."}
+                            style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                          {form.ccDestinoId&&<button onClick={()=>setF("ccDestinoId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
+                        </div>
+                        {form.ccDestinoBuscar&&filtDestino.length>0&&(
+                          <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                            {filtDestino.map(cl=>(
+                              <div key={cl.id} onClick={()=>{setF("ccDestinoId",String(cl.id));setF("ccDestinoBuscar","");}}
+                                style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                {cl.nombre} {cl.apellido}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{marginTop:10,...S.grid("1fr 1fr",8)}}>
                   <div><Lbl>Cliente</Lbl><Inp placeholder="(opcional)" value={form.cliente} onChange={e=>setF("cliente",e.target.value)}/></div>
                   <div><Lbl>Nota</Lbl><Inp placeholder="..." value={form.nota} onChange={e=>setF("nota",e.target.value)}/></div>
