@@ -1,11 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
 
-
-const SB = createClient(
-  "https://aauyrjwytyxabjxyaech.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdXlyand5dHl4YWJqeHlhZWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NDc2MzcsImV4cCI6MjA4ODQyMzYzN30.KgsY8Oyn17eZrxHODj5jDXba-XrGx1H1bSh68jlSmmw"
-);
 
 const MONEDAS = [
   { id:"USD",  simbolo:"$",  color:"#4ade80", label:"Dolares" },
@@ -3709,7 +3702,11 @@ function AppInterna({ usuario }) {
                     {MONEDAS.map(m=><th key={m.id} style={{textAlign:"right",padding:"7px 10px",borderBottom:"2px solid #1f2937",color:m.color,fontSize:10}}>{m.id}</th>)}
                   </tr></thead>
                   <tbody>
-                    {clientes.map((c,i)=>(
+                    {clientes.filter(c=>{
+                      // Ocultar clientes con inversiones activas
+                      const tieneInv=inversiones.some(x=>x.activa!==false&&x.estado!=="finalizada"&&Number(x.cliente_id)===Number(c.id));
+                      return !tieneInv;
+                    }).map((c,i)=>(
                       <tr key={c.id}
                         draggable
                         onDragStart={e=>{ e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain", String(c.id)); dragSrcId.current=c.id; }}
@@ -3803,7 +3800,7 @@ function AppInterna({ usuario }) {
                               </td>
                               {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
                                 {m.id==="USD"
-                                  ?<span style={{fontSize:13,fontWeight:700,color:"#2dd4bf"}}>{fmt(totalInv)}</span>
+                                  ?<span style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{fmt(totalInv)}</span>
                                   :<span style={{color:"#374151"}}>—</span>}
                               </td>)}
                             </tr>
