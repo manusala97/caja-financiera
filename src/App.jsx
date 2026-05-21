@@ -1431,22 +1431,7 @@ function AppInterna({ usuario }) {
     }
     cargar();
     // Auto-refresh cada 30 segundos - solo ops y CCs (sin resetear pantalla)
-    const interval = setInterval(async()=>{
-      try {
-        const {data:cls}=await SB.from("clientes").select("*");
-        const {data:movs}=await SB.from("movimientos_cc").select("*").limit(5000);
-        if(cls) setClientes(sortClientes(cls).map(c2=>({
-          id:c2.id,nombre:c2.nombre,apellido:c2.apellido,socio:c2.socio,
-          movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c2.id)).map(m=>({
-            id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
-          }))
-        })));
-        const {data:opsData}=await SB.from("operaciones").select("*").order("hora",{ascending:true});
-        if(opsData) setOps(opsData.map(o=>({...(o.datos||{}),id:o.id,fecha:o.fecha||o.datos?.fecha,hora:o.hora||o.datos?.hora,tipo:o.tipo})));
-        setUltimoRefresh(new Date());
-      } catch(e){}
-    }, 30000);
-    return ()=>clearInterval(interval);
+    // Auto-refresh eliminado - usar boton manual Actualizar
   },[]);
 
   const calcDif = useMemo(()=>{
@@ -3056,10 +3041,12 @@ function AppInterna({ usuario }) {
 
         {pant==="clientes"&&clienteActivo&&(()=>{
           const c=clientes.find(x=>x.id===clienteActivo); if(!c) return null;
+          // Marcar que hay CC activa para pausar auto-refresh
+          if(typeof document!=="undefined") document.body.setAttribute("data-cc-activa","1");
           const sal=saldoCC(c);
           return (
             <div>
-              <button onClick={()=>setClienteActivo(null)} style={{...S.btn(false),marginBottom:14}}>Volver</button>
+              <button onClick={()=>{setClienteActivo(null);document.body.removeAttribute('data-cc-activa');}} style={{...S.btn(false),marginBottom:14}}>Volver</button>
               <div style={{fontSize:15,fontWeight:700,marginBottom:7}}>{c.nombre} {c.apellido}</div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:18}}>
                 {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
