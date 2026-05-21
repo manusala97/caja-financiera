@@ -1244,7 +1244,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", baseImpactaCaja:"si" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -1692,29 +1692,36 @@ function AppInterna({ usuario }) {
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
       setF("dn",""); setF("dfa","");
     } else if (tipo==="transferencia") {
-      const tn=parse(form.tn),tcomFijo=parse(form.tcomFijo)||0;
+      const tn=parse(form.tn);
       if (!tn) { notify("Ingresa un monto",false); return; }
-      const neto=tn-tcomFijo;
-      // La comision NO entra a caja - es la diferencia entre lo que manda origen y lo que recibe destino
-      opData={tipo,hora,tn,tpct:0,tcom:tcomFijo,tcomFijo,neto,monto:tcomFijo,ccOrigenId:form.ccOrigenId,ccDestinoId:form.ccDestinoId,cliente:form.cliente,nota:form.nota};
+      const tMon=form.tmoneda||"ARS";
+      const pctOrigen=parse(form.tpctOrigen)||0;
+      const pctDestino=parse(form.tpctDestino)||0;
+      const comOrigen=tn*(pctOrigen/100);
+      const comDestino=tn*(pctDestino/100);
+      const netoOrigen=tn-comOrigen;   // lo que le queda en HABER al origen
+      const netoDestino=tn+comDestino; // lo que debe el destino (tn + su comision)
+      const gananciaFin=comOrigen+comDestino;
+      const nombreOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen";
+      const nombreDestino=clientes.find(x=>x.id===Number(form.ccDestinoId))?.nombre||"destino";
+      opData={tipo,hora,tn,tpct:pctOrigen,tpctOrigen:pctOrigen,tpctDestino:pctDestino,tcom:gananciaFin,netoOrigen,netoDestino,monto:gananciaFin,ccOrigenId:form.ccOrigenId,ccDestinoId:form.ccDestinoId,tmoneda:tMon,cliente:form.cliente,nota:form.nota};
       // CC Origen: ingreso_transf por el neto (HABER = le debemos el neto)
       if(form.ccOrigenId){
         const cOrId=Number(form.ccOrigenId);
-        const tMon=form.tmoneda||"ARS";
-        const notaOr="Transf. a "+(clientes.find(x=>x.id===Number(form.ccDestinoId))?.nombre||"destino")+" - neto "+fmt(neto)+" "+tMon+(tcomFijo?" (com "+fmt(tcomFijo)+")":"");
-        const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:neto,nota:notaOr};
-        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:neto,nota:notaOr});
+        const notaOr="Transf. a "+nombreDestino+" - "+fmt(netoOrigen)+" "+tMon+(pctOrigen?" (com "+pctOrigen+"%)":"");
+        const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr};
+        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr});
         setClientes(p=>p.map(cl=>cl.id!==cOrId?cl:{...cl,movimientos:[...cl.movimientos,mvOr]}));
       }
-      // CC Destino: retiro_transf por el neto (DEBE = nos debe el neto)
+      // CC Destino: retiro_transf por el total mas su comision (DEBE = nos debe)
       if(form.ccDestinoId){
         const cDId=Number(form.ccDestinoId);
-        const notaDest="Transf. de "+(clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen")+" - "+fmt(neto)+" "+tMon;
-        const mvDest={id:Date.now()+2,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:neto,nota:notaDest};
-        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:neto,nota:notaDest});
+        const notaDest="Transf. de "+nombreOrigen+" - "+fmt(netoDestino)+" "+tMon+(pctDestino?" (com "+pctDestino+"%)":"");
+        const mvDest={id:Date.now()+2,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:netoDestino,nota:notaDest};
+        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:netoDestino,nota:notaDest});
         setClientes(p=>p.map(cl=>cl.id!==cDId?cl:{...cl,movimientos:[...cl.movimientos,mvDest]}));
       }
-      setF("tn",""); setF("tpct",""); setF("tcomFijo",""); setF("ccOrigenId",""); setF("ccDestinoId","");
+      setF("tn",""); setF("tpctOrigen",""); setF("tpctDestino",""); setF("ccOrigenId",""); setF("ccDestinoId",""); setF("ccOrigenBuscar",""); setF("ccDestinoBuscar","");
     }
     if (!opData) return;
     setSaldos(ns);
