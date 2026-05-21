@@ -872,7 +872,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     dn: opInicial?.dn?String(opInicial.dn):"", dtm:"58", dtg:"2.5",
     dfr: fechaDefault||hoy, dfa: opInicial?.dfa||"",
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
-    tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
+    tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", tmoneda: opInicial?.tmoneda||"ARS", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
     ccOrigenBuscar:"", ccDestinoBuscar:"",
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
@@ -1244,7 +1244,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", baseImpactaCaja:"si" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", baseImpactaCaja:"si" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -1700,17 +1700,18 @@ function AppInterna({ usuario }) {
       // CC Origen: ingreso_transf por el neto (HABER = le debemos el neto)
       if(form.ccOrigenId){
         const cOrId=Number(form.ccOrigenId);
-        const notaOr="Transf. a "+(clientes.find(x=>x.id===Number(form.ccDestinoId))?.nombre||"destino")+" - neto $"+fmt(neto)+(tcomFijo?" (com $"+fmt(tcomFijo)+")":"");
-        const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:neto,nota:notaOr};
-        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:neto,nota:notaOr});
+        const tMon=form.tmoneda||"ARS";
+        const notaOr="Transf. a "+(clientes.find(x=>x.id===Number(form.ccDestinoId))?.nombre||"destino")+" - neto "+fmt(neto)+" "+tMon+(tcomFijo?" (com "+fmt(tcomFijo)+")":"");
+        const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:neto,nota:notaOr};
+        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:neto,nota:notaOr});
         setClientes(p=>p.map(cl=>cl.id!==cOrId?cl:{...cl,movimientos:[...cl.movimientos,mvOr]}));
       }
       // CC Destino: retiro_transf por el neto (DEBE = nos debe el neto)
       if(form.ccDestinoId){
         const cDId=Number(form.ccDestinoId);
-        const notaDest="Transf. de "+(clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen")+" - $"+fmt(neto);
-        const mvDest={id:Date.now()+2,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:neto,nota:notaDest};
-        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:neto,nota:notaDest});
+        const notaDest="Transf. de "+(clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen")+" - "+fmt(neto)+" "+tMon;
+        const mvDest={id:Date.now()+2,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:neto,nota:notaDest};
+        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:neto,nota:notaDest});
         setClientes(p=>p.map(cl=>cl.id!==cDId?cl:{...cl,movimientos:[...cl.movimientos,mvDest]}));
       }
       setF("tn",""); setF("tpct",""); setF("tcomFijo",""); setF("ccOrigenId",""); setF("ccDestinoId","");
@@ -2573,9 +2574,10 @@ function AppInterna({ usuario }) {
                   const filtDestino=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccDestinoBuscar||"").toLowerCase()));
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      <div style={S.grid("1fr 1fr",8)}>
+                      <div style={S.grid("1fr 1fr 1fr",8)}>
+                        <div><Lbl>Moneda</Lbl><MonedasSel value={form.tmoneda||"ARS"} onChange={v=>setF("tmoneda",v)}/></div>
                         <div><Lbl>Monto enviado</Lbl><Inp type="number" placeholder="0" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
-                        <div><Lbl>Comision $</Lbl><Inp type="number" placeholder="0" value={form.tcomFijo||""} onChange={e=>setF("tcomFijo",e.target.value)}/></div>
+                        <div><Lbl>Comision</Lbl><Inp type="number" placeholder="0" value={form.tcomFijo||""} onChange={e=>setF("tcomFijo",e.target.value)}/></div>
                       </div>
                       {tn>0&&(
                         <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:11}}>
