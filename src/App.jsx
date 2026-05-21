@@ -3034,12 +3034,11 @@ function AppInterna({ usuario }) {
 
         {pant==="clientes"&&clienteActivo&&(()=>{
           const c=clientes.find(x=>x.id===clienteActivo); if(!c) return null;
-          // Marcar que hay CC activa para pausar auto-refresh
-          if(typeof document!=="undefined") document.body.setAttribute("data-cc-activa","1");
+
           const sal=saldoCC(c);
           return (
             <div>
-              <button onClick={()=>{setClienteActivo(null);document.body.removeAttribute('data-cc-activa');}} style={{...S.btn(false),marginBottom:14}}>Volver</button>
+              <button onClick={()=>setClienteActivo(null)} style={{...S.btn(false),marginBottom:14}}>Volver</button>
               <div style={{fontSize:15,fontWeight:700,marginBottom:7}}>{c.nombre} {c.apellido}</div>
               <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:18}}>
                 {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
