@@ -2574,31 +2574,36 @@ function AppInterna({ usuario }) {
                   </div>}
                 </div>)}
                 {form.tipo==="transferencia"&&(()=>{
-                  const tn=parse(form.tn),com=parse(form.tcomFijo)||0,neto=tn-com;
+                  const tnV=parse(form.tn),pctOr=parse(form.tpctOrigen)||0,pctDest=parse(form.tpctDestino)||0;
+                  const comOr=tnV*(pctOr/100),comDest=tnV*(pctDest/100);
+                  const netoOr=tnV-comOr,netoDest=tnV+comDest,ganFin=comOr+comDest;
                   const clOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId));
                   const clDestino=clientes.find(x=>x.id===Number(form.ccDestinoId));
                   const filtOrigen=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccOrigenBuscar||"").toLowerCase()));
                   const filtDestino=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccDestinoBuscar||"").toLowerCase()));
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      <div style={S.grid("1fr 1fr 1fr",8)}>
+                      <div style={S.grid("1fr 1fr",8)}>
                         <div><Lbl>Moneda</Lbl><MonedasSel value={form.tmoneda||"ARS"} onChange={v=>setF("tmoneda",v)}/></div>
-                        <div><Lbl>Monto enviado</Lbl><Inp type="number" placeholder="0" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
-                        <div><Lbl>Comision</Lbl><Inp type="number" placeholder="0" value={form.tcomFijo||""} onChange={e=>setF("tcomFijo",e.target.value)}/></div>
+                        <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
                       </div>
-                      {tn>0&&(
+                      <div style={S.grid("1fr 1fr",8)}>
+                        <div><Lbl>% Comision origen</Lbl><Inp type="number" placeholder="ej: 2.75" value={form.tpctOrigen||""} onChange={e=>setF("tpctOrigen",e.target.value)}/></div>
+                        <div><Lbl>% Comision destino</Lbl><Inp type="number" placeholder="ej: 2.25" value={form.tpctDestino||""} onChange={e=>setF("tpctDestino",e.target.value)}/></div>
+                      </div>
+                      {tnV>0&&(
                         <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:11}}>
                           <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                            <span style={{color:"#6b7280"}}>Origen paga (HABER):</span>
-                            <strong style={{color:"#f87171"}}>${fmt(neto)}</strong>
+                            <span style={{color:"#6b7280"}}>Origen HABER ({pctOr}%):</span>
+                            <strong style={{color:"#f87171"}}>{fmt(netoOr)}</strong>
                           </div>
-                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:com>0?4:0}}>
-                            <span style={{color:"#6b7280"}}>Destino recibe (DEBE):</span>
-                            <strong style={{color:"#4ade80"}}>${fmt(tn)}</strong>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:ganFin>0?4:0}}>
+                            <span style={{color:"#6b7280"}}>Destino DEBE ({pctDest}%):</span>
+                            <strong style={{color:"#4ade80"}}>{fmt(netoDest)}</strong>
                           </div>
-                          {com>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:4}}>
-                            <span style={{color:"#6b7280"}}>Ganancia financiera:</span>
-                            <strong style={{color:"#f59e0b"}}>${fmt(com)} ({((com/tn)*100).toFixed(2)}%)</strong>
+                          {ganFin>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:4}}>
+                            <span style={{color:"#f59e0b",fontWeight:600}}>Ganancia financiera:</span>
+                            <strong style={{color:"#f59e0b"}}>{fmt(ganFin)} ({((ganFin/tnV)*100).toFixed(2)}%)</strong>
                           </div>}
                         </div>
                       )}
