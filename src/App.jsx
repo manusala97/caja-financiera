@@ -872,6 +872,8 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     dn: opInicial?.dn?String(opInicial.dn):"", dtm:"58", dtg:"2.5",
     dfr: fechaDefault||hoy, dfa: opInicial?.dfa||"",
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
+    tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
+    ccOrigenBuscar:"", ccDestinoBuscar:"",
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
   const calcDif = useMemo(()=>{
@@ -897,8 +899,9 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
       return {tipo:t,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:f.dfa,monto:calcDif.mFinal,cliente:f.cliente,nota:f.nota};
     }
     if (t==="transferencia") {
-      const tn=parse(f.tn),tpct=parse(f.tpct); if (!tn||!tpct) return null;
-      return {tipo:t,hora,tn,tpct,tcom:tn*tpct/100,monto:tn*tpct/100,cliente:f.cliente,nota:f.nota};
+      const tn=parse(f.tn),tcomFijo=parse(f.tcomFijo); if (!tn) return null;
+      const neto=tn-tcomFijo;
+      return {tipo:t,hora,tn,tpct:0,tcom:tcomFijo,tcomFijo,neto,monto:tcomFijo,ccOrigenId:f.ccOrigenId,ccDestinoId:f.ccDestinoId,cliente:f.cliente,nota:f.nota};
     }
     return null;
   }
@@ -961,15 +964,88 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
           </div>}
         </div>
       )}
-      {f.tipo==="transferencia"&&(
-        <div style={S.grid("1fr 1fr",8)}>
-          <div><Lbl>Monto</Lbl><Inp type="number" value={f.tn} onChange={e=>sf("tn",e.target.value)}/></div>
-          <div><Lbl>Comision %</Lbl><Inp type="number" value={f.tpct} onChange={e=>sf("tpct",e.target.value)}/></div>
-          {f.tn&&f.tpct&&<div style={{gridColumn:"1/-1",background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:12}}>
-            Ingresa: <strong style={{color:"#4ade80"}}>${fmt(parse(f.tn)*parse(f.tpct)/100)}</strong>
-          </div>}
-        </div>
-      )}
+      {f.tipo==="transferencia"&&(()=>{
+        const tn=parse(f.tn), com=parse(f.tcomFijo), neto=tn-com;
+        const clOrigen=clientes.find(x=>x.id===Number(f.ccOrigenId));
+        const clDestino=clientes.find(x=>x.id===Number(f.ccDestinoId));
+        const filtOrigen=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((f.ccOrigenBuscar||"").toLowerCase()));
+        const filtDestino=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((f.ccDestinoBuscar||"").toLowerCase()));
+        return (
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* Monto y comision */}
+            <div style={S.grid("1fr 1fr",8)}>
+              <div><Lbl>Monto enviado</Lbl><Inp type="number" placeholder="0" value={f.tn} onChange={e=>sf("tn",e.target.value)}/></div>
+              <div><Lbl>Comision $</Lbl><Inp type="number" placeholder="0" value={f.tcomFijo} onChange={e=>sf("tcomFijo",e.target.value)}/></div>
+            </div>
+            {tn>0&&(
+              <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:11}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{color:"#6b7280"}}>Origen paga (HABER):</span>
+                  <strong style={{color:"#f87171"}}>${fmt(neto)}</strong>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{color:"#6b7280"}}>Destino recibe (DEBE):</span>
+                  <strong style={{color:"#4ade80"}}>${fmt(tn)}</strong>
+                </div>
+                {com>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:4}}>
+                  <span style={{color:"#6b7280"}}>Ganancia financiera:</span>
+                  <strong style={{color:"#f59e0b"}}>${fmt(com)} ({((com/tn)*100).toFixed(2)}%)</strong>
+                </div>}
+              </div>
+            )}
+            {/* CC Origen */}
+            <div style={{position:"relative"}}>
+              <Lbl>CC Origen (quien envia)</Lbl>
+              <div style={{display:"flex",gap:4}}>
+                {clOrigen&&!f.ccOrigenBuscar&&(
+                  <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",fontSize:10,color:"#f87171",fontWeight:600}}>
+                    {clOrigen.nombre} {clOrigen.apellido}
+                  </div>
+                )}
+                <input value={f.ccOrigenBuscar||""} onChange={e=>sf("ccOrigenBuscar",e.target.value)}
+                  placeholder={clOrigen&&!f.ccOrigenBuscar?"Cambiar...":"Buscar origen..."}
+                  style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                {f.ccOrigenId&&<button onClick={()=>sf("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
+              </div>
+              {f.ccOrigenBuscar&&filtOrigen.length>0&&(
+                <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                  {filtOrigen.map(cl=>(
+                    <div key={cl.id} onClick={()=>{sf("ccOrigenId",String(cl.id));sf("ccOrigenBuscar","");}}
+                      style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                      {cl.nombre} {cl.apellido}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* CC Destino */}
+            <div style={{position:"relative"}}>
+              <Lbl>CC Destino (quien recibe)</Lbl>
+              <div style={{display:"flex",gap:4}}>
+                {clDestino&&!f.ccDestinoBuscar&&(
+                  <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>
+                    {clDestino.nombre} {clDestino.apellido}
+                  </div>
+                )}
+                <input value={f.ccDestinoBuscar||""} onChange={e=>sf("ccDestinoBuscar",e.target.value)}
+                  placeholder={clDestino&&!f.ccDestinoBuscar?"Cambiar...":"Buscar destino..."}
+                  style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                {f.ccDestinoId&&<button onClick={()=>sf("ccDestinoId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
+              </div>
+              {f.ccDestinoBuscar&&filtDestino.length>0&&(
+                <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                  {filtDestino.map(cl=>(
+                    <div key={cl.id} onClick={()=>{sf("ccDestinoId",String(cl.id));sf("ccDestinoBuscar","");}}
+                      style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                      {cl.nombre} {cl.apellido}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       <div style={{marginTop:10,...S.grid("1fr 1fr",8)}}>
         <div><Lbl>Cliente</Lbl><Inp placeholder="(opcional)" value={f.cliente} onChange={e=>sf("cliente",e.target.value)}/></div>
         <div><Lbl>Nota</Lbl><Inp placeholder="..." value={f.nota} onChange={e=>sf("nota",e.target.value)}/></div>
@@ -1616,11 +1692,28 @@ function AppInterna({ usuario }) {
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
       setF("dn",""); setF("dfa","");
     } else if (tipo==="transferencia") {
-      const tn=parse(form.tn),tpct=parse(form.tpct);
-      if (!tn||!tpct) { notify("Ingresa monto y %",false); return; }
-      ns.ARS+=tn*tpct/100;
-      opData={tipo,hora,tn,tpct,tcom:tn*tpct/100,monto:tn*tpct/100,cliente:form.cliente,nota:form.nota};
-      setF("tn",""); setF("tpct","");
+      const tn=parse(form.tn),tcomFijo=parse(form.tcomFijo)||0;
+      if (!tn) { notify("Ingresa un monto",false); return; }
+      const neto=tn-tcomFijo;
+      // La comision NO entra a caja - es la diferencia entre lo que manda origen y lo que recibe destino
+      opData={tipo,hora,tn,tpct:0,tcom:tcomFijo,tcomFijo,neto,monto:tcomFijo,ccOrigenId:form.ccOrigenId,ccDestinoId:form.ccDestinoId,cliente:form.cliente,nota:form.nota};
+      // CC Origen: ingreso_transf por el neto (HABER = le debemos el neto)
+      if(form.ccOrigenId){
+        const cOrId=Number(form.ccOrigenId);
+        const notaOr="Transf. a "+(clientes.find(x=>x.id===Number(form.ccDestinoId))?.nombre||"destino")+" - neto $"+fmt(neto)+(tcomFijo?" (com $"+fmt(tcomFijo)+")":"");
+        const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:neto,nota:notaOr};
+        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:neto,nota:notaOr});
+        setClientes(p=>p.map(cl=>cl.id!==cOrId?cl:{...cl,movimientos:[...cl.movimientos,mvOr]}));
+      }
+      // CC Destino: retiro_transf por el neto (DEBE = nos debe el neto)
+      if(form.ccDestinoId){
+        const cDId=Number(form.ccDestinoId);
+        const notaDest="Transf. de "+(clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen")+" - $"+fmt(neto);
+        const mvDest={id:Date.now()+2,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:neto,nota:notaDest};
+        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:neto,nota:notaDest});
+        setClientes(p=>p.map(cl=>cl.id!==cDId?cl:{...cl,movimientos:[...cl.movimientos,mvDest]}));
+      }
+      setF("tn",""); setF("tpct",""); setF("tcomFijo",""); setF("ccOrigenId",""); setF("ccDestinoId","");
     }
     if (!opData) return;
     setSaldos(ns);
@@ -1696,7 +1789,7 @@ function AppInterna({ usuario }) {
     else if (t==="venta"){ if(baseImpacto) ns[op.moneda]+=op.monto; ns[op.moneda2]-=imp2; }
     else if (t==="cheque_dia") { ns.ARS-=op.cn; }
     else if (t==="cheque_dif") { ns.ARS+=op.montoFinal||op.monto; }
-    else if (t==="transferencia") { ns.ARS-=op.tcom||op.monto; }
+    else if (t==="transferencia") { /* comision no impacta caja */ }
     else if (t==="ajuste") { ns[op.moneda]-=op.delta; }
     else if (t==="cobro_dif") { ns[op.moneda]-=op.monto; }
     setSaldos(ns);
