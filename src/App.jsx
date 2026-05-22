@@ -1058,12 +1058,12 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
   );
 }
 
-function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancelar, ultimaCotiz={}, ultimaBlue="" }) {
+function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onCerrar, onCancelar, ultimaCotiz={}, ultimaBlue="" }) {
   const [cotiz, setCotiz] = useState({ ARS:ultimaCotiz.ARS||"", BRL:ultimaCotiz.BRL||"", GBP:ultimaCotiz.GBP||"", EUR:ultimaCotiz.EUR||"", USDT:"1" });
   const [cotizCompra, setCotizCompra] = useState(ultimaBlue?.compra||"");
   const [cotizVenta, setCotizVenta] = useState(ultimaBlue?.venta||"");
   const sc = (k,v) => setCotiz(c=>({...c,[k]:v}));
-  // Calcular patrimonio total = caja fisica + CCs + cheques a cobrar
+  // Calcular patrimonio total = caja fisica + CCs + cheques - inversiones
   const patrimonioTotal = useMemo(()=>{
     if (!parse(cotiz.ARS)) return null;
     const tots=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
@@ -1073,15 +1073,25 @@ function ModalCierre({ saldos, clientes, diferidos, saldoCC, onCerrar, onCancela
         if(te>0) return s+d.nominal*(1-te/100);
         return s+(d.mFinal||d.nominal);
       },0);
-    const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)]));
+    // Inversiones activas - capital + intereses (la financiera les debe)
+    function calcIntC(monto,tasa,dias){return monto*(Math.pow(1+tasa/100,dias/365)-1);}
+    const invsAct=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");
+    const totalInv=invsAct.reduce((s,inv)=>{
+      const hoyDate=new Date().toISOString().split("T")[0];
+      const dias=Math.floor((new Date(hoyDate)-new Date(inv.fecha_inicio))/86400000);
+      return s+inv.monto+calcIntC(inv.monto,inv.tasa,dias);
+    },0);
+    // Inversiones restan del patrimonio (son pasivos)
+    const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)-(mId==="USD"?totalInv:0)]));
     return {
       totalUSD: calcTotalUSD(patrimonioSaldos, cotiz),
       cajaUSD: calcTotalUSD(saldos, cotiz),
       saldosPatrimonio: patrimonioSaldos,
       totalDif,
+      totalInv,
       tots,
     };
-  },[saldos,cotiz,clientes,diferidos]);
+  },[saldos,cotiz,clientes,diferidos,inversiones]);
   const totalUSD = patrimonioTotal?.totalUSD||null;
   const monCotiz = MONEDAS.filter(m=>m.id!=="USD");
   return (
@@ -1963,7 +1973,7 @@ function AppInterna({ usuario }) {
   return (
     <div style={S.app}>
       {toast&&<div style={S.toast(toast.ok)}>{toast.msg}</div>}
-      {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} ultimaBlue={ultimaBlue} onCerrar={(cotiz,total,blue)=>{setUltimaCotiz(cotiz);setUltimaBlue(blue);ejecutarCierre(cotiz,total,blue);}} onCancelar={()=>setShowModalCierre(false)}/>}
+      {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} inversiones={inversiones} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} ultimaBlue={ultimaBlue} onCerrar={(cotiz,total,blue)=>{setUltimaCotiz(cotiz);setUltimaBlue(blue);ejecutarCierre(cotiz,total,blue);}} onCancelar={()=>setShowModalCierre(false)}/>}
       {editandoOp&&(
         <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}}>
