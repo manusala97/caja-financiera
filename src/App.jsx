@@ -216,7 +216,7 @@ function PantallaAnalisis() {
         SB.from("operaciones").select("*").order("fecha", { ascending: true }).order("hora", { ascending: true }),
         SB.from("cierres").select("*").order("fecha", { ascending: true }),
         SB.from("dias").select("*").order("id", { ascending: true }),
-        SB.from("movimientos_cc").select("*").limit(5000),
+        SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000),
         SB.from("diferidos").select("*"),
       ]);
       if (!cierres?.length) {
@@ -1388,7 +1388,7 @@ function AppInterna({ usuario }) {
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
-        const {data:movs} = await SB.from("movimientos_cc").select("*").limit(5000);
+        const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000);
         if (cls) {
           const tresor=cls.find(x=>x.nombre==="TRESOR"||x.nombre==="Tresor");
           if(tresor) {
