@@ -3481,8 +3481,8 @@ function AppInterna({ usuario }) {
 
         {pant==="posicion"&&(()=>{
           const getS=(cId,mId)=>{ const k=cId+"_"+mId; return posOvr[k]!==undefined?posOvr[k]:(saldoCC(clientes.find(x=>x.id===cId))[mId]||0); };
-          const idsEnInversion=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada").map(x=>Number(x.cliente_id));
-          const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.filter(c=>!idsEnInversion.includes(Number(c.id))).reduce((s,c)=>s+getS(c.id,m.id),0)]));
+          const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+getS(c.id,m.id),0)]));
+          const totsCC=Object.fromEntries(MONEDAS.map(m=>[m.id,tots[m.id]-((inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada").reduce((s,x)=>{const cl=clientes.find(c=>Number(c.id)===Number(x.cliente_id));return s+(cl?saldoCC(cl)[m.id]||0:0);},0))]));
           const meses=Object.entries(fact.meses||{});
           const ganAcum=meses.reduce((s,[,v])=>s+parse(v),0),obj=parse(fact.objetivo);
 
@@ -3769,7 +3769,7 @@ function AppInterna({ usuario }) {
                       // Patrimonio total = caja fisica + CCs + cheques a cobrar + inversiones
                       const invsActPat=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");
                       const totalInvPat=invsActPat.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);
-                      const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)-(m.id==="USD"?totalInvPat:0)]));
+                      const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+totsCC[m.id]+(m.id==="ARS"?totalDif:0)]));
                       return (<>
                         <tr style={{borderTop:"2px solid #1f2937",background:"#0a1a0a"}}>
                           <td style={{padding:"9px 10px",fontSize:9,color:"#4ade80",fontWeight:700,letterSpacing:1}}>CAJA OFICINA</td>
@@ -3780,7 +3780,7 @@ function AppInterna({ usuario }) {
                         <tr style={{borderTop:"1px solid #1f2937",background:"#0a0a0a"}}>
                           <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL CC</td>
                           {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
-                            <span style={{fontSize:13,fontWeight:700,color:tots[m.id]>0?"#4ade80":tots[m.id]<0?"#f87171":"#374151"}}>{tots[m.id]!==0?fmt(tots[m.id]):"—"}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:totsCC[m.id]>0?"#4ade80":totsCC[m.id]<0?"#f87171":"#374151"}}>{totsCC[m.id]!==0?fmt(totsCC[m.id]):"—"}</span>
                           </td>)}
                         </tr>
                         {totalDif>0&&(
