@@ -3766,8 +3766,10 @@ function AppInterna({ usuario }) {
         if(te>0) return s+d.nominal*(1-te/100);
         return s+(d.mFinal||d.nominal);
       },0);
-                      // Patrimonio total = caja fisica + CCs + cheques a cobrar
-                      const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)]));
+                      // Patrimonio total = caja fisica + CCs + cheques a cobrar + inversiones
+                      const invsActPat=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");
+                      const totalInvPat=invsActPat.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);
+                      const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+tots[m.id]+(m.id==="ARS"?totalDif:0)-(m.id==="USD"?totalInvPat:0)]));
                       return (<>
                         <tr style={{borderTop:"2px solid #1f2937",background:"#0a1a0a"}}>
                           <td style={{padding:"9px 10px",fontSize:9,color:"#4ade80",fontWeight:700,letterSpacing:1}}>CAJA OFICINA</td>
