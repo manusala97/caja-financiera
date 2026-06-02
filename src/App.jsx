@@ -1073,23 +1073,27 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
         if(te>0) return s+d.nominal*(1-te/100);
         return s+(d.mFinal||d.nominal);
       },0);
-    // Inversiones activas - capital + intereses (la financiera les debe)
+    // Inversiones activas - capital + intereses
     function calcIntC(monto,tasa,dias){return monto*(Math.pow(1+tasa/100,dias/365)-1);}
     const invsAct=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");
+    const idsInvCierre=invsAct.map(x=>Number(x.cliente_id));
     const totalInv=invsAct.reduce((s,inv)=>{
       const hoyDate=new Date().toISOString().split("T")[0];
       const dias=Math.floor((new Date(hoyDate)-new Date(inv.fecha_inicio))/86400000);
       return s+inv.monto+calcIntC(inv.monto,inv.tasa,dias);
     },0);
-    // Inversiones restan del patrimonio (son pasivos)
-    const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+tots[mId]+(mId==="ARS"?totalDif:0)-(mId==="USD"?totalInv:0)]));
+    // Tots sin clientes en inversión (ya están en fila Inversiones)
+    const totsCC=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).filter(c=>!idsInvCierre.includes(Number(c.id))).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
+    // Patrimonio = Caja + CC(sin inversores) + Cheques + Inversiones
+    const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+totsCC[mId]+(mId==="ARS"?totalDif:0)-(mId==="USD"?totalInv:0)]));
     return {
       totalUSD: calcTotalUSD(patrimonioSaldos, cotiz),
       cajaUSD: calcTotalUSD(saldos, cotiz),
       saldosPatrimonio: patrimonioSaldos,
       totalDif,
       totalInv,
-      tots,
+      totsCC,
+      tots: totsCC,
     };
   },[saldos,cotiz,clientes,diferidos,inversiones]);
   const totalUSD = patrimonioTotal?.totalUSD||null;
@@ -3769,7 +3773,7 @@ function AppInterna({ usuario }) {
                       // Patrimonio total = caja fisica + CCs + cheques a cobrar + inversiones
                       const invsActPat=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");
                       const totalInvPat=invsActPat.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);
-                      const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+totsCC[m.id]+(m.id==="ARS"?totalDif:0)]));
+                      const invsActPos=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");const totalInvPos=invsActPos.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+totsCC[m.id]+(m.id==="ARS"?totalDif:0)-(m.id==="USD"?totalInvPos:0)]));
                       return (<>
                         <tr style={{borderTop:"2px solid #1f2937",background:"#0a1a0a"}}>
                           <td style={{padding:"9px 10px",fontSize:9,color:"#4ade80",fontWeight:700,letterSpacing:1}}>CAJA OFICINA</td>
