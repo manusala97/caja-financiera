@@ -3481,8 +3481,8 @@ function AppInterna({ usuario }) {
 
         {pant==="posicion"&&(()=>{
           const getS=(cId,mId)=>{ const k=cId+"_"+mId; return posOvr[k]!==undefined?posOvr[k]:(saldoCC(clientes.find(x=>x.id===cId))[mId]||0); };
-          const clientesConInversion=new Set((inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada").map(x=>x.cliente_id));
-          const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.filter(c=>!clientesConInversion.has(c.id)).reduce((s,c)=>s+getS(c.id,m.id),0)]));
+          const clientesConInversion=new Set((inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada").map(x=>String(x.cliente_id)));
+          const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.filter(c=>!clientesConInversion.has(String(c.id))).reduce((s,c)=>s+getS(c.id,m.id),0)]));
           const meses=Object.entries(fact.meses||{});
           const ganAcum=meses.reduce((s,[,v])=>s+parse(v),0),obj=parse(fact.objetivo);
 
