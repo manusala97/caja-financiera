@@ -1299,6 +1299,8 @@ function AppInterna({ usuario }) {
   const [editandoMov, setEditandoMov] = useState(null);
   const [ccMonTab, setCcMonTab] = useState(null);
   const [ccFiltro, setCcFiltro] = useState({desde:"",hasta:""});
+  const [cobrandoDif, setCobrandoDif] = useState(null); // id del cheque en proceso de cobro
+  const [cobrandoDifCC, setCobrandoDifCC] = useState({modo:"caja",clienteId:"",buscar:""});
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
@@ -1826,17 +1828,36 @@ function AppInterna({ usuario }) {
     notify("Eliminada"+(movsVinculados.length>0?" y movimientos CC revertidos":"")+" ✓");
   }
 
-  async function cobrarDif(id) {
+  async function cobrarDif(id, modo="caja", clienteId=null) {
     const d=diferidos.find(x=>x.id===id); if(!d) return;
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    const ns={...saldos,ARS:saldos.ARS+d.nominal};
-    setSaldos(ns);
+    // Monto a cobrar: si tiene tasa endoso usamos nominal*(1-tasaEndoso/100), sino nominal
+    const te=parse(d.tasaEndoso||"0");
+    const montoCobro=te>0?d.nominal*(1-te/100):d.nominal;
     await SB.from("diferidos").update({cobrado:true}).eq("id",id);
     setDiferidos(p=>p.map(x=>x.id===id?{...x,cobrado:true}:x));
-    const opData={tipo:"cobro_dif",hora,moneda:"ARS",monto:d.nominal,cliente:d.cliente,nota:"Cobro diferido $"+fmt(d.nominal)+(d.manual?" (manual)":"")};
-    const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"cobro_dif",datos:opData}).select().single();
-    if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
-    await guardarDia(ns,null,null); notify("Cobrado");
+    if(modo==="caja"){
+      const ns={...saldos,ARS:saldos.ARS+montoCobro};
+      setSaldos(ns);
+      const opData={tipo:"cobro_dif",hora,moneda:"ARS",monto:montoCobro,cliente:d.cliente,nota:"Cobro diferido $"+fmt(d.nominal)+(d.manual?" (manual)":"")};
+      const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"cobro_dif",datos:opData}).select().single();
+      if(ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
+      await guardarDia(ns,null,null);
+    } else if(modo==="cc"&&clienteId){
+      // No impacta caja — genera retiro_transf en CC del comprador (nos debe)
+      const cId=Number(clienteId);
+      const clNombre=clientes.find(x=>x.id===cId)?.nombre||"cliente";
+      const nota="Cheque diferido $"+fmt(d.nominal)+(te>0?" (endoso "+d.tasaEndoso+"%)":"")+" - "+d.cliente;
+      const mv={id:Date.now(),hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:montoCobro,nota};
+      await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:montoCobro,nota});
+      setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+      const opData={tipo:"cobro_dif",hora,moneda:"ARS",monto:montoCobro,cliente:d.cliente,nota:"Cobro diferido → CC "+clNombre+" $"+fmt(montoCobro)};
+      const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"cobro_dif",datos:opData}).select().single();
+      if(ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
+    }
+    setCobrandoDif(null);
+    setCobrandoDifCC({modo:"caja",clienteId:"",buscar:""});
+    notify("Cobrado"+(modo==="cc"?" → CC":""));
   }
 
   async function confirmarEditSaldo(mon) {
@@ -2989,7 +3010,58 @@ function AppInterna({ usuario }) {
                         </div>
                       </div>
                     </div>
-                    <button onClick={()=>cobrarDif(d.id)} style={{padding:"7px 12px",borderRadius:6,background:"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Cobrar</button>
+                    <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0}}>
+                      <button onClick={()=>{setCobrandoDif(cobrandoDif===d.id?null:d.id);setCobrandoDifCC({modo:"caja",clienteId:"",buscar:""}); }}
+                        style={{padding:"7px 12px",borderRadius:6,background:cobrandoDif===d.id?"#1a2e1a":"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                        {cobrandoDif===d.id?"▾ Cobrar":"▸ Cobrar"}
+                      </button>
+                      {cobrandoDif===d.id&&(()=>{
+                        const te=parse(d.tasaEndoso||"0");
+                        const montoCobro=te>0?d.nominal*(1-te/100):d.nominal;
+                        const clSel=clientes.find(x=>x.id===Number(cobrandoDifCC.clienteId));
+                        const filtCC=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((cobrandoDifCC.buscar||"").toLowerCase()));
+                        return (
+                          <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:12,width:240,display:"flex",flexDirection:"column",gap:10}}>
+                            <div style={{fontSize:10,color:"#4ade80",fontWeight:700}}>Monto a cobrar: ${fmt(montoCobro)}</div>
+                            {/* Toggle caja / CC */}
+                            <div style={{display:"flex",gap:6}}>
+                              {["caja","cc"].map(m=>(
+                                <button key={m} onClick={()=>setCobrandoDifCC(p=>({...p,modo:m}))}
+                                  style={{flex:1,padding:"5px 0",borderRadius:5,fontFamily:"inherit",fontSize:10,fontWeight:700,cursor:"pointer",
+                                    background:cobrandoDifCC.modo===m?"rgba(74,222,128,0.15)":"transparent",
+                                    border:"1px solid "+(cobrandoDifCC.modo===m?"#4ade80":"#374151"),
+                                    color:cobrandoDifCC.modo===m?"#4ade80":"#6b7280"}}>
+                                  {m==="caja"?"🏦 Caja":"👤 CC"}
+                                </button>
+                              ))}
+                            </div>
+                            {/* Si es CC, selector de cliente */}
+                            {cobrandoDifCC.modo==="cc"&&(
+                              <div style={{position:"relative"}}>
+                                <Lbl>Cliente comprador</Lbl>
+                                <div style={{display:"flex",gap:4}}>
+                                  {clSel&&!cobrandoDifCC.buscar&&<div style={{flex:1,padding:"4px 7px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>{clSel.nombre} {clSel.apellido}</div>}
+                                  <input value={cobrandoDifCC.buscar||""} onChange={e=>setCobrandoDifCC(p=>({...p,buscar:e.target.value}))}
+                                    placeholder={clSel&&!cobrandoDifCC.buscar?"Cambiar...":"Buscar cliente..."}
+                                    style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 7px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                  {cobrandoDifCC.clienteId&&<button onClick={()=>setCobrandoDifCC(p=>({...p,clienteId:"",buscar:""}))} style={{padding:"2px 5px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                </div>
+                                {cobrandoDifCC.buscar&&filtCC.length>0&&<div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:300,maxHeight:100,overflowY:"auto",marginTop:2}}>
+                                  {filtCC.map(cl=><div key={cl.id} onClick={()=>setCobrandoDifCC(p=>({...p,clienteId:String(cl.id),buscar:""}))} style={{padding:"5px 8px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>)}
+                                </div>}
+                              </div>
+                            )}
+                            {/* Botón confirmar */}
+                            <button
+                              disabled={cobrandoDifCC.modo==="cc"&&!cobrandoDifCC.clienteId}
+                              onClick={()=>cobrarDif(d.id,cobrandoDifCC.modo,cobrandoDifCC.clienteId||null)}
+                              style={{padding:"7px",borderRadius:6,background:cobrandoDifCC.modo==="cc"&&!cobrandoDifCC.clienteId?"#0a0a0a":"#052e16",border:"1px solid "+(cobrandoDifCC.modo==="cc"&&!cobrandoDifCC.clienteId?"#374151":"#4ade80"),color:cobrandoDifCC.modo==="cc"&&!cobrandoDifCC.clienteId?"#374151":"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:cobrandoDifCC.modo==="cc"&&!cobrandoDifCC.clienteId?"not-allowed":"pointer"}}>
+                              ✓ Confirmar cobro {cobrandoDifCC.modo==="cc"?"→ CC":"→ Caja"}
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </Card>
               );
