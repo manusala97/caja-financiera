@@ -1420,7 +1420,7 @@ function AppInterna({ usuario }) {
             console.log("TRESOR saldo ARS calculado:",salARS);
           }
           setClientes(sortClientes(cls).map(c=>({
-          id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio,
+          id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio, oculto:c.oculto||false,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
             moneda:m.moneda, monto:Number(m.monto), nota:m.nota
@@ -3122,6 +3122,10 @@ function AppInterna({ usuario }) {
                       <div style={{fontSize:9,color:colorSocio,fontWeight:700}}>{c.socio||"Sin socio"}</div>
                       <div style={{display:"flex",gap:4}}>
                         <button onClick={e=>{e.stopPropagation();setEditandoCliente(c.id);setEditClienteV({nombre:c.nombre,apellido:c.apellido,socio:c.socio||"Manuel Sala"});}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #38bdf8",color:"#38bdf8",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✎</button>
+                        <button title={c.oculto?"Mostrar en Posición":"Ocultar en Posición"} onClick={async e=>{e.stopPropagation();const nuevo=!c.oculto;await SB.from("clientes").update({oculto:nuevo}).eq("id",c.id);setClientes(p=>p.map(x=>x.id===c.id?{...x,oculto:nuevo}:x));notify(nuevo?"Oculto en Posición":"Visible en Posición");}}
+                          style={{width:22,height:22,borderRadius:4,background:c.oculto?"rgba(248,113,113,0.1)":"transparent",border:"1px solid "+(c.oculto?"#f87171":"#374151"),color:c.oculto?"#f87171":"#4b5563",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
+                          {c.oculto?"👁":"○"}
+                        </button>
                         <button onClick={e=>{e.stopPropagation();eliminarCliente(c.id);}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
                       </div>
                     </div>
@@ -3805,10 +3809,14 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:14}}>
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
                   <div style={{fontSize:10,letterSpacing:3,color:"#e879f9"}}>POSICION CONSOLIDADA</div>
                   <button onClick={generarImagen} style={{padding:"5px 12px",borderRadius:7,background:"rgba(99,102,241,0.1)",border:"1px solid rgba(99,102,241,0.3)",color:"#a5b4fc",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     ⬇ Descargar resumen
+                  </button>
+                  <button onClick={()=>setMostrarOcultos(p=>!p)}
+                    style={{padding:"5px 12px",borderRadius:7,background:mostrarOcultos?"rgba(248,113,113,0.1)":"rgba(255,255,255,0.04)",border:"1px solid "+(mostrarOcultos?"#f8717133":"#1f2937"),color:mostrarOcultos?"#f87171":"#4b5563",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    {mostrarOcultos?"👁 Mostrando todos":"👁 Mostrar ocultos"}
                   </button>
                 </div>
                 <Card sx={{border:"1px solid #e879f933",minWidth:190}}>
@@ -3851,9 +3859,10 @@ function AppInterna({ usuario }) {
                   </tr></thead>
                   <tbody>
                     {clientes.filter(c=>{
-                      // Ocultar clientes con inversiones activas
                       const tieneInv=inversiones.some(x=>x.activa!==false&&x.estado!=="finalizada"&&Number(x.cliente_id)===Number(c.id));
-                      return !tieneInv;
+                      if(tieneInv) return false;
+                      if(c.oculto&&!mostrarOcultos) return false;
+                      return true;
                     }).map((c,i)=>(
                       <tr key={c.id}
                         draggable
