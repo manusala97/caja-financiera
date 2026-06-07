@@ -1297,6 +1297,8 @@ function AppInterna({ usuario }) {
   const [editandoCliente, setEditandoCliente] = useState(null);
   const [editClienteV, setEditClienteV] = useState({nombre:"",apellido:"",socio:""});
   const [editandoMov, setEditandoMov] = useState(null);
+  const [ccMonTab, setCcMonTab] = useState(null);
+  const [ccFiltro, setCcFiltro] = useState({desde:"",hasta:""});
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
@@ -3400,100 +3402,142 @@ function AppInterna({ usuario }) {
                     </div>
                   )}
                   {(()=>{
-                    // Agrupar movimientos por moneda para mostrar tabla debe/haber con saldo corriente
+                    // Tabs por moneda + filtro de fechas
                     const monedaConMovs=[...new Set(c.movimientos.map(mv=>mv.moneda))];
-                    return monedaConMovs.map(monId=>{
-                      const mon=MONEDAS.find(m=>m.id===monId);
-                      const movsMon=[...c.movimientos].filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
-                      // Calcular saldo corriente
-                      let saldoCorriente=0;
-                      const movsConSaldo=movsMon.map(mv=>{
-                        const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
-                        saldoCorriente+=(ing?-mv.monto:mv.monto);
-                        return {...mv,saldoAcum:saldoCorriente};
-                      });
-                      const saldoFinal=saldoCorriente;
-                      return (
-                        <div key={monId} style={{marginBottom:20}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                            <span style={{fontSize:11,fontWeight:700,color:mon?.color||"#6b7280",letterSpacing:2}}>{monId}</span>
-                            <span style={{fontSize:12,fontWeight:700,color:saldoFinal>0?"#4ade80":saldoFinal<0?"#f87171":"#6b7280"}}>
-                              {saldoFinal>0?"Me debe":"Le debo"} {mon?.simbolo}{fmt(Math.abs(saldoFinal))}
-                            </span>
-                          </div>
-                          <div style={{overflowX:"auto"}}>
-                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                              <thead>
-                                <tr style={{borderBottom:"1px solid #1f2937"}}>
-                                  <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#4b5563",fontWeight:600}}>FECHA</th>
-                                  <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#4b5563",fontWeight:600}}>CONCEPTO</th>
-                                  <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#4ade80",fontWeight:600}}>DEBE</th>
-                                  <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#f87171",fontWeight:600}}>HABER</th>
-                                  <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#6b7280",fontWeight:600}}>SALDO</th>
-                                  <th style={{padding:"5px 4px",fontSize:9,color:"#4b5563",fontWeight:600}}></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {[...movsConSaldo].reverse().map(mv=>{
-                                  const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
-                                  // debe = me debe (retiro = le mande plata)
-                                  // haber = le debo (ingreso = me mando plata)
-                                  const debe=!ing?mv.monto:null;
-                                  const haber=ing?mv.monto:null;
-                                  return (
-                                    <tr key={mv.id} style={{borderBottom:"1px solid #0f0f0f",background:"rgba(255,255,255,0.01)"}}>
-                                      <td style={{padding:"6px 8px",color:"#475569",whiteSpace:"nowrap"}}>{mv.fecha||""}</td>
-                                      <td style={{padding:"6px 8px",color:"#94a3b8"}}>
-                                        {labelCC[mv.tipo]||mv.tipo}
-                                        {mv.nota&&<span style={{color:"#334155",marginLeft:4}}>· {mv.nota}</span>}
-                                      </td>
-                                      <td style={{padding:"6px 8px",textAlign:"right",color:"#4ade80",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
-                                        {debe?mon?.simbolo+fmt(debe):""}
-                                      </td>
-                                      <td style={{padding:"6px 8px",textAlign:"right",color:"#f87171",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
-                                        {haber?mon?.simbolo+fmt(haber):""}
-                                      </td>
-                                      <td style={{padding:"6px 8px",textAlign:"right",color:mv.saldoAcum>0?"#4ade80":mv.saldoAcum<0?"#f87171":"#475569",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
-                                        {mv.saldoAcum>0?"+":""}{mon?.simbolo}{fmt(mv.saldoAcum)}
-                                      </td>
-                                      <td style={{padding:"6px 4px",whiteSpace:"nowrap"}}>
-                                        <button onClick={()=>{setEditandoMov(mv.id);setEditMovV({tipo:mv.tipo,monto:String(mv.monto),nota:mv.nota||"",moneda:mv.moneda});}} style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",cursor:"pointer",fontFamily:"inherit",marginRight:3}}>editar</button>
-                                        <button onClick={async()=>{
-                                          const esTransCC2=mv.nota&&mv.nota.includes("Transf. entre CCs");
-                                          if(esTransCC2){
-                                            if(!window.confirm("Es una transferencia entre CCs. Se van a borrar los movimientos de AMBAS cuentas. Continuar?")) return;
-                                            // Buscar espejo en otras CCs (misma hora, fecha y monto)
-                                            let borrados=0;
-                                            for(const cl2 of clientes){
-                                              if(cl2.id===clienteActivo) continue;
-                                              for(const mv2 of cl2.movimientos){
-                                                if(mv2.nota&&mv2.nota.includes("Transf. entre CCs")&&mv2.fecha===mv.fecha&&mv2.hora===mv.hora&&Number(mv2.monto)===Number(mv.monto)){
-                                                  await SB.from("movimientos_cc").delete().eq("id",mv2.id);
-                                                  setClientes(p=>p.map(x=>x.id!==cl2.id?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv2.id)}));
-                                                  borrados++;
-                                                }
+                    const monTabActiva=ccMonTab&&monedaConMovs.includes(ccMonTab)?ccMonTab:monedaConMovs[0];
+                    const filtDesde=ccFiltro.desde||"";
+                    const filtHasta=ccFiltro.hasta||"";
+                    const monId=monTabActiva;
+                    const mon=MONEDAS.find(m=>m.id===monId);
+                    const movsMon=[...c.movimientos].filter(mv=>mv.moneda===monId).sort((a,b)=>((a.fecha||"")+(a.hora||"")).localeCompare((b.fecha||"")+(b.hora||"")));
+                    // Saldo anterior al filtro
+                    const movsAntes=filtDesde?movsMon.filter(mv=>(mv.fecha||"")<filtDesde):[];
+                    let saldoAnterior=0;
+                    movsAntes.forEach(mv=>{const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";saldoAnterior+=(ing?-mv.monto:mv.monto);});
+                    // Movimientos filtrados
+                    const movsFiltrados=movsMon.filter(mv=>{
+                      if(filtDesde&&(mv.fecha||"")<filtDesde) return false;
+                      if(filtHasta&&(mv.fecha||"")>filtHasta) return false;
+                      return true;
+                    });
+                    let saldoCorriente=saldoAnterior;
+                    const movsConSaldo=movsFiltrados.map(mv=>{
+                      const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+                      saldoCorriente+=(ing?-mv.monto:mv.monto);
+                      return {...mv,saldoAcum:saldoCorriente};
+                    });
+                    const saldoFinal=saldoCorriente;
+                    return (
+                      <div>
+                        {/* Tabs por moneda */}
+                        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+                          {monedaConMovs.map(mId=>{
+                            const m=MONEDAS.find(x=>x.id===mId);
+                            const activa=mId===monTabActiva;
+                            const saldoM=saldoCC(c)[mId]||0;
+                            return (
+                              <button key={mId} onClick={()=>setCcMonTab(mId)}
+                                style={{padding:"5px 14px",borderRadius:20,fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer",
+                                  background:activa?"rgba(255,255,255,0.08)":"transparent",
+                                  border:"1px solid "+(activa?(m?.color||"#6b7280"):"#1f2937"),
+                                  color:activa?(m?.color||"#e2e8f0"):"#4b5563",
+                                  transition:"all 0.15s"}}>
+                                {mId}
+                                {saldoM!==0&&<span style={{marginLeft:5,fontSize:9,color:saldoM>0?"#4ade80":"#f87171"}}>{saldoM>0?"+":""}{fmt(Math.round(saldoM))}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {/* Filtros fecha */}
+                        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+                          <span style={{fontSize:10,color:"#4b5563"}}>Filtrar:</span>
+                          <input type="date" value={ccFiltro.desde} onChange={e=>setCcFiltro(p=>({...p,desde:e.target.value}))}
+                            style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                          <span style={{fontSize:10,color:"#4b5563"}}>→</span>
+                          <input type="date" value={ccFiltro.hasta} onChange={e=>setCcFiltro(p=>({...p,hasta:e.target.value}))}
+                            style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                          {(ccFiltro.desde||ccFiltro.hasta)&&<button onClick={()=>setCcFiltro({desde:"",hasta:""})}
+                            style={{padding:"3px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",fontFamily:"inherit",fontSize:9,cursor:"pointer"}}>✕ Limpiar</button>}
+                          <span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:saldoFinal>0?"#4ade80":saldoFinal<0?"#f87171":"#6b7280"}}>
+                            {saldoFinal>0?"Me debe":"Le debo"} {mon?.simbolo}{fmt(Math.abs(saldoFinal))}
+                          </span>
+                        </div>
+                        {/* Saldo anterior si hay filtro */}
+                        {filtDesde&&<div style={{padding:"6px 10px",marginBottom:8,borderRadius:5,background:"rgba(255,255,255,0.03)",border:"1px solid #1f2937",fontSize:11,display:"flex",justifyContent:"space-between"}}>
+                          <span style={{color:"#4b5563"}}>Saldo anterior al {filtDesde}:</span>
+                          <strong style={{color:saldoAnterior>0?"#4ade80":saldoAnterior<0?"#f87171":"#6b7280"}}>{saldoAnterior>0?"+":""}{mon?.simbolo}{fmt(saldoAnterior)}</strong>
+                        </div>}
+                        {/* Tabla movimientos */}
+                        <div style={{overflowX:"auto"}}>
+                          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                            <thead>
+                              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                                <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#4b5563",fontWeight:600}}>FECHA</th>
+                                <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#4b5563",fontWeight:600}}>CONCEPTO</th>
+                                <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#4ade80",fontWeight:600}}>DEBE</th>
+                                <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#f87171",fontWeight:600}}>HABER</th>
+                                <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#6b7280",fontWeight:600}}>SALDO</th>
+                                <th style={{padding:"5px 4px",fontSize:9,color:"#4b5563",fontWeight:600}}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...movsConSaldo].reverse().map(mv=>{
+                                const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+                                const debe=!ing?mv.monto:null;
+                                const haber=ing?mv.monto:null;
+                                return (
+                                  <tr key={mv.id} style={{borderBottom:"1px solid #0f0f0f",background:"rgba(255,255,255,0.01)"}}>
+                                    <td style={{padding:"6px 8px",color:"#475569",whiteSpace:"nowrap"}}>{mv.fecha||""}</td>
+                                    <td style={{padding:"6px 8px",color:"#94a3b8"}}>
+                                      {labelCC[mv.tipo]||mv.tipo}
+                                      {mv.nota&&<span style={{color:"#334155",marginLeft:4}}>· {mv.nota}</span>}
+                                    </td>
+                                    <td style={{padding:"6px 8px",textAlign:"right",color:"#4ade80",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
+                                      {debe?mon?.simbolo+fmt(debe):""}
+                                    </td>
+                                    <td style={{padding:"6px 8px",textAlign:"right",color:"#f87171",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
+                                      {haber?mon?.simbolo+fmt(haber):""}
+                                    </td>
+                                    <td style={{padding:"6px 8px",textAlign:"right",color:mv.saldoAcum>0?"#4ade80":mv.saldoAcum<0?"#f87171":"#475569",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>
+                                      {mv.saldoAcum>0?"+":""}{mon?.simbolo}{fmt(mv.saldoAcum)}
+                                    </td>
+                                    <td style={{padding:"6px 4px",whiteSpace:"nowrap"}}>
+                                      <button onClick={()=>{setEditandoMov(mv.id);setEditMovV({tipo:mv.tipo,monto:String(mv.monto),nota:mv.nota||"",moneda:mv.moneda});}} style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",cursor:"pointer",fontFamily:"inherit",marginRight:3}}>editar</button>
+                                      <button onClick={async()=>{
+                                        const esTransCC2=mv.nota&&mv.nota.includes("Transf. entre CCs");
+                                        if(esTransCC2){
+                                          if(!window.confirm("Es una transferencia entre CCs. Se van a borrar los movimientos de AMBAS cuentas. Continuar?")) return;
+                                          let borrados=0;
+                                          for(const cl2 of clientes){
+                                            if(cl2.id===clienteActivo) continue;
+                                            for(const mv2 of cl2.movimientos){
+                                              if(mv2.nota&&mv2.nota.includes("Transf. entre CCs")&&mv2.fecha===mv.fecha&&mv2.hora===mv.hora&&Number(mv2.monto)===Number(mv.monto)){
+                                                await SB.from("movimientos_cc").delete().eq("id",mv2.id);
+                                                setClientes(p=>p.map(x=>x.id!==cl2.id?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv2.id)}));
+                                                borrados++;
                                               }
                                             }
-                                            await SB.from("movimientos_cc").delete().eq("id",mv.id);
-                                            setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
-                                            notify("Transf. entre CCs revertida en "+(borrados+1)+" cuentas");
-                                          } else {
-                                            if(!window.confirm("Eliminar este movimiento?")) return;
-                                            await SB.from("movimientos_cc").delete().eq("id",mv.id);
-                                            setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
-                                            notify("Eliminado");
                                           }
-                                        }} style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f43f5e",cursor:"pointer",fontFamily:"inherit"}}>borrar</button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
+                                          await SB.from("movimientos_cc").delete().eq("id",mv.id);
+                                          setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
+                                          notify("Transf. entre CCs revertida en "+(borrados+1)+" cuentas");
+                                        } else {
+                                          if(!window.confirm("Eliminar este movimiento?")) return;
+                                          await SB.from("movimientos_cc").delete().eq("id",mv.id);
+                                          setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.filter(m=>m.id!==mv.id)}));
+                                          notify("Eliminado");
+                                        }
+                                      }} style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f43f5e",cursor:"pointer",fontFamily:"inherit"}}>borrar</button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {movsConSaldo.length===0&&<tr><td colSpan={6} style={{padding:"20px",textAlign:"center",color:"#374151",fontSize:11}}>Sin movimientos en este período</td></tr>}
+                            </tbody>
+                          </table>
                         </div>
-                      );
-                    });
+                      </div>
+                    );
                   })()}
                 </Card>
               </div>
