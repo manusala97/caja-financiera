@@ -3861,7 +3861,7 @@ function AppInterna({ usuario }) {
                     {clientes.filter(c=>{
                       const tieneInv=inversiones.some(x=>x.activa!==false&&x.estado!=="finalizada"&&Number(x.cliente_id)===Number(c.id));
                       if(tieneInv) return false;
-                      if(c.oculto&&!mostrarOcultos) return false;
+                      if(c.oculto===true&&!mostrarOcultos) return false;
                       return true;
                     }).map((c,i)=>(
                       <tr key={c.id}
