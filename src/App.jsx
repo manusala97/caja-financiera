@@ -1301,6 +1301,7 @@ function AppInterna({ usuario }) {
   const [ccFiltro, setCcFiltro] = useState({desde:"",hasta:""});
   const [cobrandoDif, setCobrandoDif] = useState(null); // id del cheque en proceso de cobro
   const [cobrandoDifCC, setCobrandoDifCC] = useState({modo:"caja",clienteId:"",buscar:""});
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
