@@ -965,84 +965,93 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
         </div>
       )}
       {f.tipo==="transferencia"&&(()=>{
-        const tn=parse(f.tn), com=parse(f.tcomFijo), neto=tn-com;
+        const tn=parse(f.tn), pctOr=parse(f.tpctOrigen)||0;
+        const comOr=tn*(pctOr/100), netoOr=tn-comOr;
         const clOrigen=clientes.find(x=>x.id===Number(f.ccOrigenId));
-        const clDestino=clientes.find(x=>x.id===Number(f.ccDestinoId));
         const filtOrigen=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((f.ccOrigenBuscar||"").toLowerCase()));
-        const filtDestino=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((f.ccDestinoBuscar||"").toLowerCase()));
+        const totalDistribuido=tDestinos.reduce((s,d)=>s+parse(d.monto),0);
+        const totalComDest=tDestinos.reduce((s,d)=>{const m=parse(d.monto),p=parse(d.pct)||0;return s+m*(p/100);},0);
+        const ganTotal=comOr+totalComDest;
+        const diferencia=netoOr-totalDistribuido;
         return (
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {/* Monto y comision */}
-            <div style={S.grid("1fr 1fr",8)}>
-              <div><Lbl>Monto enviado</Lbl><Inp type="number" placeholder="0" value={f.tn} onChange={e=>sf("tn",e.target.value)}/></div>
-              <div><Lbl>Comision $</Lbl><Inp type="number" placeholder="0" value={f.tcomFijo} onChange={e=>sf("tcomFijo",e.target.value)}/></div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={S.grid("1fr 1fr 1fr",8)}>
+              <div><Lbl>Moneda</Lbl><MonedasSel value={f.tmoneda||"ARS"} onChange={v=>sf("tmoneda",v)}/></div>
+              <div><Lbl>Monto total origen</Lbl><Inp type="number" placeholder="0" value={f.tn} onChange={e=>sf("tn",e.target.value)}/></div>
+              <div><Lbl>% Comisión origen</Lbl><Inp type="number" placeholder="0" value={f.tpctOrigen||""} onChange={e=>sf("tpctOrigen",e.target.value)}/></div>
             </div>
-            {tn>0&&(
-              <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:11}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{color:"#6b7280"}}>Origen paga (HABER):</span>
-                  <strong style={{color:"#f87171"}}>${fmt(neto)}</strong>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{color:"#6b7280"}}>Destino recibe (DEBE):</span>
-                  <strong style={{color:"#4ade80"}}>${fmt(tn)}</strong>
-                </div>
-                {com>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:4}}>
-                  <span style={{color:"#6b7280"}}>Ganancia financiera:</span>
-                  <strong style={{color:"#f59e0b"}}>${fmt(com)} ({((com/tn)*100).toFixed(2)}%)</strong>
-                </div>}
-              </div>
-            )}
-            {/* CC Origen */}
             <div style={{position:"relative"}}>
-              <Lbl>CC Origen (quien envia)</Lbl>
+              <Lbl>CC Origen (quien envía)</Lbl>
               <div style={{display:"flex",gap:4}}>
-                {clOrigen&&!f.ccOrigenBuscar&&(
-                  <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",fontSize:10,color:"#f87171",fontWeight:600}}>
-                    {clOrigen.nombre} {clOrigen.apellido}
-                  </div>
-                )}
+                {clOrigen&&!f.ccOrigenBuscar&&<div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",fontSize:10,color:"#f87171",fontWeight:600}}>{clOrigen.nombre} {clOrigen.apellido}</div>}
                 <input value={f.ccOrigenBuscar||""} onChange={e=>sf("ccOrigenBuscar",e.target.value)}
                   placeholder={clOrigen&&!f.ccOrigenBuscar?"Cambiar...":"Buscar origen..."}
                   style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                {f.ccOrigenId&&<button onClick={()=>sf("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
+                {f.ccOrigenId&&<button onClick={()=>sf("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
               </div>
-              {f.ccOrigenBuscar&&filtOrigen.length>0&&(
-                <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
-                  {filtOrigen.map(cl=>(
-                    <div key={cl.id} onClick={()=>{sf("ccOrigenId",String(cl.id));sf("ccOrigenBuscar","");}}
-                      style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
-                      {cl.nombre} {cl.apellido}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {f.ccOrigenBuscar&&filtOrigen.length>0&&<div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                {filtOrigen.map(cl=><div key={cl.id} onClick={()=>{sf("ccOrigenId",String(cl.id));sf("ccOrigenBuscar","");}} style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>)}
+              </div>}
             </div>
-            {/* CC Destino */}
-            <div style={{position:"relative"}}>
-              <Lbl>CC Destino (quien recibe)</Lbl>
-              <div style={{display:"flex",gap:4}}>
-                {clDestino&&!f.ccDestinoBuscar&&(
-                  <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>
-                    {clDestino.nombre} {clDestino.apellido}
+            {tn>0&&<div style={{background:"#0a1220",border:"1px solid #3b82f633",borderRadius:6,padding:"8px 10px",fontSize:11,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+              <span style={{color:"#6b7280"}}>Total enviado: <strong style={{color:"#e2e8f0"}}>{fmt(tn)}</strong></span>
+              <span style={{color:"#6b7280"}}>Com. origen ({pctOr}%): <strong style={{color:"#f59e0b"}}>-{fmt(comOr)}</strong></span>
+              <span style={{color:"#6b7280"}}>Neto a distribuir: <strong style={{color:"#4ade80"}}>{fmt(netoOr)}</strong></span>
+            </div>}
+            <div style={{borderTop:"1px solid #1f2937",paddingTop:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <Lbl>Destinos</Lbl>
+                <button onClick={()=>setTDestinos(p=>[...p,{id:Date.now(),clienteId:"",buscar:"",monto:"",pct:"",nota:""}])}
+                  style={{padding:"3px 10px",borderRadius:5,background:"rgba(74,222,128,0.1)",border:"1px solid #4ade8044",color:"#4ade80",fontFamily:"inherit",fontSize:10,cursor:"pointer",fontWeight:600}}>+ Agregar destino</button>
+              </div>
+              {tDestinos.map((dest,idx)=>{
+                const clDest=clientes.find(x=>x.id===Number(dest.clienteId));
+                const filtDest=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((dest.buscar||"").toLowerCase()));
+                const mDest=parse(dest.monto),pDest=parse(dest.pct)||0,comDest=mDest*(pDest/100);
+                return (
+                  <div key={dest.id} style={{background:"#0a0f0a",border:"1px solid #1f2937",borderRadius:7,padding:10,marginBottom:8,display:"flex",flexDirection:"column",gap:6}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:10,color:"#6b7280",fontWeight:600}}>Destino {idx+1}</span>
+                      {tDestinos.length>1&&<button onClick={()=>setTDestinos(p=>p.filter(d=>d.id!==dest.id))} style={{padding:"2px 7px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#f87171",cursor:"pointer",fontSize:9}}>✕</button>}
+                    </div>
+                    <div style={{position:"relative"}}>
+                      <div style={{display:"flex",gap:4}}>
+                        {clDest&&!dest.buscar&&<div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>{clDest.nombre} {clDest.apellido}</div>}
+                        <input value={dest.buscar||""} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,buscar:e.target.value}:d))}
+                          placeholder={clDest&&!dest.buscar?"Cambiar cliente...":"Buscar cliente destino..."}
+                          style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                        {dest.clienteId&&<button onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:"",buscar:""}:d))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                      </div>
+                      {dest.buscar&&filtDest.length>0&&<div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:100,overflowY:"auto",marginTop:2}}>
+                        {filtDest.map(cl=><div key={cl.id} onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:String(cl.id),buscar:""}:d))} style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>)}
+                      </div>}
+                    </div>
+                    <div style={S.grid("1fr 1fr 1fr",6)}>
+                      <div><Lbl>Monto a recibir</Lbl><Inp type="number" placeholder="0" value={dest.monto} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,monto:e.target.value}:d))}/></div>
+                      <div><Lbl>% Comisión</Lbl><Inp type="number" placeholder="0" value={dest.pct} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,pct:e.target.value}:d))}/></div>
+                      <div><Lbl>Nota</Lbl><Inp placeholder="opcional" value={dest.nota} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,nota:e.target.value}:d))}/></div>
+                    </div>
+                    {mDest>0&&<div style={{fontSize:10,color:"#6b7280",display:"flex",gap:12}}>
+                      <span>Recibe: <strong style={{color:"#e2e8f0"}}>{fmt(mDest)}</strong></span>
+                      {pDest>0&&<span>Com ({pDest}%): <strong style={{color:"#f59e0b"}}>+{fmt(comDest)}</strong></span>}
+                      <span>DEBE en CC: <strong style={{color:"#4ade80"}}>{fmt(mDest+comDest)}</strong></span>
+                    </div>}
                   </div>
-                )}
-                <input value={f.ccDestinoBuscar||""} onChange={e=>sf("ccDestinoBuscar",e.target.value)}
-                  placeholder={clDestino&&!f.ccDestinoBuscar?"Cambiar...":"Buscar destino..."}
-                  style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                {f.ccDestinoId&&<button onClick={()=>sf("ccDestinoId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
-              </div>
-              {f.ccDestinoBuscar&&filtDestino.length>0&&(
-                <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
-                  {filtDestino.map(cl=>(
-                    <div key={cl.id} onClick={()=>{sf("ccDestinoId",String(cl.id));sf("ccDestinoBuscar","");}}
-                      style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
-                      {cl.nombre} {cl.apellido}
-                    </div>
-                  ))}
-                </div>
-              )}
+                );
+              })}
             </div>
+            {tn>0&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",flexDirection:"column",gap:4}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
+              <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
+                <span style={{color:Math.abs(diferencia)<0.01?"#6b7280":"#f87171",fontWeight:600}}>Diferencia:</span>
+                <strong style={{color:Math.abs(diferencia)<0.01?"#4ade80":"#f87171"}}>{Math.abs(diferencia)<0.01?"✓ Cuadra":fmt(diferencia)}</strong>
+              </div>
+              {ganTotal>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
+                <span style={{color:"#f59e0b",fontWeight:600}}>Ganancia STS:</span>
+                <strong style={{color:"#f59e0b"}}>{fmt(ganTotal)}</strong>
+              </div>}
+            </div>}
           </div>
         );
       })()}
@@ -1260,6 +1269,7 @@ function AppInterna({ usuario }) {
   },[ops]);
   const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
+  const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
@@ -1695,32 +1705,36 @@ function AppInterna({ usuario }) {
       if (!tn) { notify("Ingresa un monto",false); return; }
       const tMon=form.tmoneda||"ARS";
       const pctOrigen=parse(form.tpctOrigen)||0;
-      const pctDestino=parse(form.tpctDestino)||0;
       const comOrigen=tn*(pctOrigen/100);
-      const comDestino=tn*(pctDestino/100);
-      const netoOrigen=tn-comOrigen;   // lo que le queda en HABER al origen
-      const netoDestino=tn+comDestino; // lo que debe el destino (tn + su comision)
-      const gananciaFin=comOrigen+comDestino;
+      const netoOrigen=tn-comOrigen;
+      const destinos=tDestinos.filter(d=>d.clienteId&&parse(d.monto)>0);
+      if(destinos.length===0){notify("Agregá al menos un destino",false);return;}
       const nombreOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen";
-      const nombreDestino=clientes.find(x=>x.id===Number(form.ccDestinoId))?.nombre||"destino";
-      opData={tipo,hora,tn,tpct:pctOrigen,tpctOrigen:pctOrigen,tpctDestino:pctDestino,tcom:gananciaFin,netoOrigen,netoDestino,monto:gananciaFin,ccOrigenId:form.ccOrigenId,ccDestinoId:form.ccDestinoId,tmoneda:tMon,cliente:form.cliente,nota:form.nota};
-      // CC Origen: ingreso_transf por el neto (HABER = le debemos el neto)
+      const totalComDest=destinos.reduce((s,d)=>{const m=parse(d.monto),p=parse(d.pct)||0;return s+m*(p/100);},0);
+      const gananciaFin=comOrigen+totalComDest;
+      const nombresDestino=destinos.map(d=>clientes.find(x=>x.id===Number(d.clienteId))?.nombre||"dest").join(", ");
+      opData={tipo,hora,tn,tpct:pctOrigen,tpctOrigen:pctOrigen,tcom:gananciaFin,netoOrigen,monto:gananciaFin,ccOrigenId:form.ccOrigenId,tmoneda:tMon,destinos:destinos.map(d=>({clienteId:d.clienteId,monto:parse(d.monto),pct:parse(d.pct)||0,nota:d.nota})),cliente:form.cliente,nota:form.nota};
+      // CC Origen: HABER por el neto (le debemos el neto)
       if(form.ccOrigenId){
         const cOrId=Number(form.ccOrigenId);
-        const notaOr="Transf. a "+nombreDestino+" - "+fmt(netoOrigen)+" "+tMon+(pctOrigen?" (com "+pctOrigen+"%)":"");
+        const notaOr="Transf. → "+nombresDestino+" - neto "+fmt(netoOrigen)+" "+tMon+(pctOrigen?" (com "+pctOrigen+"%)":"");
         const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr};
         await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr});
         setClientes(p=>p.map(cl=>cl.id!==cOrId?cl:{...cl,movimientos:[...cl.movimientos,mvOr]}));
       }
-      // CC Destino: retiro_transf por el total mas su comision (DEBE = nos debe)
-      if(form.ccDestinoId){
-        const cDId=Number(form.ccDestinoId);
-        const notaDest="Transf. de "+nombreOrigen+" - "+fmt(netoDestino)+" "+tMon+(pctDestino?" (com "+pctDestino+"%)":"");
-        const mvDest={id:Date.now()+2,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:netoDestino,nota:notaDest};
-        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:netoDestino,nota:notaDest});
+      // CC Destinos: DEBE por monto + comision de cada uno
+      for(let i=0;i<destinos.length;i++){
+        const d=destinos[i];
+        const cDId=Number(d.clienteId);
+        const mDest=parse(d.monto), pDest=parse(d.pct)||0, comDest=mDest*(pDest/100), totalDest=mDest+comDest;
+        const clDest=clientes.find(x=>x.id===cDId);
+        const notaDest=(d.nota||("Transf. de "+nombreOrigen+" - "+fmt(mDest)+" "+tMon+(pDest?" (com "+pDest+"%)":"")));
+        const mvDest={id:Date.now()+(i+2),hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest};
+        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest});
         setClientes(p=>p.map(cl=>cl.id!==cDId?cl:{...cl,movimientos:[...cl.movimientos,mvDest]}));
       }
-      setF("tn",""); setF("tpctOrigen",""); setF("tpctDestino",""); setF("ccOrigenId",""); setF("ccDestinoId",""); setF("ccOrigenBuscar",""); setF("ccDestinoBuscar","");
+      setF("tn",""); setF("tpctOrigen",""); setF("ccOrigenId",""); setF("ccOrigenBuscar","");
+      setTDestinos([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
     }
     if (!opData) return;
     setSaldos(ns);
@@ -2566,89 +2580,93 @@ function AppInterna({ usuario }) {
                   </div>}
                 </div>)}
                 {form.tipo==="transferencia"&&(()=>{
-                  const tnV=parse(form.tn),pctOr=parse(form.tpctOrigen)||0,pctDest=parse(form.tpctDestino)||0;
-                  const comOr=tnV*(pctOr/100),comDest=tnV*(pctDest/100);
-                  const netoOr=tnV-comOr,netoDest=tnV+comDest,ganFin=comOr+comDest;
+                  const tn=parse(form.tn), pctOr=parse(form.tpctOrigen)||0;
+                  const comOr=tn*(pctOr/100), netoOr=tn-comOr;
                   const clOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId));
-                  const clDestino=clientes.find(x=>x.id===Number(form.ccDestinoId));
                   const filtOrigen=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccOrigenBuscar||"").toLowerCase()));
-                  const filtDestino=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((form.ccDestinoBuscar||"").toLowerCase()));
+                  const totalDistribuido=tDestinos.reduce((s,d)=>s+parse(d.monto),0);
+                  const totalComDest=tDestinos.reduce((s,d)=>{const m=parse(d.monto),p=parse(d.pct)||0;return s+m*(p/100);},0);
+                  const ganTotal=comOr+totalComDest;
+                  const diferencia=netoOr-totalDistribuido;
                   return (
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      <div style={S.grid("1fr 1fr",8)}>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      <div style={S.grid("1fr 1fr 1fr",8)}>
                         <div><Lbl>Moneda</Lbl><MonedasSel value={form.tmoneda||"ARS"} onChange={v=>setF("tmoneda",v)}/></div>
-                        <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
+                        <div><Lbl>Monto total origen</Lbl><Inp type="number" placeholder="0" value={form.tn} onChange={e=>setF("tn",e.target.value)}/></div>
+                        <div><Lbl>% Comisión origen</Lbl><Inp type="number" placeholder="0" value={form.tpctOrigen||""} onChange={e=>setF("tpctOrigen",e.target.value)}/></div>
                       </div>
-                      <div style={S.grid("1fr 1fr",8)}>
-                        <div><Lbl>% Comision origen</Lbl><Inp type="number" placeholder="ej: 2.75" value={form.tpctOrigen||""} onChange={e=>setF("tpctOrigen",e.target.value)}/></div>
-                        <div><Lbl>% Comision destino</Lbl><Inp type="number" placeholder="ej: 2.25" value={form.tpctDestino||""} onChange={e=>setF("tpctDestino",e.target.value)}/></div>
-                      </div>
-                      {tnV>0&&(
-                        <div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 10px",fontSize:11}}>
-                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                            <span style={{color:"#6b7280"}}>Origen HABER ({pctOr}%):</span>
-                            <strong style={{color:"#f87171"}}>{fmt(netoOr)}</strong>
-                          </div>
-                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:ganFin>0?4:0}}>
-                            <span style={{color:"#6b7280"}}>Destino DEBE ({pctDest}%):</span>
-                            <strong style={{color:"#4ade80"}}>{fmt(netoDest)}</strong>
-                          </div>
-                          {ganFin>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:4}}>
-                            <span style={{color:"#f59e0b",fontWeight:600}}>Ganancia financiera:</span>
-                            <strong style={{color:"#f59e0b"}}>{fmt(ganFin)} ({((ganFin/tnV)*100).toFixed(2)}%)</strong>
-                          </div>}
-                        </div>
-                      )}
-                      {/* CC Origen */}
                       <div style={{position:"relative"}}>
-                        <Lbl>CC Origen (quien envia)</Lbl>
+                        <Lbl>CC Origen (quien envía)</Lbl>
                         <div style={{display:"flex",gap:4}}>
-                          {clOrigen&&!form.ccOrigenBuscar&&(
-                            <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",fontSize:10,color:"#f87171",fontWeight:600}}>
-                              {clOrigen.nombre} {clOrigen.apellido}
-                            </div>
-                          )}
+                          {clOrigen&&!form.ccOrigenBuscar&&<div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",fontSize:10,color:"#f87171",fontWeight:600}}>{clOrigen.nombre} {clOrigen.apellido}</div>}
                           <input value={form.ccOrigenBuscar||""} onChange={e=>setF("ccOrigenBuscar",e.target.value)}
                             placeholder={clOrigen&&!form.ccOrigenBuscar?"Cambiar...":"Buscar origen..."}
                             style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                          {form.ccOrigenId&&<button onClick={()=>setF("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
+                          {form.ccOrigenId&&<button onClick={()=>setF("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
                         </div>
-                        {form.ccOrigenBuscar&&filtOrigen.length>0&&(
-                          <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
-                            {filtOrigen.map(cl=>(
-                              <div key={cl.id} onClick={()=>{setF("ccOrigenId",String(cl.id));setF("ccOrigenBuscar","");}}
-                                style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
-                                {cl.nombre} {cl.apellido}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {form.ccOrigenBuscar&&filtOrigen.length>0&&<div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                          {filtOrigen.map(cl=><div key={cl.id} onClick={()=>{setF("ccOrigenId",String(cl.id));setF("ccOrigenBuscar","");}} style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>)}
+                        </div>}
                       </div>
-                      {/* CC Destino */}
-                      <div style={{position:"relative"}}>
-                        <Lbl>CC Destino (quien recibe)</Lbl>
-                        <div style={{display:"flex",gap:4}}>
-                          {clDestino&&!form.ccDestinoBuscar&&(
-                            <div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>
-                              {clDestino.nombre} {clDestino.apellido}
+                      {tn>0&&<div style={{background:"#0a1220",border:"1px solid #3b82f633",borderRadius:6,padding:"8px 10px",fontSize:11,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+                        <span style={{color:"#6b7280"}}>Total enviado: <strong style={{color:"#e2e8f0"}}>{fmt(tn)}</strong></span>
+                        <span style={{color:"#6b7280"}}>Com. origen ({pctOr}%): <strong style={{color:"#f59e0b"}}>-{fmt(comOr)}</strong></span>
+                        <span style={{color:"#6b7280"}}>Neto a distribuir: <strong style={{color:"#4ade80"}}>{fmt(netoOr)}</strong></span>
+                      </div>}
+                      <div style={{borderTop:"1px solid #1f2937",paddingTop:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <Lbl>Destinos</Lbl>
+                          <button onClick={()=>setTDestinos(p=>[...p,{id:Date.now(),clienteId:"",buscar:"",monto:"",pct:"",nota:""}])}
+                            style={{padding:"3px 10px",borderRadius:5,background:"rgba(74,222,128,0.1)",border:"1px solid #4ade8044",color:"#4ade80",fontFamily:"inherit",fontSize:10,cursor:"pointer",fontWeight:600}}>+ Agregar destino</button>
+                        </div>
+                        {tDestinos.map((dest,idx)=>{
+                          const clDest=clientes.find(x=>x.id===Number(dest.clienteId));
+                          const filtDest=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((dest.buscar||"").toLowerCase()));
+                          const mDest=parse(dest.monto),pDest=parse(dest.pct)||0,comDest=mDest*(pDest/100);
+                          return (
+                            <div key={dest.id} style={{background:"#0a0f0a",border:"1px solid #1f2937",borderRadius:7,padding:10,marginBottom:8,display:"flex",flexDirection:"column",gap:6}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                <span style={{fontSize:10,color:"#6b7280",fontWeight:600}}>Destino {idx+1}</span>
+                                {tDestinos.length>1&&<button onClick={()=>setTDestinos(p=>p.filter(d=>d.id!==dest.id))} style={{padding:"2px 7px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#f87171",cursor:"pointer",fontSize:9}}>✕</button>}
+                              </div>
+                              <div style={{position:"relative"}}>
+                                <div style={{display:"flex",gap:4}}>
+                                  {clDest&&!dest.buscar&&<div style={{flex:1,padding:"5px 8px",borderRadius:5,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8033",fontSize:10,color:"#4ade80",fontWeight:600}}>{clDest.nombre} {clDest.apellido}</div>}
+                                  <input value={dest.buscar||""} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,buscar:e.target.value}:d))}
+                                    placeholder={clDest&&!dest.buscar?"Cambiar cliente...":"Buscar cliente destino..."}
+                                    style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
+                                  {dest.clienteId&&<button onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:"",buscar:""}:d))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                </div>
+                                {dest.buscar&&filtDest.length>0&&<div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:100,overflowY:"auto",marginTop:2}}>
+                                  {filtDest.map(cl=><div key={cl.id} onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:String(cl.id),buscar:""}:d))} style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>{cl.nombre} {cl.apellido}</div>)}
+                                </div>}
+                              </div>
+                              <div style={S.grid("1fr 1fr 1fr",6)}>
+                                <div><Lbl>Monto a recibir</Lbl><Inp type="number" placeholder="0" value={dest.monto} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,monto:e.target.value}:d))}/></div>
+                                <div><Lbl>% Comisión</Lbl><Inp type="number" placeholder="0" value={dest.pct} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,pct:e.target.value}:d))}/></div>
+                                <div><Lbl>Nota</Lbl><Inp placeholder="opcional" value={dest.nota} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,nota:e.target.value}:d))}/></div>
+                              </div>
+                              {mDest>0&&<div style={{fontSize:10,color:"#6b7280",display:"flex",gap:12}}>
+                                <span>Recibe: <strong style={{color:"#e2e8f0"}}>{fmt(mDest)}</strong></span>
+                                {pDest>0&&<span>Com ({pDest}%): <strong style={{color:"#f59e0b"}}>+{fmt(comDest)}</strong></span>}
+                                <span>DEBE en CC: <strong style={{color:"#4ade80"}}>{fmt(mDest+comDest)}</strong></span>
+                              </div>}
                             </div>
-                          )}
-                          <input value={form.ccDestinoBuscar||""} onChange={e=>setF("ccDestinoBuscar",e.target.value)}
-                            placeholder={clDestino&&!form.ccDestinoBuscar?"Cambiar...":"Buscar destino..."}
-                            style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                          {form.ccDestinoId&&<button onClick={()=>setF("ccDestinoId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>x</button>}
-                        </div>
-                        {form.ccDestinoBuscar&&filtDestino.length>0&&(
-                          <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
-                            {filtDestino.map(cl=>(
-                              <div key={cl.id} onClick={()=>{setF("ccDestinoId",String(cl.id));setF("ccDestinoBuscar","");}}
-                                style={{padding:"6px 10px",cursor:"pointer",fontSize:10,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
-                                {cl.nombre} {cl.apellido}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
+                      {tn>0&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",flexDirection:"column",gap:4}}>
+                        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
+                        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
+                        <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
+                          <span style={{color:Math.abs(diferencia)<0.01?"#6b7280":"#f87171",fontWeight:600}}>Diferencia:</span>
+                          <strong style={{color:Math.abs(diferencia)<0.01?"#4ade80":"#f87171"}}>{Math.abs(diferencia)<0.01?"✓ Cuadra":fmt(diferencia)}</strong>
+                        </div>
+                        {ganTotal>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
+                          <span style={{color:"#f59e0b",fontWeight:600}}>Ganancia STS:</span>
+                          <strong style={{color:"#f59e0b"}}>{fmt(ganTotal)}</strong>
+                        </div>}
+                      </div>}
                     </div>
                   );
                 })()}
