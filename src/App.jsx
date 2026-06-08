@@ -1232,6 +1232,7 @@ function LoginScreen({ onLogin }) {
 }
 
 function AppInterna({ usuario }) {
+  const [rolUsuario, setRolUsuario] = useState("operador"); // default restringido
   const [hoyState, setHoyState] = useState(getHoy());
   // Actualizar fecha cada minuto por si la app queda abierta de un dia al otro
   useEffect(()=>{
@@ -1348,6 +1349,11 @@ function AppInterna({ usuario }) {
         // Asegurar sesion activa antes de cargar datos
         const {data:{session}} = await SB.auth.getSession();
         if (!session) { setCargando(false); return; }
+        // Cargar rol del usuario
+        if(usuario?.email){
+          const {data:rolData} = await SB.from("usuarios_roles").select("rol").eq("email",usuario.email).single();
+          if(rolData?.rol) setRolUsuario(rolData.rol);
+        }
         // Dia de hoy - schema: id=fecha, caja_ini jsonb, abierta bool
         const {data:dia} = await SB.from("dias").select("*").eq("id",hoy).single();
         if (dia) {
@@ -2001,7 +2007,7 @@ function AppInterna({ usuario }) {
     {id:"inversiones",label:"Inversiones",c:"#2dd4bf"},
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
-  ];
+  ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre","posicion"].includes(p.id));
 
   if (cargando) return (
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
