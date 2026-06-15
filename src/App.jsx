@@ -1303,6 +1303,8 @@ function AppInterna({ usuario }) {
   const [cobrandoDif, setCobrandoDif] = useState(null); // id del cheque en proceso de cobro
   const [cobrandoDifCC, setCobrandoDifCC] = useState({modo:"caja",clienteId:"",buscar:""});
   const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const ultimoInsertRef = useRef(null);
   const [filtroOps, setFiltroOps] = useState("todas");
   const [dragOverId, setDragOverId] = useState(null);
   const dragSrcId = useRef(null);
@@ -1561,6 +1563,10 @@ function AppInterna({ usuario }) {
 
   async function registrarOp() {
     if (cajaCerrada) { notify("La caja esta cerrada",false); return; }
+    if (guardando) { notify("Espera, procesando...",false); return; }
+    setGuardando(true);
+    ultimoInsertRef.current = Date.now();
+    try {
     const {tipo}=form;
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     let opData=null, ns={...saldos};
@@ -1771,6 +1777,7 @@ function AppInterna({ usuario }) {
     }
     await guardarDia(ns,null,null);
     notify("Registrado"); setF("cliente",""); setF("nota","");
+    } catch(e){ notify("Error al registrar",false); console.error(e); } finally { setGuardando(false); ultimoInsertRef.current=null; }
   }
 
   async function guardarEdicionOp(opOriginal, datosNuevos) {
@@ -2008,6 +2015,54 @@ function AppInterna({ usuario }) {
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre","posicion"].includes(p.id));
+
+  // ===== REALTIME =====
+  const recargarMovimientos = useCallback(async()=>{
+    if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 1500) return;
+    const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000);
+    if(!movs) return;
+    setClientes(prev=>prev.map(c=>({
+      ...c,
+      movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
+        id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota
+      }))
+    })));
+  },[]);
+
+  const recargarOperaciones = useCallback(async()=>{
+    if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 1500) return;
+    const {data:opsData} = await SB.from("operaciones").select("*").eq("dia_id",hoy).order("hora",{ascending:true});
+    if(opsData) setOps(opsData.map(o=>({...(o.datos||{}),id:o.id,fecha:o.fecha||o.datos?.fecha,hora:o.hora||o.datos?.hora,tipo:o.tipo})));
+  },[hoy]);
+
+  const recargarDiferidos = useCallback(async()=>{
+    if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 1500) return;
+    const {data:difs} = await SB.from("diferidos").select("*").order("fecha_venc",{ascending:true});
+    if(difs) setDiferidos(difs.map(d=>({
+      id:d.id,cliente:d.cliente,nominal:Number(d.nominal),fechaEmision:d.fecha_emision,
+      fechaVenc:d.fecha_venc,banco:d.banco||"",manual:d.manual||false,
+      tasaEndoso:d.tasa_endoso||"",cobrado:d.cobrado||false,nota:d.nota||""
+    })));
+  },[]);
+
+  const recargarDia = useCallback(async()=>{
+    if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 1500) return;
+    const {data:dia} = await SB.from("dias").select("*").eq("id",hoy).single();
+    if(!dia) return;
+    const sf=dia.caja_ini?._saldos_finales;
+    if(sf) setSaldos(Object.fromEntries(MONEDAS.map(m=>[m.id,Number(sf[m.id])||0])));
+  },[hoy]);
+
+  useEffect(()=>{
+    const channel = SB.channel("realtime_caja")
+      .on("postgres_changes",{event:"*",schema:"public",table:"movimientos_cc"},()=>recargarMovimientos())
+      .on("postgres_changes",{event:"*",schema:"public",table:"operaciones"},()=>recargarOperaciones())
+      .on("postgres_changes",{event:"*",schema:"public",table:"diferidos"},()=>recargarDiferidos())
+      .on("postgres_changes",{event:"*",schema:"public",table:"dias"},()=>recargarDia())
+      .subscribe();
+    return ()=>{ SB.removeChannel(channel); };
+  },[recargarMovimientos,recargarOperaciones,recargarDiferidos,recargarDia]);
+  // ===== FIN REALTIME =====
 
   if (cargando) return (
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -2760,7 +2815,7 @@ function AppInterna({ usuario }) {
                     })()}
                   </div>
                 )}
-                <button onClick={registrarOp} style={{marginTop:12,width:"100%",padding:11,borderRadius:7,background:"#0a1a0a",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:2}}>REGISTRAR</button>
+                <button onClick={registrarOp} disabled={guardando} style={{marginTop:12,width:"100%",padding:11,borderRadius:7,background:guardando?"#0a0a0a":"#0a1a0a",border:"1px solid "+(guardando?"#374151":"#4ade80"),color:guardando?"#374151":"#4ade80",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:guardando?"not-allowed":"pointer",letterSpacing:2,opacity:guardando?0.5:1}}>{guardando?"PROCESANDO...":"REGISTRAR"}</button>
               </Card>
             ):(
               <Card sx={{border:"1px solid #f43f5e33",display:"flex",alignItems:"center",justifyContent:"center",minHeight:200}}>
