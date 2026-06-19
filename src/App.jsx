@@ -1311,7 +1311,7 @@ function AppInterna({ usuario }) {
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
-  const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:"", operacion:null});
+  const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
@@ -3306,97 +3306,78 @@ function AppInterna({ usuario }) {
                   </div>
                   {convertirCC.activo&&(()=>{
                     const salOrigen=saldoCC(c)[convertirCC.monedaOrigen]||0;
-                    const monO=MONEDAS.find(m=>m.id===convertirCC.monedaOrigen);
-                    const monD=MONEDAS.find(m=>m.id===convertirCC.monedaDestino);
                     const montoOrigen=parse(convertirCC.monto)||Math.abs(salOrigen);
                     const cotiz=parse(convertirCC.cotiz)||1;
-                    // Lógica de conversión general:
-                    // La cotización SIEMPRE expresa: cuántas unidades de monedaDestino vale 1 unidad de monedaOrigen
-                    // Ej: USD→ARS cotiz=1420 → 1 USD = 1420 ARS → montoDestino = montoOrigen * cotiz
-                    // Ej: ARS→USD cotiz=1420 → cotiz = ARS por USD → montoDestino = montoOrigen / cotiz
-                    // Ej: EUR→USD cotiz=1.08 → 1 EUR = 1.08 USD → montoDestino = montoOrigen * cotiz
-                    // Ej: USD→EUR cotiz=1.08 → montoDestino = montoOrigen / cotiz
-                    // Para simplificar: si la moneda origen es "menor" (ej USD, EUR, GBP, USDT) y destino es ARS → multiplicar
-                    // En todos los demás casos el usuario puede elegir si es x o /
-                    const monedaMenor=["USD","EUR","GBP","USDT","BRL"];
-                    const origenEsMenor=monedaMenor.includes(convertirCC.monedaOrigen);
-                    const destinoEsMenor=monedaMenor.includes(convertirCC.monedaDestino);
-                    // Auto-detectar operación según par
-                    const operacion = convertirCC.operacion || (
-                      origenEsMenor && !destinoEsMenor ? "x"    // USD→ARS: multiplicar
-                      : !origenEsMenor && destinoEsMenor ? "/"  // ARS→USD: dividir
-                      : origenEsMenor && destinoEsMenor ? "x"   // USD→EUR: multiplicar (cotiz = cuanto vale 1 origen en destino)
-                      : "x"
-                    );
-                    const montoDestino = operacion==="x" ? montoOrigen*cotiz : montoOrigen/cotiz;
-                    const labelCotiz = operacion==="x"
-                      ? `1 ${convertirCC.monedaOrigen} = ${fmt(cotiz)} ${convertirCC.monedaDestino}`
-                      : `1 ${convertirCC.monedaDestino} = ${fmt(cotiz)} ${convertirCC.monedaOrigen}`;
+                    // Calcular montoDestino segun las monedas
+                    const monO=convertirCC.monedaOrigen, monD=convertirCC.monedaDestino;
+                    let montoDestino;
+                    if(monO==="ARS"&&monD==="USD") montoDestino=montoOrigen/cotiz;
+                    else if(monO==="USD"&&monD==="ARS") montoDestino=montoOrigen*cotiz;
+                    else if(monO==="ARS"&&(monD==="EUR"||monD==="GBP")) montoDestino=montoOrigen/cotiz;
+                    else if((monO==="EUR"||monO==="GBP")&&monD==="ARS") montoDestino=montoOrigen*cotiz;
+                    else if(monO==="USD"&&(monD==="EUR"||monD==="GBP"||monD==="USDT")) montoDestino=montoOrigen*cotiz;
+                    else if((monO==="EUR"||monO==="GBP"||monO==="USDT")&&monD==="USD") montoDestino=montoOrigen/cotiz;
+                    else montoDestino=montoOrigen*cotiz;
+                    // Determinar si le debemos o nos debe en moneda origen
+                    const leDebemosOrigen=salOrigen<0; // negativo = le debemos
+                    // Preview explicativo
+                    const textoPreview=leDebemosOrigen
+                      ? "Le debemos "+fmt(montoOrigen)+" "+monO+" → le pasamos a deber "+fmt(montoDestino)+" "+monD
+                      : "Nos debe "+fmt(montoOrigen)+" "+monO+" → nos pasa a deber "+fmt(montoDestino)+" "+monD;
                     return (
                       <div style={{background:"rgba(45,212,191,0.05)",border:"1px solid rgba(45,212,191,0.2)",borderRadius:8,padding:10,marginBottom:12}}>
                         <div style={{fontSize:9,color:"#2dd4bf",letterSpacing:2,marginBottom:8}}>CONVERTIR EN CC DE {c.nombre}</div>
-                        {/* Saldo actual */}
-                        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                        {/* Saldos actuales */}
+                        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
                           {MONEDAS.filter(m=>saldoCC(c)[m.id]!==0).map(m=>{
                             const sal=saldoCC(c)[m.id];
-                            return <div key={m.id} style={{padding:"3px 8px",borderRadius:4,background:"rgba(255,255,255,0.03)",fontSize:10}}>
+                            return <div key={m.id} style={{padding:"3px 8px",borderRadius:4,background:"rgba(255,255,255,0.03)",border:"1px solid #1f2937",fontSize:10}}>
                               <span style={{color:"#6b7280"}}>{m.id}: </span>
-                              <span style={{color:sal>0?"#4ade80":"#f87171",fontWeight:600}}>{m.simbolo}{fmt(Math.abs(sal))}</span>
+                              <span style={{color:sal>0?"#4ade80":"#f87171",fontWeight:600}}>{sal>0?"nos debe ":"le debemos "}{m.simbolo}{fmt(Math.abs(sal))}</span>
                             </div>;
                           })}
                         </div>
                         <div style={S.grid("1fr 1fr",8)}>
+                          <div><Lbl>De (moneda origen)</Lbl><MonedasSel value={convertirCC.monedaOrigen} onChange={v=>setConvertirCC(cv=>({...cv,monedaOrigen:v,monto:""}))}/></div>
+                          <div><Lbl>A (moneda destino)</Lbl><MonedasSel value={convertirCC.monedaDestino} onChange={v=>setConvertirCC(cv=>({...cv,monedaDestino:v}))}/></div>
                           <div>
-                            <Lbl>De</Lbl>
-                            <MonedasSel value={convertirCC.monedaOrigen} onChange={v=>setConvertirCC(cv=>({...cv,monedaOrigen:v,operacion:null}))}/>
-                          </div>
-                          <div>
-                            <Lbl>A</Lbl>
-                            <MonedasSel value={convertirCC.monedaDestino} onChange={v=>setConvertirCC(cv=>({...cv,monedaDestino:v,operacion:null}))} exclude={convertirCC.monedaOrigen}/>
-                          </div>
-                          <div>
-                            <Lbl>Monto {convertirCC.monedaOrigen} <span style={{fontSize:9,color:"#4b5563"}}>(saldo: {fmt(Math.abs(salOrigen))})</span></Lbl>
-                            <Inp type="number" placeholder={fmt(Math.abs(salOrigen))} value={convertirCC.monto}
+                            <Lbl>Monto a convertir ({monO})</Lbl>
+                            <Inp type="number" placeholder={fmt(Math.abs(salOrigen))+" (saldo completo)"} value={convertirCC.monto}
                               onChange={e=>setConvertirCC(cv=>({...cv,monto:e.target.value}))}/>
                           </div>
                           <div>
-                            <Lbl>Cotizacion <span style={{fontSize:9,color:"#4b5563"}}>({labelCotiz})</span></Lbl>
-                            <div style={{display:"flex",gap:4}}>
-                              <Inp type="number" placeholder="1420" value={convertirCC.cotiz}
-                                onChange={e=>setConvertirCC(cv=>({...cv,cotiz:e.target.value}))}/>
-                              <button onClick={()=>setConvertirCC(cv=>({...cv,operacion:operacion==="x"?"/":"x"}))}
-                                title="Cambiar operación (multiplicar o dividir)"
-                                style={{padding:"4px 10px",borderRadius:5,background:"rgba(45,212,191,0.1)",border:"1px solid #2dd4bf44",color:"#2dd4bf",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                                {operacion==="x"?"×":"÷"}
-                              </button>
-                            </div>
+                            <Lbl>Cotizacion ({monO}/{monD})</Lbl>
+                            <Inp type="number" placeholder={monO==="ARS"||monD==="ARS"?"1400":"1"} value={convertirCC.cotiz}
+                              onChange={e=>setConvertirCC(cv=>({...cv,cotiz:e.target.value}))}/>
                           </div>
                         </div>
-                        {convertirCC.cotiz&&(
-                          <div style={{marginTop:6,fontSize:11,color:"#2dd4bf",padding:"6px 10px",background:"rgba(45,212,191,0.08)",borderRadius:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <span>{fmt(montoOrigen)} {convertirCC.monedaOrigen}</span>
-                            <span style={{color:"#4b5563"}}>→</span>
-                            <strong>{fmt(montoDestino)} {convertirCC.monedaDestino}</strong>
-                            <span style={{fontSize:9,color:"#4b5563"}}>({labelCotiz})</span>
+                        {montoOrigen>0&&convertirCC.cotiz&&(
+                          <div style={{marginTop:8,padding:"8px 10px",borderRadius:6,background:"rgba(45,212,191,0.08)",border:"1px solid #2dd4bf33",fontSize:11}}>
+                            <div style={{color:"#2dd4bf",fontWeight:600,marginBottom:4}}>{textoPreview}</div>
+                            <div style={{color:"#6b7280",fontSize:10}}>
+                              Cancela: {fmt(montoOrigen)} {monO} → Crea: {fmt(montoDestino)} {monD}
+                            </div>
                           </div>
                         )}
                         <button onClick={async()=>{
                           if(!montoOrigen||!cotiz){notify("Completa monto y cotizacion",false);return;}
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                          const nota="Conversion "+fmt(montoOrigen)+" "+convertirCC.monedaOrigen+" a "+fmt(montoDestino)+" "+convertirCC.monedaDestino+" (x"+fmt(cotiz)+")";
-                          // Cancelar deuda en moneda origen
-                          // Si le debemos (saldo negativo) → retiro_transf para cancelar
-                          // Si nos debe (saldo positivo) → ingreso_transf para cancelar
-                          const tipoOrigen=salOrigen<0?"retiro_transf":"ingreso_transf";
-                          const mv1={id:Date.now(),hora,fecha:hoy,tipo:tipoOrigen,moneda:convertirCC.monedaOrigen,monto:montoOrigen,nota};
-                          await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoOrigen,moneda:convertirCC.monedaOrigen,monto:montoOrigen,nota});
+                          const nota="Conversion "+fmt(montoOrigen)+" "+monO+" → "+fmt(montoDestino)+" "+monD+" (cotiz "+fmt(cotiz)+")";
+                          // Movimiento 1: cancelar en moneda origen
+                          // Si le debemos (neg) → retiro_transf sube el saldo hacia 0
+                          // Si nos debe (pos) → ingreso_transf baja el saldo hacia 0
+                          const tipoCancel=leDebemosOrigen?"retiro_transf":"ingreso_transf";
+                          const {data:ins1}=await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoCancel,moneda:monO,monto:montoOrigen,nota}).select().single();
+                          const mv1={id:ins1?.id||Date.now(),hora,fecha:hoy,tipo:tipoCancel,moneda:monO,monto:montoOrigen,nota};
                           setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
-                          // Crear deuda equivalente en moneda destino (mismo signo)
-                          const tipoDestino=salOrigen<0?"ingreso_transf":"retiro_transf";
-                          const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota};
-                          await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota});
+                          // Movimiento 2: crear deuda en moneda destino (mismo sentido)
+                          // Si le debíamos → ahora le debemos en destino → ingreso_transf
+                          // Si nos debía → ahora nos debe en destino → retiro_transf
+                          const tipoNuevo=leDebemosOrigen?"ingreso_transf":"retiro_transf";
+                          const {data:ins2}=await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoNuevo,moneda:monD,monto:montoDestino,nota}).select().single();
+                          const mv2={id:ins2?.id||Date.now()+1,hora,fecha:hoy,tipo:tipoNuevo,moneda:monD,monto:montoDestino,nota};
                           setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
-                          setConvertirCC({activo:false,monedaOrigen:"USD",monedaDestino:"ARS",monto:"",cotiz:"",operacion:null});
+                          setConvertirCC({activo:false,monedaOrigen:"USD",monedaDestino:"ARS",monto:"",cotiz:""});
                           notify("Conversion registrada ✓");
                         }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(45,212,191,0.1)",border:"1px solid #2dd4bf",color:"#2dd4bf",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                           ⇌ Confirmar conversion
