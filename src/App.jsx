@@ -1311,7 +1311,7 @@ function AppInterna({ usuario }) {
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
-  const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
+  const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:"", operacion:null});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
     sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
@@ -3310,11 +3310,28 @@ function AppInterna({ usuario }) {
                     const monD=MONEDAS.find(m=>m.id===convertirCC.monedaDestino);
                     const montoOrigen=parse(convertirCC.monto)||Math.abs(salOrigen);
                     const cotiz=parse(convertirCC.cotiz)||1;
-                    const montoDestino=convertirCC.monedaOrigen==="USD"&&convertirCC.monedaDestino==="ARS"
-                      ? montoOrigen*cotiz
-                      : convertirCC.monedaOrigen==="ARS"&&convertirCC.monedaDestino==="USD"
-                      ? montoOrigen/cotiz
-                      : montoOrigen*cotiz;
+                    // Lógica de conversión general:
+                    // La cotización SIEMPRE expresa: cuántas unidades de monedaDestino vale 1 unidad de monedaOrigen
+                    // Ej: USD→ARS cotiz=1420 → 1 USD = 1420 ARS → montoDestino = montoOrigen * cotiz
+                    // Ej: ARS→USD cotiz=1420 → cotiz = ARS por USD → montoDestino = montoOrigen / cotiz
+                    // Ej: EUR→USD cotiz=1.08 → 1 EUR = 1.08 USD → montoDestino = montoOrigen * cotiz
+                    // Ej: USD→EUR cotiz=1.08 → montoDestino = montoOrigen / cotiz
+                    // Para simplificar: si la moneda origen es "menor" (ej USD, EUR, GBP, USDT) y destino es ARS → multiplicar
+                    // En todos los demás casos el usuario puede elegir si es x o /
+                    const monedaMenor=["USD","EUR","GBP","USDT","BRL"];
+                    const origenEsMenor=monedaMenor.includes(convertirCC.monedaOrigen);
+                    const destinoEsMenor=monedaMenor.includes(convertirCC.monedaDestino);
+                    // Auto-detectar operación según par
+                    const operacion = convertirCC.operacion || (
+                      origenEsMenor && !destinoEsMenor ? "x"    // USD→ARS: multiplicar
+                      : !origenEsMenor && destinoEsMenor ? "/"  // ARS→USD: dividir
+                      : origenEsMenor && destinoEsMenor ? "x"   // USD→EUR: multiplicar (cotiz = cuanto vale 1 origen en destino)
+                      : "x"
+                    );
+                    const montoDestino = operacion==="x" ? montoOrigen*cotiz : montoOrigen/cotiz;
+                    const labelCotiz = operacion==="x"
+                      ? `1 ${convertirCC.monedaOrigen} = ${fmt(cotiz)} ${convertirCC.monedaDestino}`
+                      : `1 ${convertirCC.monedaDestino} = ${fmt(cotiz)} ${convertirCC.monedaOrigen}`;
                     return (
                       <div style={{background:"rgba(45,212,191,0.05)",border:"1px solid rgba(45,212,191,0.2)",borderRadius:8,padding:10,marginBottom:12}}>
                         <div style={{fontSize:9,color:"#2dd4bf",letterSpacing:2,marginBottom:8}}>CONVERTIR EN CC DE {c.nombre}</div>
@@ -3331,11 +3348,11 @@ function AppInterna({ usuario }) {
                         <div style={S.grid("1fr 1fr",8)}>
                           <div>
                             <Lbl>De</Lbl>
-                            <MonedasSel value={convertirCC.monedaOrigen} onChange={v=>setConvertirCC(cv=>({...cv,monedaOrigen:v}))}/>
+                            <MonedasSel value={convertirCC.monedaOrigen} onChange={v=>setConvertirCC(cv=>({...cv,monedaOrigen:v,operacion:null}))}/>
                           </div>
                           <div>
                             <Lbl>A</Lbl>
-                            <MonedasSel value={convertirCC.monedaDestino} onChange={v=>setConvertirCC(cv=>({...cv,monedaDestino:v}))} exclude={convertirCC.monedaOrigen}/>
+                            <MonedasSel value={convertirCC.monedaDestino} onChange={v=>setConvertirCC(cv=>({...cv,monedaDestino:v,operacion:null}))} exclude={convertirCC.monedaOrigen}/>
                           </div>
                           <div>
                             <Lbl>Monto {convertirCC.monedaOrigen} <span style={{fontSize:9,color:"#4b5563"}}>(saldo: {fmt(Math.abs(salOrigen))})</span></Lbl>
@@ -3343,14 +3360,24 @@ function AppInterna({ usuario }) {
                               onChange={e=>setConvertirCC(cv=>({...cv,monto:e.target.value}))}/>
                           </div>
                           <div>
-                            <Lbl>Cotizacion</Lbl>
-                            <Inp type="number" placeholder="1400" value={convertirCC.cotiz}
-                              onChange={e=>setConvertirCC(cv=>({...cv,cotiz:e.target.value}))}/>
+                            <Lbl>Cotizacion <span style={{fontSize:9,color:"#4b5563"}}>({labelCotiz})</span></Lbl>
+                            <div style={{display:"flex",gap:4}}>
+                              <Inp type="number" placeholder="1420" value={convertirCC.cotiz}
+                                onChange={e=>setConvertirCC(cv=>({...cv,cotiz:e.target.value}))}/>
+                              <button onClick={()=>setConvertirCC(cv=>({...cv,operacion:operacion==="x"?"/":"x"}))}
+                                title="Cambiar operación (multiplicar o dividir)"
+                                style={{padding:"4px 10px",borderRadius:5,background:"rgba(45,212,191,0.1)",border:"1px solid #2dd4bf44",color:"#2dd4bf",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                                {operacion==="x"?"×":"÷"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                         {convertirCC.cotiz&&(
-                          <div style={{marginTop:6,fontSize:10,color:"#2dd4bf",padding:"4px 8px",background:"rgba(45,212,191,0.08)",borderRadius:5}}>
-                            {fmt(montoOrigen)} {convertirCC.monedaOrigen} → {fmt(montoDestino)} {convertirCC.monedaDestino}
+                          <div style={{marginTop:6,fontSize:11,color:"#2dd4bf",padding:"6px 10px",background:"rgba(45,212,191,0.08)",borderRadius:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <span>{fmt(montoOrigen)} {convertirCC.monedaOrigen}</span>
+                            <span style={{color:"#4b5563"}}>→</span>
+                            <strong>{fmt(montoDestino)} {convertirCC.monedaDestino}</strong>
+                            <span style={{fontSize:9,color:"#4b5563"}}>({labelCotiz})</span>
                           </div>
                         )}
                         <button onClick={async()=>{
@@ -3369,7 +3396,7 @@ function AppInterna({ usuario }) {
                           const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota};
                           await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:tipoDestino,moneda:convertirCC.monedaDestino,monto:montoDestino,nota});
                           setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
-                          setConvertirCC({activo:false,monedaOrigen:"USD",monedaDestino:"ARS",monto:"",cotiz:""});
+                          setConvertirCC({activo:false,monedaOrigen:"USD",monedaDestino:"ARS",monto:"",cotiz:"",operacion:null});
                           notify("Conversion registrada ✓");
                         }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(45,212,191,0.1)",border:"1px solid #2dd4bf",color:"#2dd4bf",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                           ⇌ Confirmar conversion
