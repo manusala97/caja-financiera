@@ -2380,7 +2380,7 @@ function AppInterna({ usuario }) {
                     {/* Toggle impacto en caja de moneda base */}
                     <div style={{marginTop:10,marginBottom:4}}>
                       <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:6}}>
-                        {form.tipo==="compra"?"USD ENTRAN A CAJA":"USD SALEN DE CAJA"}
+                        {form.tipo==="compra"?form.moneda+" ENTRAN A CAJA":form.moneda+" SALEN DE CAJA"}
                       </div>
                       <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                         <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid #1f2937"}}>
@@ -2405,10 +2405,15 @@ function AppInterna({ usuario }) {
                                   </div>
                                 )}
                                 <input value={usdPendiente.buscar||""} onChange={e=>setUsdPendiente(u=>({...u,buscar:e.target.value}))}
-                                  placeholder={clSel?"Cambiar...":"¿Quien nos debe los "+form.moneda+"?"}
+                                  placeholder={clSel?"Cambiar...":form.tipo==="compra"?"¿Quien nos debe los "+form.moneda+"?":"¿A quien le debemos los "+form.moneda+"?"}
                                   style={{flex:1,background:"#0a0a0a",border:"1px solid #6366f133",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
                                 {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
                                   style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                              </div>
+                              <div style={{fontSize:9,color:"#6366f1",marginTop:3}}>
+                                {form.tipo==="compra"
+                                  ?"El cliente nos debe los "+form.moneda+" (DEBE en su CC)"
+                                  :"Le debemos los "+form.moneda+" al cliente (HABER en su CC)"}
                               </div>
                               {usdPendiente.buscar&&filtrados.length>0&&(
                                 <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
