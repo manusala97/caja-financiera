@@ -1682,7 +1682,18 @@ function AppInterna({ usuario }) {
       } else {
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
-      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
+      // Calcular impactoReal2: cuanto impacto la caja en moneda2
+      let impactoReal2=m2; // por defecto todo
+      if(mostrarDesglose&&desglose.length>0){
+        impactoReal2=desglose.filter(d=>d.tipo!=="sincc").reduce((s,d)=>{
+          const dm=parse(d.monto); if(!dm) return s;
+          if(d.tipo==="efectivo") return s+dm;
+          return s+(d.impactaCaja?dm:0);
+        },0);
+      } else if(form.baseImpactaCaja==="no"){
+        impactoReal2=0; // pendiente CC, no impacto caja en moneda2
+      }
+      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,impactoReal2,baseImpactaCaja:form.baseImpactaCaja||"si",cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
       // Procesar base pendiente (no impacta caja)
       if(form.baseImpactaCaja==="no"&&usdPendiente.clienteId){
         const cPendId2=Number(usdPendiente.clienteId);
