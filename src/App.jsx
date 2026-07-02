@@ -1831,22 +1831,30 @@ function AppInterna({ usuario }) {
     }
     const ns={...saldos};
     const t=op.tipo;
-    const imp2=op.impactoReal2!==undefined?op.impactoReal2:op.monto2;
-    if (t==="compra")    { if(baseImpacto) ns[op.moneda]-=op.monto; ns[op.moneda2]+=imp2; }
-    else if (t==="venta"){ if(baseImpacto) ns[op.moneda]+=op.monto; ns[op.moneda2]-=imp2; }
-    else if (t==="cheque_dia") { ns.ARS-=op.cn; }
-    else if (t==="cheque_dif") { ns.ARS+=op.montoFinal||op.monto; }
+    // imp2: cuanto impacto REALMENTE la caja en moneda2
+    // Usar impactoReal2 si existe (guardado al registrar), sino monto2 completo
+    const imp2=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
+    if (t==="compra"){
+      if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0);
+      if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)+imp2;
+    } else if (t==="venta"){
+      if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)+Number(op.monto||0);
+      if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)-imp2;
+    } else if (t==="cheque_dia") { ns.ARS=Number(ns.ARS||0)-Number(op.cn||0); }
+    else if (t==="cheque_dif") { ns.ARS=Number(ns.ARS||0)+Number(op.montoFinal||op.monto||0); }
     else if (t==="transferencia") { /* comision no impacta caja */ }
-    else if (t==="ajuste") { ns[op.moneda]-=op.delta; }
-    else if (t==="cobro_dif") { ns[op.moneda]-=op.monto; }
+    else if (t==="ajuste") { ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.delta||0); }
+    else if (t==="cobro_dif") { ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0); }
     setSaldos(ns);
-    await SB.from("operaciones").delete().eq("id",op.id);
+    const {error:delErr}=await SB.from("operaciones").delete().eq("id",op.id);
+    if(delErr){ notify("Error al eliminar: "+delErr.message,false); return; }
     setOps(p=>p.filter(o=>o.id!==op.id));
     for(const mv of movsVinculados){
       await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
       setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
     }
-    await guardarDia(ns,null,null);
+    const {error:diaErr}=await guardarDia(ns,null,null);
+    if(diaErr) console.error("Error guardando dia tras eliminar:",diaErr);
     notify("Eliminada"+(movsVinculados.length>0?" y movimientos CC revertidos":"")+" ✓");
   }
 
