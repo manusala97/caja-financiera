@@ -2925,11 +2925,19 @@ function AppInterna({ usuario }) {
               const movs = [];
               const t = op.tipo;
               if(t==="compra"){
-                movs.push({moneda:op.moneda,monto:op.monto,entrada:true,label:"Compra "+op.moneda,detalle:op.cliente||(op.nota||"")});
-                movs.push({moneda:op.moneda2,monto:op.monto2,entrada:false,label:"Compra "+op.moneda+" (pago)",detalle:op.cliente||(op.nota||"")});
+                const baseImp=op.baseImpactaCaja!=="no";
+                const imp2=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
+                const ccParte=Number(op.monto2||0)-imp2;
+                if(baseImp) movs.push({moneda:op.moneda,monto:op.monto,entrada:true,label:"Compra "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(imp2>0) movs.push({moneda:op.moneda2,monto:imp2,entrada:false,label:"Compra "+op.moneda+" (pago caja)",detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(ccParte>0) movs.push({moneda:op.moneda2,monto:ccParte,entrada:false,label:"Compra "+op.moneda+" (pago CC)",detalle:op.cliente||(op.nota||""),esCaja:false,esCC:true});
               } else if(t==="venta"){
-                movs.push({moneda:op.moneda,monto:op.monto,entrada:false,label:"Venta "+op.moneda,detalle:op.cliente||(op.nota||"")});
-                movs.push({moneda:op.moneda2,monto:op.monto2,entrada:true,label:"Venta "+op.moneda+" (cobro)",detalle:op.cliente||(op.nota||"")});
+                const baseImpV=op.baseImpactaCaja!=="no";
+                const imp2V=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
+                const ccParteV=Number(op.monto2||0)-imp2V;
+                if(baseImpV) movs.push({moneda:op.moneda,monto:op.monto,entrada:false,label:"Venta "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(imp2V>0) movs.push({moneda:op.moneda2,monto:imp2V,entrada:true,label:"Venta "+op.moneda+" (cobro caja)",detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(ccParteV>0) movs.push({moneda:op.moneda2,monto:ccParteV,entrada:true,label:"Venta "+op.moneda+" (cobro CC)",detalle:op.cliente||(op.nota||""),esCaja:false,esCC:true});
               } else if(t==="cheque_dia"){
                 movs.push({moneda:"ARS",monto:op.cn,entrada:true,label:"Cheque al día",detalle:op.cliente||(op.nota||"")});
               } else if(t==="cheque_dif"){
@@ -2957,7 +2965,8 @@ function AppInterna({ usuario }) {
             let sal=ini;
             const filas=[{hora:"APERTURA",label:"Saldo inicial",entrada:true,monto:0,saldo:ini,detalle:"",id:"ini_"+m.id,origen:"ini"}];
             todosMovs.filter(mv=>mv.moneda===m.id).forEach(mv=>{
-              sal+=mv.entrada?mv.monto:-mv.monto;
+              // Los movimientos via CC no impactan el saldo de caja fisica
+              if(!mv.esCC) sal+=mv.entrada?mv.monto:-mv.monto;
               filas.push({...mv,saldo:sal});
             });
             if(filas.length>1) extractoPorMoneda[m.id]={filas,ini,fin:sal,mon:m};
@@ -3005,6 +3014,8 @@ function AppInterna({ usuario }) {
                             <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{f.hora}</td>
                             <td style={{padding:"7px 8px",color:"#e2e8f0",fontWeight:f.origen==="ini"?600:400}}>
                               {f.origen==="cc"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc",marginRight:6}}>CC</span>}
+                              {f.esCC&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.12)",color:"#a5b4fc",marginRight:6}}>via CC</span>}
+                              {f.esCaja&&f.origen!=="ini"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(74,222,128,0.08)",color:"#4ade80",marginRight:6}}>caja</span>}
                               {f.label}
                             </td>
                             <td style={{padding:"7px 8px",color:"#4b5563",fontSize:10}}>{f.detalle}</td>
