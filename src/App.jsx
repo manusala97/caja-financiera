@@ -2928,16 +2928,19 @@ function AppInterna({ usuario }) {
                 const baseImp=op.baseImpactaCaja!=="no";
                 const imp2=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
                 const ccParte=Number(op.monto2||0)-imp2;
-                if(baseImp) movs.push({moneda:op.moneda,monto:op.monto,entrada:true,label:"Compra "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(imp2>0) movs.push({moneda:op.moneda2,monto:imp2,entrada:false,label:"Compra "+op.moneda+" (pago caja)",detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(ccParte>0) movs.push({moneda:op.moneda2,monto:ccParte,entrada:false,label:"Compra "+op.moneda+" (pago CC)",detalle:op.cliente||(op.nota||""),esCaja:false,esCC:true});
+                // Buscar CCs vinculadas a esta op
+                const ccsVinc=clientes.flatMap(cl=>cl.movimientos.filter(mv=>mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora).map(mv=>cl.nombre+" "+cl.apellido)).filter((v,i,a)=>a.indexOf(v)===i);
+                if(baseImp) movs.push({moneda:op.moneda,monto:op.monto,entrada:true,label:"Compra "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(imp2>0) movs.push({moneda:op.moneda2,monto:imp2,entrada:false,label:"Pago efectivo — Compra "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(ccParte>0) movs.push({moneda:op.moneda2,monto:ccParte,entrada:false,label:"Pago via CC — Compra "+fmt(op.monto)+" "+op.moneda,detalle:ccsVinc.length>0?ccsVinc.join(", "):(op.nota||""),esCaja:false,esCC:true});
               } else if(t==="venta"){
                 const baseImpV=op.baseImpactaCaja!=="no";
                 const imp2V=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
                 const ccParteV=Number(op.monto2||0)-imp2V;
-                if(baseImpV) movs.push({moneda:op.moneda,monto:op.monto,entrada:false,label:"Venta "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(imp2V>0) movs.push({moneda:op.moneda2,monto:imp2V,entrada:true,label:"Venta "+op.moneda+" (cobro caja)",detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(ccParteV>0) movs.push({moneda:op.moneda2,monto:ccParteV,entrada:true,label:"Venta "+op.moneda+" (cobro CC)",detalle:op.cliente||(op.nota||""),esCaja:false,esCC:true});
+                const ccsVincV=clientes.flatMap(cl=>cl.movimientos.filter(mv=>mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora).map(mv=>cl.nombre+" "+cl.apellido)).filter((v,i,a)=>a.indexOf(v)===i);
+                if(baseImpV) movs.push({moneda:op.moneda,monto:op.monto,entrada:false,label:"Venta "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(imp2V>0) movs.push({moneda:op.moneda2,monto:imp2V,entrada:true,label:"Cobro efectivo — Venta "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
+                if(ccParteV>0) movs.push({moneda:op.moneda2,monto:ccParteV,entrada:true,label:"Cobro via CC — Venta "+fmt(op.monto)+" "+op.moneda,detalle:ccsVincV.length>0?ccsVincV.join(", "):(op.nota||""),esCaja:false,esCC:true});
               } else if(t==="cheque_dia"){
                 movs.push({moneda:"ARS",monto:op.cn,entrada:true,label:"Cheque al día",detalle:op.cliente||(op.nota||"")});
               } else if(t==="cheque_dif"){
@@ -3010,18 +3013,18 @@ function AppInterna({ usuario }) {
                       </thead>
                       <tbody>
                         {filas.map((f,i)=>(
-                          <tr key={f.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:f.origen==="ini"?"rgba(255,255,255,0.02)":f.origen==="cc"?"rgba(99,102,241,0.04)":"transparent"}}>
-                            <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap"}}>{f.hora}</td>
-                            <td style={{padding:"7px 8px",color:"#e2e8f0",fontWeight:f.origen==="ini"?600:400}}>
+                          <tr key={f.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:f.origen==="ini"?"rgba(255,255,255,0.02)":f.esCC?"rgba(99,102,241,0.03)":f.origen==="cc"?"rgba(99,102,241,0.04)":"transparent"}}>
+                            <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap",fontSize:10}}>{f.hora}</td>
+                            <td style={{padding:"7px 8px",color:f.esCC?"#a5b4fc":"#e2e8f0",fontWeight:f.origen==="ini"?600:400}}>
                               {f.origen==="cc"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc",marginRight:6}}>CC</span>}
-                              {f.esCC&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.12)",color:"#a5b4fc",marginRight:6}}>via CC</span>}
-                              {f.esCaja&&f.origen!=="ini"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(74,222,128,0.08)",color:"#4ade80",marginRight:6}}>caja</span>}
+                              {f.esCC&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.12)",color:"#a5b4fc",marginRight:6}}>⇄ CC</span>}
+                              {f.esCaja&&f.origen!=="ini"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(74,222,128,0.08)",color:"#4ade80",marginRight:6}}>💵</span>}
                               {f.label}
                             </td>
-                            <td style={{padding:"7px 8px",color:"#4b5563",fontSize:10}}>{f.detalle}</td>
-                            <td style={{padding:"7px 8px",textAlign:"right",color:"#4ade80",fontWeight:600}}>{f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
-                            <td style={{padding:"7px 8px",textAlign:"right",color:"#f87171",fontWeight:600}}>{!f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
-                            <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:f.saldo>0?"#e2e8f0":f.saldo<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{mon.simbolo}{fmt(f.saldo)}</td>
+                            <td style={{padding:"7px 8px",color:f.esCC?"#6366f1":"#4b5563",fontSize:10,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.detalle}</td>
+                            <td style={{padding:"7px 8px",textAlign:"right",color:f.esCC?"#a5b4fc":"#4ade80",fontWeight:600}}>{f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
+                            <td style={{padding:"7px 8px",textAlign:"right",color:f.esCC?"#a5b4fc":"#f87171",fontWeight:600}}>{!f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
+                            <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:f.esCC?"#6b7280":f.saldo>0?"#e2e8f0":f.saldo<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace",fontSize:f.esCC?10:11}}>{f.esCC?"—":mon.simbolo+fmt(f.saldo)}</td>
                           </tr>
                         ))}
                       </tbody>
