@@ -1308,6 +1308,8 @@ function AppInterna({ usuario }) {
   const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId|"op_simultanea", monto:"", impactaCaja:true, cotizSim:"", clienteSim:"", monedaSim:"USD", impactaCajaSim:true, clienteSimId:"", clienteSimBuscar:""}]
   const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  const [resolviendo, setResolviendo] = useState(null); // {opId, pi, monto, nota, op}
+  const [resolverForm, setResolverForm] = useState({tipo:"efectivo",clienteId:"",buscar:"",moneda2:"ARS"});
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
@@ -1578,6 +1580,40 @@ function AppInterna({ usuario }) {
     setPant("home"); notify("Caja abierta ✓");
   }
 
+  async function resolverPendiente() {
+    if (!resolviendo) return;
+    const {opId, pi, monto, op} = resolviendo;
+    const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+    const moneda = op.moneda2 || "ARS";
+
+    if (resolverForm.tipo === "efectivo") {
+      // Impacta caja directo
+      const ns = await leerSaldoFresco();
+      // En venta: entra moneda2 a caja. En compra: sale moneda2.
+      if (op.tipo === "venta") ns[moneda] = (ns[moneda]||0) + monto;
+      else ns[moneda] = (ns[moneda]||0) - monto;
+      setSaldos(ns);
+      await guardarDia(ns, null, null);
+    } else if (resolverForm.tipo === "cc" && resolverForm.clienteId) {
+      // Impacta CC del cliente
+      const cId = Number(resolverForm.clienteId);
+      const tipoMov = op.tipo === "venta" ? "retiro_transf" : "ingreso_transf";
+      const notaCC = `Resolución pendiente — ${op.tipo} ${fmt(op.monto)} ${op.moneda} ($${fmt(monto)} ${moneda})`;
+      const mv = {id:Date.now(),hora,fecha:hoy,tipo:tipoMov,moneda,monto,nota:notaCC};
+      await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:tipoMov,moneda,monto,nota:notaCC});
+      setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+    }
+
+    // Marcar pendiente como resuelto en la op
+    const opActualizada = {...op};
+    opActualizada.pendientes = op.pendientes.map((p,i)=>i===pi?{...p,resuelto:true}:p);
+    await SB.from("operaciones").update({datos:opActualizada}).eq("id",opId);
+    setOps(prev=>prev.map(o=>o.id!==opId?o:opActualizada));
+    setResolviendo(null);
+    setResolverForm({tipo:"efectivo",clienteId:"",buscar:"",moneda2:"ARS"});
+    notify("Pendiente resuelto ✓");
+  }
+
   async function registrarOp() {
     if (cajaCerrada) { notify("La caja esta cerrada",false); return; }
     if (guardando) { notify("Espera, procesando...",false); return; }
@@ -1604,6 +1640,7 @@ function AppInterna({ usuario }) {
       if (mostrarDesglose&&desglose.length>0) {
         for (const d of desglose) {
           const dm=parse(d.monto); if(!dm) continue;
+          if (d.tipo==="pendiente") continue; // no impacta caja ni CC
           if (d.tipo==="efectivo") {
             // Efectivo siempre impacta caja
             tipo==="compra"?ns[form.moneda2]-=dm:ns[form.moneda2]+=dm;
@@ -1694,7 +1731,7 @@ function AppInterna({ usuario }) {
       // Calcular impactoReal2: cuanto impacto la caja en moneda2
       let impactoReal2=m2; // por defecto todo
       if(mostrarDesglose&&desglose.length>0){
-        impactoReal2=desglose.filter(d=>d.tipo!=="sincc").reduce((s,d)=>{
+        impactoReal2=desglose.filter(d=>d.tipo!=="sincc"&&d.tipo!=="pendiente").reduce((s,d)=>{
           const dm=parse(d.monto); if(!dm) return s;
           if(d.tipo==="efectivo") return s+dm;
           return s+(d.impactaCaja?dm:0);
@@ -1702,7 +1739,8 @@ function AppInterna({ usuario }) {
       } else if(form.baseImpactaCaja==="no"){
         impactoReal2=0; // pendiente CC, no impacto caja en moneda2
       }
-      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,impactoReal2,baseImpactaCaja:form.baseImpactaCaja||"si",cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota};
+      const pendientesGuardar=mostrarDesglose?desglose.filter(d=>d.tipo==="pendiente").map(d=>({monto:parse(d.monto),nota:d.notaPendiente||"",resuelto:false})):[];
+      opData={tipo,hora,moneda:form.moneda,monto:m,moneda2:form.moneda2,monto2:m2,impactoReal2,baseImpactaCaja:form.baseImpactaCaja||"si",cotizacion:parse(form.cotizacion),cliente:form.cliente,nota:form.nota,pendientes:pendientesGuardar};
       // Procesar base pendiente (no impacta caja)
       if(form.baseImpactaCaja==="no"&&usdPendiente.clienteId){
         const cPendId2=Number(usdPendiente.clienteId);
@@ -2001,7 +2039,12 @@ function AppInterna({ usuario }) {
         <span style={{color:t.color,fontSize:13,marginTop:1,width:14}}>{t.icon}</span>
         <div style={{flex:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
-            <span style={{fontSize:11,color:t.color,fontWeight:700}}>{t.label}</span>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:11,color:t.color,fontWeight:700}}>{t.label}</span>
+              {op.pendientes&&op.pendientes.some(p=>!p.resuelto)&&(
+                <span style={{fontSize:10,color:"#fb923c",background:"rgba(251,146,60,0.12)",border:"1px solid #fb923c44",borderRadius:4,padding:"1px 6px",fontWeight:700}}>⚠ PENDIENTE</span>
+              )}
+            </div>
             <div style={{display:"flex",gap:5,alignItems:"center"}}>
               <span style={{fontSize:10,color:"#4b5563"}}>{op.hora}</span>
               {(conAcc||esHoy)&&<>
@@ -2018,6 +2061,23 @@ function AppInterna({ usuario }) {
             {!["cheque_dia","cheque_dif","transferencia","compra","venta"].includes(op.tipo)&&(m?.simbolo||"")+fmt(op.monto)+" "+(op.moneda||"")}
           </div>
           {(op.cliente||op.nota)&&<div style={{fontSize:11,color:"#4b5563",marginTop:1}}>{op.cliente?"👤 "+op.cliente:""}{op.cliente&&op.nota?" - ":""}{op.nota||""}</div>}
+          {op.pendientes&&op.pendientes.length>0&&(
+            <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+              {op.pendientes.map((p,pi)=>(
+                <div key={pi} style={{display:"flex",alignItems:"center",gap:6,background:p.resuelto?"rgba(74,222,128,0.05)":"rgba(251,146,60,0.07)",border:"1px solid "+(p.resuelto?"#4ade8033":"#fb923c44"),borderRadius:6,padding:"4px 10px"}}>
+                  <span style={{fontSize:10,color:p.resuelto?"#4ade80":"#fb923c",fontWeight:700}}>{p.resuelto?"✓":"⏳"}</span>
+                  <span style={{fontSize:11,color:p.resuelto?"#4ade80":"#fb923c",fontWeight:600}}>${fmt(p.monto)} ARS {p.resuelto?"(resuelto)":"pendiente"}</span>
+                  {p.nota&&<span style={{fontSize:10,color:"#6b7280"}}>— {p.nota}</span>}
+                  {!p.resuelto&&(conAcc||esHoy)&&(
+                    <button onClick={()=>setResolviendo({opId:op.id,pi,monto:p.monto,nota:p.nota||"",op})}
+                      style={{marginLeft:"auto",fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(251,146,60,0.15)",border:"1px solid #fb923c66",color:"#fb923c",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                      Completar
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2163,6 +2223,47 @@ function AppInterna({ usuario }) {
         </div>
       )}
       {toast&&<div style={S.toast(toast.ok)}>{toast.msg}</div>}
+      {resolviendo&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:"#0f1623",border:"1px solid #fb923c44",borderRadius:16,padding:28,width:360,maxWidth:"95vw"}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#fb923c",marginBottom:4}}>Completar pendiente</div>
+            <div style={{fontSize:12,color:"#6b7280",marginBottom:16}}>${fmt(resolviendo.monto)} {resolviendo.op.moneda2||"ARS"}{resolviendo.nota?" — "+resolviendo.nota:""}</div>
+            <label style={S.lbl}>¿Cómo se resuelve?</label>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              {[{v:"efectivo",label:"💵 Efectivo"},{v:"cc",label:"CC cliente"}].map(opt=>(
+                <button key={opt.v} onClick={()=>setResolverForm(f=>({...f,tipo:opt.v,clienteId:"",buscar:""}))}
+                  style={{...S.btn(resolverForm.tipo===opt.v,"#fb923c"),flex:1}}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {resolverForm.tipo==="cc"&&(
+              <div style={{marginBottom:16}}>
+                <label style={S.lbl}>Cliente CC</label>
+                <input placeholder="Buscar cliente..." value={resolverForm.buscar}
+                  onChange={e=>setResolverForm(f=>({...f,buscar:e.target.value,clienteId:""}))}
+                  style={S.inp()} />
+                {resolverForm.buscar&&!resolverForm.clienteId&&(
+                  <div style={{background:"#111",border:"1px solid #1f2937",borderRadius:6,marginTop:4,maxHeight:150,overflowY:"auto"}}>
+                    {clientes.filter(cl=>!cl.oculto&&(cl.nombre+" "+cl.apellido).toLowerCase().includes(resolverForm.buscar.toLowerCase())).map(cl=>(
+                      <div key={cl.id} onClick={()=>setResolverForm(f=>({...f,clienteId:String(cl.id),buscar:cl.nombre+" "+cl.apellido}))}
+                        style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                        {cl.nombre} {cl.apellido}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,marginTop:8}}>
+              <button onClick={()=>{setResolviendo(null);setResolverForm({tipo:"efectivo",clienteId:"",buscar:"",moneda2:"ARS"});}}
+                style={{...S.btn(false),flex:1}}>Cancelar</button>
+              <button onClick={resolverPendiente}
+                style={{...S.btn(true,"#fb923c"),flex:1,fontWeight:700}}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} inversiones={inversiones} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} ultimaBlue={ultimaBlue} onCerrar={(cotiz,total,blue)=>{setUltimaCotiz(cotiz);setUltimaBlue(blue);ejecutarCierre(cotiz,total,blue);}} onCancelar={()=>setShowModalCierre(false)}/>}
       {editandoOp&&(
         <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
@@ -2493,10 +2594,10 @@ function AppInterna({ usuario }) {
                                       <div style={{display:"flex",gap:4,alignItems:"center"}}>
                                         {/* Chip efectivo o nombre cliente seleccionado */}
                                         {!busq&&(
-                                          <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:5,background:d.tipo==="efectivo"?"rgba(74,222,128,0.08)":"rgba(99,102,241,0.08)",border:"1px solid "+(d.tipo==="efectivo"?"#4ade8033":"#6366f133"),flexShrink:0,cursor:"pointer"}}
+                                          <div style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:5,background:d.tipo==="efectivo"?"rgba(74,222,128,0.08)":d.tipo==="pendiente"?"rgba(251,146,60,0.08)":"rgba(99,102,241,0.08)",border:"1px solid "+(d.tipo==="efectivo"?"#4ade8033":d.tipo==="pendiente"?"#fb923c33":"#6366f133"),flexShrink:0,cursor:"pointer"}}
                                             onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:" "}))}>
                                             <span style={{fontSize:10,color:d.tipo==="efectivo"?"#4ade80":d.tipo==="op_simultanea"?"#f59e0b":"#a5b4fc",fontWeight:600}}>
-                                              {d.tipo==="efectivo"?"💵 Efectivo":d.tipo==="op_simultanea"?"⇄ Op. simultánea":clSel?clSel.nombre+" "+clSel.apellido:"?"}
+                                              {d.tipo==="efectivo"?"💵 Efectivo":d.tipo==="op_simultanea"?"⇄ Op. simultánea":d.tipo==="pendiente"?"⏳ Pendiente":clSel?clSel.nombre+" "+clSel.apellido:"?"}
                                             </span>
                                             <span style={{fontSize:9,color:"#475569"}}>▾</span>
                                           </div>
@@ -2519,6 +2620,10 @@ function AppInterna({ usuario }) {
                                           <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"op_simultanea",cotizSim:"",clienteSim:"",monedaSim:"USD",impactaCajaSim:true,clienteSimId:"",clienteSimBuscar:""}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
                                             style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#f59e0b",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
                                             ⇄ Op. simultánea
+                                          </div>
+                                          <div onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:"pendiente",notaPendiente:""}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                            style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#fb923c",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>
+                                            ⏳ Pendiente (sin asignar)
                                           </div>
                                           {filtrados.map(cl=>(
                                             <div key={cl.id} onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
@@ -2661,6 +2766,14 @@ function AppInterna({ usuario }) {
                                 );
                               })()}
                               {/* Borrar fila */}
+                              {d.tipo==="pendiente"&&(
+                                <input
+                                  placeholder="Nota (ej: falta cuenta de X)"
+                                  value={d.notaPendiente||""}
+                                  onChange={e=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,notaPendiente:e.target.value}))}
+                                  style={{...S.inp(),fontSize:11,padding:"5px 10px",flex:1,border:"1px solid #fb923c44",color:"#fb923c"}}
+                                />
+                              )}
                               <button onClick={()=>setDesglose(p=>p.filter(x=>x.id!==d.id))} style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#f87171",fontFamily:"inherit",fontSize:11,cursor:"pointer",flexShrink:0}}>✕</button>
                             </div>
                           ))}
