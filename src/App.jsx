@@ -1536,6 +1536,15 @@ function AppInterna({ usuario }) {
     return r;
   },[ops]);
 
+  async function leerSaldoFresco() {
+    try {
+      const {data} = await SB.from("dias").select("caja_ini").eq("id", hoy).single();
+      const sf = data?.caja_ini?._saldos_finales;
+      if (sf) return Object.fromEntries(MONEDAS.map(m => [m.id, Number(sf[m.id]) || 0]));
+    } catch(e) {}
+    return {...saldos};
+  }
+
   async function guardarDia(ns, nf, no) {
     // Guardar facturacion y pos_overrides en sus tablas propias
     const nfinal = nf||fact;
@@ -1577,7 +1586,7 @@ function AppInterna({ usuario }) {
     try {
     const {tipo}=form;
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    let opData=null, ns={...saldos};
+    let opData=null, ns=await leerSaldoFresco();
     if (tipo==="compra"||tipo==="venta") {
       const m=parse(form.monto),m2=parse(form.monto2);
       if (!m||!m2) { notify("Ingresa montos validos",false); return; }
@@ -1840,7 +1849,7 @@ function AppInterna({ usuario }) {
     } else {
       if(!window.confirm("Eliminar esta operacion? El saldo se va a revertir."+detalleCC)) return;
     }
-    const ns={...saldos};
+    const ns=await leerSaldoFresco();
     const t=op.tipo;
     // imp2: cuanto impacto REALMENTE la caja en moneda2
     // Usar impactoReal2 si existe (guardado al registrar), sino monto2 completo
@@ -1878,7 +1887,7 @@ function AppInterna({ usuario }) {
     await SB.from("diferidos").update({cobrado:true}).eq("id",id);
     setDiferidos(p=>p.map(x=>x.id===id?{...x,cobrado:true}:x));
     if(modo==="caja"){
-      const ns={...saldos,ARS:saldos.ARS+montoCobro};
+      const ns=await leerSaldoFresco(); ns.ARS=(ns.ARS||0)+montoCobro;
       setSaldos(ns);
       const opData={tipo:"cobro_dif",hora,moneda:"ARS",monto:montoCobro,cliente:d.cliente,nota:"Cobro diferido $"+fmt(d.nominal)+(d.manual?" (manual)":"")};
       const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"cobro_dif",datos:opData}).select().single();
@@ -1904,7 +1913,7 @@ function AppInterna({ usuario }) {
   async function confirmarEditSaldo(mon) {
     const nv=parse(editSaldoV),delta=nv-saldos[mon];
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    const ns={...saldos,[mon]:nv}; setSaldos(ns);
+    const ns=await leerSaldoFresco(); ns[mon]=nv; setSaldos(ns);
     const opData={tipo:"ajuste",hora,moneda:mon,monto:Math.abs(delta),delta,nota:"Ajuste "+(delta>-1?"+":"")+fmt(delta)+" "+mon};
     const {data:ins}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"ajuste",datos:opData}).select().single();
     if (ins) setOps(p=>[...p,{...opData,id:ins.id,fecha:hoy}]);
@@ -1917,7 +1926,7 @@ function AppInterna({ usuario }) {
     const ing=formCC.tipo==="ingreso_transf"||formCC.tipo==="ingreso_dep";
     // Si impactaCaja=true, modificar el saldo fisico
     if (formCC.impactaCaja) {
-      const ns={...saldos,[formCC.moneda]:saldos[formCC.moneda]+(ing?monto:-monto)};
+      const ns=await leerSaldoFresco(); ns[formCC.moneda]=(ns[formCC.moneda]||0)+(ing?monto:-monto);
       setSaldos(ns);
       await guardarDia(ns,null,null);
     }
@@ -4707,7 +4716,7 @@ function AppInterna({ usuario }) {
                     setClientes(p=>p.map(x=>x.id!==cId?x:{...x,movimientos:[...x.movimientos,mv]}));
                   } else {
                     // Sale de caja fisica
-                    const ns={...saldos,[formGasto.moneda]:saldos[formGasto.moneda]-monto};
+                    const ns=await leerSaldoFresco(); ns[formGasto.moneda]=(ns[formGasto.moneda]||0)-monto;
                     setSaldos(ns); await guardarDia(ns,null,null);
                   }
                   setFormGasto(f=>({...f,monto:"",nota:""}));
@@ -5463,7 +5472,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                               const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
                               const {data:ins}=await SB.from("gastos").insert(g).select().single();
                               if(ins){ setGastos(p=>[ins,...p]); movimientosIds.push({tipo:"gasto",id:ins.id}); }
-                              const ns={...saldos,USD:saldos.USD-totalEmpleado};
+                              const ns=await leerSaldoFresco(); ns.USD=(ns.USD||0)-totalEmpleado;
                               setSaldos(ns); await guardarDia(ns,null,null);
                             }
                           }
