@@ -1309,7 +1309,8 @@ function AppInterna({ usuario }) {
   const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [resolviendo, setResolviendo] = useState(null); // {opId, pi, monto, nota, op}
-  const [resolverForm, setResolverForm] = useState({tipo:"efectivo",clienteId:"",buscar:"",moneda2:"ARS"});
+  const [resolverLineas, setResolverLineas] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", buscar:""}]
+  const [buscarResolverDrop, setBuscarResolverDrop] = useState({});
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
@@ -1586,31 +1587,42 @@ function AppInterna({ usuario }) {
     const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const moneda = op.moneda2 || "ARS";
 
-    if (resolverForm.tipo === "efectivo") {
-      // Impacta caja directo
-      const ns = await leerSaldoFresco();
-      // En venta: entra moneda2 a caja. En compra: sale moneda2.
-      if (op.tipo === "venta") ns[moneda] = (ns[moneda]||0) + monto;
-      else ns[moneda] = (ns[moneda]||0) - monto;
-      setSaldos(ns);
-      await guardarDia(ns, null, null);
-    } else if (resolverForm.tipo === "cc" && resolverForm.clienteId) {
-      // Impacta CC del cliente
-      const cId = Number(resolverForm.clienteId);
-      const tipoMov = op.tipo === "venta" ? "retiro_transf" : "ingreso_transf";
-      const notaCC = `Resolución pendiente — ${op.tipo} ${fmt(op.monto)} ${op.moneda} ($${fmt(monto)} ${moneda})`;
-      const mv = {id:Date.now(),hora,fecha:hoy,tipo:tipoMov,moneda,monto,nota:notaCC};
-      await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:tipoMov,moneda,monto,nota:notaCC});
-      setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+    // Validar que el total de líneas cuadre con el monto pendiente
+    const totalLineas = resolverLineas.reduce((s,l)=>s+parse(l.monto),0);
+    if (Math.abs(totalLineas - monto) > 1) { notify("El total no cuadra con $"+fmt(monto),false); return; }
+
+    let ns = await leerSaldoFresco();
+    let cajaCambio = false;
+
+    for (const linea of resolverLineas) {
+      const montoLinea = parse(linea.monto);
+      if (!montoLinea) continue;
+
+      if (linea.tipo === "efectivo") {
+        if (op.tipo === "venta") ns[moneda] = (ns[moneda]||0) + montoLinea;
+        else ns[moneda] = (ns[moneda]||0) - montoLinea;
+        cajaCambio = true;
+      } else {
+        // CC cliente
+        const cId = Number(linea.tipo);
+        if (!cId) continue;
+        const tipoMov = op.tipo === "venta" ? "retiro_transf" : "ingreso_transf";
+        const notaCC = `Resolución pendiente — ${op.tipo} ${fmt(op.monto)} ${op.moneda} ($${fmt(montoLinea)} ${moneda})`;
+        const mv = {id:Date.now()+cId,hora,fecha:hoy,tipo:tipoMov,moneda,monto:montoLinea,nota:notaCC};
+        await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:tipoMov,moneda,monto:montoLinea,nota:notaCC});
+        setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+      }
     }
 
-    // Marcar pendiente como resuelto en la op
-    const opActualizada = {...op};
-    opActualizada.pendientes = op.pendientes.map((p,i)=>i===pi?{...p,resuelto:true}:p);
+    if (cajaCambio) { setSaldos(ns); await guardarDia(ns, null, null); }
+
+    // Marcar pendiente como resuelto
+    const opActualizada = {...op, pendientes: op.pendientes.map((p,i)=>i===pi?{...p,resuelto:true}:p)};
     await SB.from("operaciones").update({datos:opActualizada}).eq("id",opId);
     setOps(prev=>prev.map(o=>o.id!==opId?o:opActualizada));
     setResolviendo(null);
-    setResolverForm({tipo:"efectivo",clienteId:"",buscar:"",moneda2:"ARS"});
+    setResolverLineas([]);
+    setBuscarResolverDrop({});
     notify("Pendiente resuelto ✓");
   }
 
@@ -2069,7 +2081,7 @@ function AppInterna({ usuario }) {
                   <span style={{fontSize:11,color:p.resuelto?"#4ade80":"#fb923c",fontWeight:600}}>${fmt(p.monto)} ARS {p.resuelto?"(resuelto)":"pendiente"}</span>
                   {p.nota&&<span style={{fontSize:10,color:"#6b7280"}}>— {p.nota}</span>}
                   {!p.resuelto&&(conAcc||esHoy)&&(
-                    <button onClick={()=>setResolviendo({opId:op.id,pi,monto:p.monto,nota:p.nota||"",op})}
+                    <button onClick={()=>{setResolviendo({opId:op.id,pi,monto:p.monto,nota:p.nota||"",op});setResolverLineas([{id:Date.now(),tipo:"efectivo",monto:"",buscar:""}]);setBuscarResolverDrop({});}}
                       style={{marginLeft:"auto",fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(251,146,60,0.15)",border:"1px solid #fb923c66",color:"#fb923c",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
                       Completar
                     </button>
@@ -2223,47 +2235,87 @@ function AppInterna({ usuario }) {
         </div>
       )}
       {toast&&<div style={S.toast(toast.ok)}>{toast.msg}</div>}
-      {resolviendo&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{background:"#0f1623",border:"1px solid #fb923c44",borderRadius:16,padding:28,width:360,maxWidth:"95vw"}}>
-            <div style={{fontSize:14,fontWeight:700,color:"#fb923c",marginBottom:4}}>Completar pendiente</div>
-            <div style={{fontSize:12,color:"#6b7280",marginBottom:16}}>${fmt(resolviendo.monto)} {resolviendo.op.moneda2||"ARS"}{resolviendo.nota?" — "+resolviendo.nota:""}</div>
-            <label style={S.lbl}>¿Cómo se resuelve?</label>
-            <div style={{display:"flex",gap:8,marginBottom:16}}>
-              {[{v:"efectivo",label:"💵 Efectivo"},{v:"cc",label:"CC cliente"}].map(opt=>(
-                <button key={opt.v} onClick={()=>setResolverForm(f=>({...f,tipo:opt.v,clienteId:"",buscar:""}))}
-                  style={{...S.btn(resolverForm.tipo===opt.v,"#fb923c"),flex:1}}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {resolverForm.tipo==="cc"&&(
-              <div style={{marginBottom:16}}>
-                <label style={S.lbl}>Cliente CC</label>
-                <input placeholder="Buscar cliente..." value={resolverForm.buscar}
-                  onChange={e=>setResolverForm(f=>({...f,buscar:e.target.value,clienteId:""}))}
-                  style={S.inp()} />
-                {resolverForm.buscar&&!resolverForm.clienteId&&(
-                  <div style={{background:"#111",border:"1px solid #1f2937",borderRadius:6,marginTop:4,maxHeight:150,overflowY:"auto"}}>
-                    {clientes.filter(cl=>!cl.oculto&&(cl.nombre+" "+cl.apellido).toLowerCase().includes(resolverForm.buscar.toLowerCase())).map(cl=>(
-                      <div key={cl.id} onClick={()=>setResolverForm(f=>({...f,clienteId:String(cl.id),buscar:cl.nombre+" "+cl.apellido}))}
-                        style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
-                        {cl.nombre} {cl.apellido}
-                      </div>
-                    ))}
-                  </div>
-                )}
+      {resolviendo&&(()=>{
+        const totalLineas=resolverLineas.reduce((s,l)=>s+parse(l.monto),0);
+        const resta=resolviendo.monto-totalLineas;
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{background:"#0f1623",border:"1px solid #fb923c44",borderRadius:16,padding:24,width:440,maxWidth:"95vw",maxHeight:"90vh",overflowY:"auto"}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#fb923c",marginBottom:2}}>Completar pendiente</div>
+              <div style={{fontSize:12,color:"#6b7280",marginBottom:16}}>
+                Total a resolver: <strong style={{color:"#fb923c"}}>${fmt(resolviendo.monto)} {resolviendo.op.moneda2||"ARS"}</strong>
+                {resolviendo.nota&&<span> — {resolviendo.nota}</span>}
               </div>
-            )}
-            <div style={{display:"flex",gap:8,marginTop:8}}>
-              <button onClick={()=>{setResolviendo(null);setResolverForm({tipo:"efectivo",clienteId:"",buscar:"",moneda2:"ARS"});}}
-                style={{...S.btn(false),flex:1}}>Cancelar</button>
-              <button onClick={resolverPendiente}
-                style={{...S.btn(true,"#fb923c"),flex:1,fontWeight:700}}>Confirmar</button>
+
+              {/* Líneas de desglose */}
+              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
+                {resolverLineas.map((linea,li)=>{
+                  const clSel=linea.tipo!=="efectivo"?clientes.find(x=>x.id===Number(linea.tipo)):null;
+                  const busqR=buscarResolverDrop[linea.id]||"";
+                  const mostrarDropR=busqR.length>0;
+                  const filtradosR=clientes.filter(cl=>!cl.oculto&&(cl.nombre+" "+cl.apellido).toLowerCase().includes(busqR.toLowerCase())).slice(0,8);
+                  return (
+                    <div key={linea.id} style={{display:"flex",gap:6,alignItems:"flex-start",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:8,padding:"8px 10px"}}>
+                      {/* Selector tipo */}
+                      <div style={{position:"relative",flexShrink:0}}>
+                        {!busqR&&(
+                          <div onClick={()=>setBuscarResolverDrop(b=>({...b,[linea.id]:" "}))}
+                            style={{padding:"5px 10px",borderRadius:6,background:linea.tipo==="efectivo"?"rgba(74,222,128,0.08)":"rgba(99,102,241,0.08)",border:"1px solid "+(linea.tipo==="efectivo"?"#4ade8033":"#6366f133"),cursor:"pointer",fontSize:10,color:linea.tipo==="efectivo"?"#4ade80":"#a5b4fc",fontWeight:600,whiteSpace:"nowrap"}}>
+                            {linea.tipo==="efectivo"?"💵 Efectivo":clSel?clSel.nombre+" "+clSel.apellido:"?"} ▾
+                          </div>
+                        )}
+                        {busqR&&(
+                          <input autoFocus value={busqR==" "?"":busqR}
+                            onChange={e=>setBuscarResolverDrop(b=>({...b,[linea.id]:e.target.value}))}
+                            placeholder="Buscar..." style={{...S.inp({width:130}),fontSize:11,padding:"5px 8px"}} />
+                        )}
+                        {mostrarDropR&&(
+                          <div style={{position:"absolute",top:"100%",left:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:300,minWidth:170,maxHeight:160,overflowY:"auto",marginTop:2}}>
+                            <div onClick={()=>{setResolverLineas(p=>p.map(x=>x.id!==linea.id?x:{...x,tipo:"efectivo"}));setBuscarResolverDrop(b=>({...b,[linea.id]:""}));}}
+                              style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",borderBottom:"1px solid #1a1a1a",fontWeight:600}}>💵 Efectivo</div>
+                            {filtradosR.map(cl=>(
+                              <div key={cl.id} onClick={()=>{setResolverLineas(p=>p.map(x=>x.id!==linea.id?x:{...x,tipo:String(cl.id)}));setBuscarResolverDrop(b=>({...b,[linea.id]:""}));}}
+                                style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                {cl.nombre} {cl.apellido}
+                              </div>
+                            ))}
+                            {filtradosR.length===0&&busqR.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados</div>}
+                          </div>
+                        )}
+                      </div>
+                      {/* Monto */}
+                      <input placeholder="Monto" value={linea.monto}
+                        onChange={e=>setResolverLineas(p=>p.map(x=>x.id!==linea.id?x:{...x,monto:e.target.value}))}
+                        style={{...S.inp(),flex:1,fontSize:12,padding:"5px 10px"}} />
+                      {/* Borrar */}
+                      {resolverLineas.length>1&&(
+                        <button onClick={()=>setResolverLineas(p=>p.filter(x=>x.id!==linea.id))}
+                          style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#f87171",cursor:"pointer",fontSize:11,flexShrink:0}}>✕</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Agregar línea + indicador */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <button onClick={()=>setResolverLineas(p=>[...p,{id:Date.now(),tipo:"efectivo",monto:"",buscar:""}])}
+                  style={{fontSize:11,padding:"4px 12px",borderRadius:6,background:"rgba(251,146,60,0.08)",border:"1px solid #fb923c44",color:"#fb923c",cursor:"pointer",fontFamily:"inherit"}}>+ Agregar línea</button>
+                <span style={{fontSize:11,fontWeight:700,color:resta===0?"#4ade80":resta<0?"#f87171":"#f59e0b"}}>
+                  {resta===0?"✓ Cuadra":resta>0?"Resta: $"+fmt(resta):"Excede: $"+fmt(Math.abs(resta))}
+                </span>
+              </div>
+
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>{setResolviendo(null);setResolverLineas([]);setBuscarResolverDrop({});}}
+                  style={{...S.btn(false),flex:1}}>Cancelar</button>
+                <button onClick={resolverPendiente} disabled={Math.abs(resta)>1}
+                  style={{...S.btn(Math.abs(resta)<=1,"#fb923c"),flex:1,fontWeight:700,opacity:Math.abs(resta)>1?0.4:1}}>Confirmar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {showModalCierre&&<ModalCierre saldos={saldos} clientes={clientes} diferidos={diferidos} inversiones={inversiones} saldoCC={saldoCC} ultimaCotiz={ultimaCotiz} ultimaBlue={ultimaBlue} onCerrar={(cotiz,total,blue)=>{setUltimaCotiz(cotiz);setUltimaBlue(blue);ejecutarCierre(cotiz,total,blue);}} onCancelar={()=>setShowModalCierre(false)}/>}
       {editandoOp&&(
         <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
