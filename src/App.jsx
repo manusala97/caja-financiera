@@ -206,33 +206,17 @@ function PantallaCotizaciones() {
   const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
   const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n))return v;return (n>=0?"+":"")+n+"%";};
   const msg=(()=>{
-    let m="🏦 *STS*
-";
-    m+="📅 "+hoyFmt+"
-
-";
-    if(cot.usdC||cot.usdV) m+="💵 *USD*
-   Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+"
-";
-    if(cot.eurC||cot.eurV) m+="💶 *EUR*
-   Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+"
-";
-    if(cot.brlC||cot.brlV) m+="🇧🇷 *BRL*
-   Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+"
-";
-    if(cot.usdtC||cot.usdtV) m+="🟡 *USDT*
-   Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" (sobre USD)
-";
-    if(cot.canje) m+="🔄 *Canje*: $"+cot.canje+"
-";
-    if(cot.gestionTransf) m+="💸 *Gestión por Transferencia*: "+cot.gestionTransf+"%
-";
-    if(cot.comentario1||cot.comentario2) m+="
-";
-    if(cot.comentario1) m+="📋 Gestión de Cheques al Día y Diferidos — A consultar
-";
-    if(cot.comentario2) m+="🔁 Compra/Venta de USDT por Pesos — A consultar
-";
+    let m="🏦 *STS*\n";
+    m+="📅 "+hoyFmt+"\n\n";
+    if(cot.usdC||cot.usdV) m+="💵 *USD*\n   Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+"\n";
+    if(cot.eurC||cot.eurV) m+="💶 *EUR*\n   Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+"\n";
+    if(cot.brlC||cot.brlV) m+="🇧🇷 *BRL*\n   Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+"\n";
+    if(cot.usdtC||cot.usdtV) m+="🟡 *USDT*\n   Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" (sobre USD)\n";
+    if(cot.canje) m+="🔄 *Canje*: $"+cot.canje+"\n";
+    if(cot.gestionTransf) m+="💸 *Gestión por Transferencia*: "+cot.gestionTransf+"%\n";
+    if(cot.comentario1||cot.comentario2) m+="\n";
+    if(cot.comentario1) m+="📋 Gestión de Cheques al Día y Diferidos — A consultar\n";
+    if(cot.comentario2) m+="🔁 Compra/Venta de USDT por Pesos — A consultar\n";
     return m.trim();
   })();
   const copiar=()=>{navigator.clipboard.writeText(msg);};
