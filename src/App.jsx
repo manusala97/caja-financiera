@@ -1317,12 +1317,8 @@ function AppInterna({ usuario }) {
   const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
-    pctReserva:"10", mostrando:false,
-    patrimonioManual:"", reservaAcumulada:"", sociosCCMap:{}, sociosBuscar:{},
-    empleados:[
-      {id:1,nombre:"Roberto Spadafora",sueldoFijo:"",cotizSueldo:"",pctVariable:"5",tieneVariable:true,ccId:"",ccBuscar:""},
-      {id:2,nombre:"Mauricio Sarquis",sueldoFijo:"",cotizSueldo:"",pctVariable:"",tieneVariable:false,ccId:"",ccBuscar:""}
-    ],
+    sueldoFijo:"", cotizSueldo:"", pctVariable:"5", pctReserva:"10", mostrando:false,
+    patrimonioManual:"", reservaAcumulada:"", empleadoCCId:"", empleadoBuscar:"", sociosCCMap:{}, sociosBuscar:{},
     periodo:"", fechaImpacto:""
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -2126,7 +2122,7 @@ function AppInterna({ usuario }) {
     {id:"inversiones",label:"Inversiones",c:"#2dd4bf"},
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
-  ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre","posicion"].includes(p.id));
+  ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre"].includes(p.id));
 
   // ===== HELPER BUSCADOR CC =====
   function DropdownCC({buscar, filtrados, onSelect, onCrear}) {
@@ -5418,12 +5414,9 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                 const reservaAcumAnterior=parse(liquidacion.reservaAcumulada)||0;
                 // Ganancia real = patrimonio final - inversión - reservas acumuladas de meses anteriores
                 const gananciaBruta=patrimonioFinal-inversionTotal-reservaAcumAnterior;
-                const empleadosCalc=(liquidacion.empleados||[]).map(emp=>{
-                  const fijo=parse(emp.cotizSueldo)>0?parse(emp.sueldoFijo)/parse(emp.cotizSueldo):0;
-                  const variable=emp.tieneVariable&&gananciaBruta>0?gananciaBruta*(parse(emp.pctVariable)/100):0;
-                  return {...emp,fijo,variable,total:fijo+variable};
-                });
-                const totalEmpleado=empleadosCalc.reduce((s,e)=>s+e.total,0);
+                const sueldoFijoUSD=parse(liquidacion.cotizSueldo)>0?parse(liquidacion.sueldoFijo)/parse(liquidacion.cotizSueldo):0;
+                const sueldoVar=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctVariable)/100):0;
+                const totalEmpleado=sueldoFijoUSD+sueldoVar;
                 const nuevaReserva=gananciaBruta>0?gananciaBruta*(parse(liquidacion.pctReserva)/100):0;
                 const reserva=nuevaReserva; // para compatibilidad con el resto
                 const reservaTotalAcum=reservaAcumAnterior+nuevaReserva;
@@ -5476,78 +5469,53 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             </div>
                           ))}
                         </div>
-                        {/* Empleados */}
+                        {/* Sueldo empleado */}
                         <div style={{marginBottom:16}}>
-                          <div style={{fontSize:10,letterSpacing:2,color:"#f59e0b",marginBottom:10}}>EMPLEADOS</div>
-                          {empleadosCalc.map((emp,ei)=>{
-                            const clEmp=clientes.find(x=>x.id===Number(emp.ccId));
-                            const filtradosEmp=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((emp.ccBuscar||"").toLowerCase()));
-                            const updEmp=(fields)=>setLiquidacion(l=>({...l,empleados:l.empleados.map(e=>e.id!==emp.id?e:{...e,...fields})}));
+                          <div style={{fontSize:10,letterSpacing:2,color:"#f59e0b",marginBottom:8}}>SUELDO EMPLEADO</div>
+                          <div style={S.grid("1fr 1fr",8)}>
+                            <div><Lbl>Fijo ARS</Lbl><Inp type="number" placeholder="0" value={liquidacion.sueldoFijo} onChange={e=>setLiquidacion(l=>({...l,sueldoFijo:e.target.value}))}/></div>
+                            <div><Lbl>Cotizacion</Lbl><Inp type="number" placeholder="1400" value={liquidacion.cotizSueldo} onChange={e=>setLiquidacion(l=>({...l,cotizSueldo:e.target.value}))}/></div>
+                            <div><Lbl>Variable % ganancia</Lbl><Inp type="number" placeholder="5" value={liquidacion.pctVariable} onChange={e=>setLiquidacion(l=>({...l,pctVariable:e.target.value}))}/></div>
+                            <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
+                              <span style={{fontSize:10,color:"#6b7280"}}>Total empleado</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>{fmtUSD(totalEmpleado)}</span>
+                              {sueldoFijoUSD>0&&<span style={{fontSize:10,color:"#4b5563"}}>Fijo: {fmtUSD(sueldoFijoUSD)} + Var: {fmtUSD(sueldoVar)}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {/* CC del empleado */}
+                        <div style={{marginBottom:16,position:"relative"}}>
+                          <Lbl>CC del empleado <span style={{color:"#4b5563",fontSize:9}}>(acredita sueldo en su CC)</span></Lbl>
+                          {(()=>{
+                            const clEmp=clientes.find(x=>x.id===Number(liquidacion.empleadoCCId));
+                            const filtrados=clientes.filter(x=>(x.nombre+" "+x.apellido).toLowerCase().includes((liquidacion.empleadoBuscar||"").toLowerCase()));
                             return (
-                              <div key={emp.id} style={{background:"rgba(245,158,11,0.04)",border:"1px solid #f59e0b22",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
-                                {/* Nombre */}
-                                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                                  <input value={emp.nombre} onChange={e=>updEmp({nombre:e.target.value})}
-                                    style={{flex:1,background:"transparent",border:"none",borderBottom:"1px solid #374151",padding:"2px 4px",color:"#f59e0b",fontFamily:"inherit",fontSize:12,fontWeight:700,outline:"none"}}/>
-                                  <span style={{fontSize:13,fontWeight:700,color:"#f59e0b",marginLeft:12}}>{fmtUSD(emp.total)}</span>
-                                </div>
-                                {/* Fijo + cotiz */}
-                                <div style={S.grid("1fr 1fr",8)}>
-                                  <div><Lbl>Fijo ARS</Lbl><Inp type="number" placeholder="0" value={emp.sueldoFijo} onChange={e=>updEmp({sueldoFijo:e.target.value})}/></div>
-                                  <div><Lbl>Cotización</Lbl><Inp type="number" placeholder="1400" value={emp.cotizSueldo} onChange={e=>updEmp({cotizSueldo:e.target.value})}/></div>
-                                </div>
-                                {/* Variable toggle + campo */}
-                                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,marginBottom:8}}>
-                                  <button onClick={()=>updEmp({tieneVariable:!emp.tieneVariable})}
-                                    style={{fontSize:10,padding:"3px 10px",borderRadius:5,background:emp.tieneVariable?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.03)",border:"1px solid "+(emp.tieneVariable?"#f59e0b44":"#374151"),color:emp.tieneVariable?"#f59e0b":"#475569",cursor:"pointer",fontFamily:"inherit"}}>
-                                    {emp.tieneVariable?"✓ Con variable":"+ Variable"}
-                                  </button>
-                                  {emp.tieneVariable&&(
-                                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                      <Inp type="number" placeholder="5" value={emp.pctVariable} onChange={e=>updEmp({pctVariable:e.target.value})} style={{width:60}}/>
-                                      <span style={{fontSize:10,color:"#6b7280"}}>% → {fmtUSD(emp.variable)}</span>
+                              <div>
+                                <div style={{display:"flex",gap:4}}>
+                                  {clEmp&&!liquidacion.empleadoBuscar&&(
+                                    <div style={{flex:1,padding:"6px 8px",borderRadius:6,background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",fontSize:11,color:"#f59e0b",fontWeight:600}}>
+                                      {clEmp.nombre} {clEmp.apellido}
                                     </div>
                                   )}
-                                  {emp.fijo>0&&<span style={{fontSize:10,color:"#4b5563",marginLeft:"auto"}}>Fijo: {fmtUSD(emp.fijo)}{emp.tieneVariable?` + Var: ${fmtUSD(emp.variable)}`:""}</span>}
+                                  <input value={liquidacion.empleadoBuscar||""} onChange={e=>setLiquidacion(l=>({...l,empleadoBuscar:e.target.value}))}
+                                    placeholder={clEmp&&!liquidacion.empleadoBuscar?"Cambiar...":"Buscar empleado..."}
+                                    style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+                                  {liquidacion.empleadoCCId&&<button onClick={()=>setLiquidacion(l=>({...l,empleadoCCId:"",empleadoBuscar:""}))}
+                                    style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>}
                                 </div>
-                                {/* CC del empleado */}
-                                <div style={{position:"relative"}}>
-                                  <Lbl>CC <span style={{color:"#4b5563",fontSize:9}}>(acredita sueldo)</span></Lbl>
-                                  <div style={{display:"flex",gap:4}}>
-                                    {clEmp&&!emp.ccBuscar&&(
-                                      <div style={{flex:1,padding:"5px 8px",borderRadius:6,background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",fontSize:11,color:"#f59e0b",fontWeight:600}}>
-                                        {clEmp.nombre} {clEmp.apellido}
+                                {liquidacion.empleadoBuscar&&filtrados.length>0&&(
+                                  <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                                    {filtrados.map(cl=>(
+                                      <div key={cl.id} onClick={()=>setLiquidacion(l=>({...l,empleadoCCId:String(cl.id),empleadoBuscar:""}))}
+                                        style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                        {cl.nombre} {cl.apellido}
                                       </div>
-                                    )}
-                                    <input value={emp.ccBuscar||""} onChange={e=>updEmp({ccBuscar:e.target.value})}
-                                      placeholder={clEmp&&!emp.ccBuscar?"Cambiar...":"Buscar CC..."}
-                                      style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
-                                    {emp.ccId&&<button onClick={()=>updEmp({ccId:"",ccBuscar:""})}
-                                      style={{padding:"3px 7px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>}
+                                    ))}
                                   </div>
-                                  {emp.ccBuscar&&filtradosEmp.length>0&&(
-                                    <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
-                                      {filtradosEmp.map(cl=>(
-                                        <div key={cl.id} onClick={()=>updEmp({ccId:String(cl.id),ccBuscar:""})}
-                                          style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
-                                          {cl.nombre} {cl.apellido}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                                )}
                               </div>
                             );
-                          })}
-                          {/* Agregar empleado */}
-                          <button onClick={()=>setLiquidacion(l=>({...l,empleados:[...l.empleados,{id:Date.now(),nombre:"Nuevo empleado",sueldoFijo:"",cotizSueldo:"",pctVariable:"",tieneVariable:false,ccId:"",ccBuscar:""}]}))}
-                            style={{fontSize:11,padding:"5px 14px",borderRadius:6,background:"rgba(245,158,11,0.06)",border:"1px solid #f59e0b33",color:"#f59e0b",cursor:"pointer",fontFamily:"inherit",width:"100%"}}>
-                            + Agregar empleado
-                          </button>
-                          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid #1f2937",marginTop:8}}>
-                            <span style={{fontSize:11,color:"#6b7280"}}>Total empleados</span>
-                            <span style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>{fmtUSD(totalEmpleado)}</span>
-                          </div>
+                          })()}
                         </div>
                         {/* Fondo de reserva */}
                         <div style={{marginBottom:16}}>
@@ -5637,7 +5605,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             <tr><td>Inversion socios</td><td style="text-align:right">${fmtUSD(inversionTotal)}</td></tr>
                             <tr><td class="total">Ganancia bruta</td><td style="text-align:right" class="${gananciaBruta>-1?"green":"red"} total">${fmtUSD(gananciaBruta)}</td></tr></table>
                             <h2>DISTRIBUCION</h2>
-                            <table>${empleadosCalc.map(emp=>`<tr><td>${emp.nombre}</td><td style="text-align:right">${emp.tieneVariable?"Fijo: "+fmtUSD(emp.fijo)+" + Var "+emp.pctVariable+"%: "+fmtUSD(emp.variable):"Fijo: "+fmtUSD(emp.fijo)}</td><td style="text-align:right;font-weight:700">${fmtUSD(emp.total)}</td></tr>`).join("")}<tr><td><strong>Total empleados</strong></td><td></td><td style="text-align:right;font-weight:700">${fmtUSD(totalEmpleado)}</td></tr>
+                            <table><tr><td>Sueldo empleado</td><td style="text-align:right">Fijo: ${fmtUSD(sueldoFijoUSD)} + Variable ${liquidacion.pctVariable}%: ${fmtUSD(sueldoVar)}</td><td style="text-align:right;font-weight:700">${fmtUSD(totalEmpleado)}</td></tr>
                             <tr><td>Fondo reserva STS (${liquidacion.pctReserva}%)</td><td></td><td style="text-align:right;font-weight:700">${fmtUSD(reserva)}</td></tr>
                             <tr><td class="total">Ganancia neta socios</td><td></td><td style="text-align:right" class="${gananciaNeta>-1?"green":"red"} total">${fmtUSD(gananciaNeta)}</td></tr></table>
                             <h2>POR SOCIO</h2>
@@ -5654,21 +5622,22 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           const fechaLiq=liquidacion.fechaImpacto||hoy;
                           const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
                           const movimientosIds=[];
-                          // 1. Sueldos empleados
-                          for(const emp of empleadosCalc){
-                            if(emp.total<=0) continue;
-                            const notaEmp="Liquidacion mensual "+hoy+" - "+emp.nombre+" - Sueldo "+fmtUSD(emp.total)+(emp.tieneVariable?" (Fijo "+fmtUSD(emp.fijo)+" + Variable "+fmtUSD(emp.variable)+")":"");
-                            if(emp.ccId){
-                              const cEmpId=Number(emp.ccId);
-                              const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:emp.total,nota:notaEmp}).select().single();
-                              const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:emp.total,nota:notaEmp};
+                          // 1. Sueldo empleado
+                          if(totalEmpleado>0){
+                            if(liquidacion.empleadoCCId){
+                              // Va a CC del empleado (ingreso_transf = la financiera le debe = HABER)
+                              const cEmpId=Number(liquidacion.empleadoCCId);
+                              const notaEmp="Liquidacion mensual "+hoy+" - Sueldo "+fmtUSD(totalEmpleado)+" (Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar)+")";
+                              const {data:mvEmpIns}=await SB.from("movimientos_cc").insert({cliente_id:cEmpId,hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp}).select().single();
+                              const mvEmp={id:mvEmpIns?.id||Date.now(),hora,fecha:fechaLiq,tipo:"ingreso_transf",moneda:"USD",monto:totalEmpleado,nota:notaEmp};
                               movimientosIds.push({tipo:"cc",id:mvEmpIns?.id,clienteId:cEmpId});
                               setClientes(p=>p.map(cl=>cl.id!==cEmpId?cl:{...cl,movimientos:[...cl.movimientos,mvEmp]}));
                             } else {
-                              const g={categoria:"Sueldo",monto:emp.total,moneda:"USD",nota:notaEmp,fecha:hoy};
+                              // Sin CC: va a gastos y sale de caja
+                              const g={categoria:"Sueldo",monto:totalEmpleado,moneda:"USD",nota:"Sueldo empleado - Fijo "+fmtUSD(sueldoFijoUSD)+" + Variable "+fmtUSD(sueldoVar),fecha:hoy};
                               const {data:ins}=await SB.from("gastos").insert(g).select().single();
                               if(ins){ setGastos(p=>[ins,...p]); movimientosIds.push({tipo:"gasto",id:ins.id}); }
-                              const ns=await leerSaldoFresco(); ns.USD=(ns.USD||0)-emp.total;
+                              const ns=await leerSaldoFresco(); ns.USD=(ns.USD||0)-totalEmpleado;
                               setSaldos(ns); await guardarDia(ns,null,null);
                             }
                           }
@@ -5696,7 +5665,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           const {data:liqIns}=await SB.from("liquidaciones").insert(liq).select().single();
                           if(liqIns) setLiquidaciones(p=>[liqIns,...p]);
                           notify("Liquidacion confirmada ✓");
-                          setLiquidacion(l=>({...l,mostrando:false,patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},periodo:"",fechaImpacto:"",empleados:l.empleados.map(e=>({...e,sueldoFijo:"",cotizSueldo:"",ccId:"",ccBuscar:""}))}));
+                          setLiquidacion(l=>({...l,mostrando:false,sueldoFijo:"",cotizSueldo:"",patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},empleadoCCId:"",periodo:"",fechaImpacto:""}));
                         }} disabled={gananciaBruta<=0}
                           style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
                           CONFIRMAR LIQUIDACION
@@ -5723,7 +5692,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#6b7280"}}>
                               <span>Patrimonio: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.patrimonio_final)}</strong></span>
                               <span>Ganancia bruta: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.ganancia_bruta)}</strong></span>
-                              <span>Empleados: <strong style={{color:"#f59e0b"}}>{fmtUSD(liq.sueldo_empleado)}</strong></span>
+                              <span>Empleado: <strong style={{color:"#f59e0b"}}>{fmtUSD(liq.sueldo_empleado)}</strong></span>
                               <span>Reserva: <strong style={{color:"#c084fc"}}>{fmtUSD(liq.reserva)}</strong></span>
                             </div>
                             {liq.detalle&&liq.detalle.length>0&&(
