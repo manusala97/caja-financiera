@@ -202,7 +202,7 @@ function MiniLineChart({ series=[], labels=[], height=180 }) {
 // PANTALLA ANÁLISIS CPP — NUEVA
 // ─────────────────────────────────────────────
 function PantallaCotizaciones() {
-  const [cot,setCot]=React.useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canje:"",gestionTransf:"",comentario1:true,comentario2:true});
+  const [cot,setCot]=useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canje:"",gestionTransf:"",comentario1:true,comentario2:true});
   const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
   const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n))return v;return (n>=0?"+":"")+n+"%";};
   const msg=(()=>{
