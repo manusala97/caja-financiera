@@ -5786,7 +5786,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                   </div>
                 </div>
                 <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-                  <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>🟡 USDT <span style={{color:"#4b5563",fontSize:9"}}>% sobre USD</span></div>
+                  <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>🟡 USDT <span style={{color:"#4b5563",fontSize:9}}>% sobre USD</span></div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <Fld label="COMPRA %"><Num val={cot.usdtC} set={v=>setCot(p=>({...p,usdtC:v}))} placeholder="-1"/></Fld>
                     <Fld label="VENTA %"><Num val={cot.usdtV} set={v=>setCot(p=>({...p,usdtV:v}))} placeholder="-3"/></Fld>
