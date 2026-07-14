@@ -2121,6 +2121,7 @@ function AppInterna({ usuario }) {
     {id:"referidores",label:"Referidores",c:"#fb923c"},
     {id:"inversiones",label:"Inversiones",c:"#2dd4bf"},
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
+    {id:"cotizaciones",label:"Cotizaciones",c:"#38bdf8"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre"].includes(p.id));
 
@@ -5735,6 +5736,105 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
         })()}
 
         {pant==="analisis"&&<PantallaAnalisis/>}
+
+        {pant==="cotizaciones"&&(()=>{
+          const [cot,setCot]=React.useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canje:"",gestionTransf:"",comentario1:true,comentario2:true});
+          const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
+          const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n))return v;return (n>=0?"+":"")+n+"%";};
+          const generarMensaje=()=>{
+            let msg="🏦 *STS*\n";
+            msg+="📅 "+hoyFmt+"\n\n";
+            if(cot.usdC||cot.usdV) msg+="💵 *USD*\n   Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+"\n";
+            if(cot.eurC||cot.eurV) msg+="💶 *EUR*\n   Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+"\n";
+            if(cot.brlC||cot.brlV) msg+="🇧🇷 *BRL*\n   Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+"\n";
+            if(cot.usdtC||cot.usdtV) msg+="🟡 *USDT*\n   Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" (sobre USD)\n";
+            if(cot.canje) msg+="🔄 *Canje*: $"+cot.canje+"\n";
+            if(cot.gestionTransf) msg+="💸 *Gestión por Transferencia*: "+cot.gestionTransf+"%\n";
+            if(cot.comentario1||cot.comentario2) msg+="\n";
+            if(cot.comentario1) msg+="📋 Gestión de Cheques al Día y Diferidos — A consultar\n";
+            if(cot.comentario2) msg+="🔁 Compra/Venta de USDT por Pesos — A consultar\n";
+            return msg.trim();
+          };
+          const msg=generarMensaje();
+          const copiar=()=>{navigator.clipboard.writeText(msg);};
+          const whatsapp=()=>{window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank");};
+          const Fld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
+          const Num=({val,set,placeholder})=>(<input type="number" value={val} onChange={e=>set(e.target.value)} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%"}}/>);
+          return (
+            <div style={{padding:"20px 16px",maxWidth:600,margin:"0 auto"}}>
+              <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16}}>COTIZACIONES DEL DÍA</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginBottom:8,letterSpacing:1}}>💵 USD</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <Fld label="COMPRA"><Num val={cot.usdC} set={v=>setCot(p=>({...p,usdC:v}))} placeholder="1500"/></Fld>
+                    <Fld label="VENTA"><Num val={cot.usdV} set={v=>setCot(p=>({...p,usdV:v}))} placeholder="1520"/></Fld>
+                  </div>
+                </div>
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:8,letterSpacing:1}}>💶 EUR</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <Fld label="COMPRA"><Num val={cot.eurC} set={v=>setCot(p=>({...p,eurC:v}))} placeholder="1600"/></Fld>
+                    <Fld label="VENTA"><Num val={cot.eurV} set={v=>setCot(p=>({...p,eurV:v}))} placeholder="1620"/></Fld>
+                  </div>
+                </div>
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:8,letterSpacing:1}}>🇧🇷 BRL</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <Fld label="COMPRA"><Num val={cot.brlC} set={v=>setCot(p=>({...p,brlC:v}))} placeholder="250"/></Fld>
+                    <Fld label="VENTA"><Num val={cot.brlV} set={v=>setCot(p=>({...p,brlV:v}))} placeholder="260"/></Fld>
+                  </div>
+                </div>
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>🟡 USDT <span style={{color:"#4b5563",fontSize:9"}}>% sobre USD</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <Fld label="COMPRA %"><Num val={cot.usdtC} set={v=>setCot(p=>({...p,usdtC:v}))} placeholder="-1"/></Fld>
+                    <Fld label="VENTA %"><Num val={cot.usdtV} set={v=>setCot(p=>({...p,usdtV:v}))} placeholder="-3"/></Fld>
+                  </div>
+                </div>
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>🔄 CANJE</div>
+                  <Fld label="VALOR"><Num val={cot.canje} set={v=>setCot(p=>({...p,canje:v}))} placeholder="50"/></Fld>
+                </div>
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#fb923c",fontWeight:700,marginBottom:8,letterSpacing:1}}>💸 GESTIÓN TRANSF.</div>
+                  <Fld label="%"><Num val={cot.gestionTransf} set={v=>setCot(p=>({...p,gestionTransf:v}))} placeholder="1"/></Fld>
+                </div>
+              </div>
+
+              {/* Comentarios toggle */}
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
+                <div style={{fontSize:10,color:"#6b7280",fontWeight:700,marginBottom:10,letterSpacing:1}}>COMENTARIOS</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[["comentario1","📋 Gestión de Cheques al Día y Diferidos — A consultar"],["comentario2","🔁 Compra/Venta de USDT por Pesos — A consultar"]].map(([k,txt])=>(
+                    <div key={k} onClick={()=>setCot(p=>({...p,[k]:!p[k]}))} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 8px",borderRadius:6,background:cot[k]?"rgba(56,189,248,0.06)":"rgba(255,255,255,0.02)",border:"1px solid "+(cot[k]?"#38bdf822":"#1f2937")}}>
+                      <div style={{width:14,height:14,borderRadius:3,background:cot[k]?"#38bdf8":"transparent",border:"1px solid "+(cot[k]?"#38bdf8":"#374151"),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        {cot[k]&&<span style={{fontSize:10,color:"#0f1623",fontWeight:900}}>✓</span>}
+                      </div>
+                      <span style={{fontSize:11,color:cot[k]?"#e2e8f0":"#4b5563"}}>{txt}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
+                <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
+                <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.7}}>{msg}</pre>
+              </div>
+
+              {/* Botones */}
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={copiar} style={{flex:1,padding:"12px",borderRadius:8,background:"rgba(56,189,248,0.08)",border:"1px solid #38bdf844",color:"#38bdf8",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  📋 Copiar
+                </button>
+                <button onClick={whatsapp} style={{flex:1,padding:"12px",borderRadius:8,background:"rgba(74,222,128,0.08)",border:"1px solid #4ade8044",color:"#4ade80",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  💬 Abrir WhatsApp
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
       </main>
     </div>
