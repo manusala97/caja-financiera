@@ -205,123 +205,79 @@ function PantallaCotizaciones() {
   const [cot,setCot]=useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canjeS:"",canjeB:"",gestionTransf:"",comentario1:true,comentario2:true,comentario3:true});
   const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
   const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n)||v==="")return "";return (n>=0?"+":"")+n+"%";};
-  const copiar=()=>{
+  const buildMsg=()=>{
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    let m="🏦 *STS*
-";
-    m+="📅 "+hoyFmt+"
-
-";
-    if(cot.usdC||cot.usdV) m+="💵 *USD* — Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+"
-";
-    if(cot.eurC||cot.eurV) m+="💶 *EUR* — Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+"
-";
-    if(cot.brlC||cot.brlV) m+="🇧🇷 *BRL* — Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+"
-";
-    if(cot.usdtC||cot.usdtV) m+="🟡 *USDT* — Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD
-";
-    if(cot.canjeS||cot.canjeB) m+="🔄 *Canje* — Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+"
-";
-    if(cot.gestionTransf) m+="💸 *Gestión por Transferencia* — "+cot.gestionTransf+"%
-";
-    const hayComentarios=cot.comentario1||cot.comentario2||cot.comentario3;
-    if(hayComentarios) m+="
-";
-    if(cot.comentario1) m+="📋 Gestión de Cheques al Día y Diferidos — A consultar
-";
-    if(cot.comentario2) m+="🔁 Compra/Venta de USDT por Pesos — A consultar
-";
-    if(cot.comentario3) m+="🔄 Consultar precio de Canje
-";
-    m+="
-⏰ Precios al "+hora+" hs — Consultar antes de operar, sujeto a variación de mercado";
-    navigator.clipboard.writeText(m.trim());
-  };
-  const previewMsg=(()=>{
-    const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    let m="🏦 *STS*
-";
-    m+="📅 "+hoyFmt+"
-
-";
-    if(cot.usdC||cot.usdV) m+="💵 *USD* — Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+"
-";
-    if(cot.eurC||cot.eurV) m+="💶 *EUR* — Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+"
-";
-    if(cot.brlC||cot.brlV) m+="🇧🇷 *BRL* — Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+"
-";
-    if(cot.usdtC||cot.usdtV) m+="🟡 *USDT* — Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD
-";
-    if(cot.canjeS||cot.canjeB) m+="🔄 *Canje* — Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+"
-";
-    if(cot.gestionTransf) m+="💸 *Gestión por Transferencia* — "+cot.gestionTransf+"%
-";
-    const hayComentarios=cot.comentario1||cot.comentario2||cot.comentario3;
-    if(hayComentarios) m+="
-";
-    if(cot.comentario1) m+="📋 Gestión de Cheques al Día y Diferidos — A consultar
-";
-    if(cot.comentario2) m+="🔁 Compra/Venta de USDT por Pesos — A consultar
-";
-    if(cot.comentario3) m+="🔄 Consultar precio de Canje
-";
-    m+="
-⏰ Precios al "+hora+" hs — Consultar antes de operar, sujeto a variación de mercado";
+    const nl="\n";
+    let m="\uD83C\uDFE6 *STS*"+nl;
+    m+="\uD83D\uDCC5 "+hoyFmt+nl+nl;
+    if(cot.usdC||cot.usdV) m+="\uD83D\uDCB5 *USD* \u2014 Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+nl;
+    if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+nl;
+    if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+nl;
+    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD"+nl;
+    if(cot.canjeS||cot.canjeB) m+="\uD83D\uDD04 *Canje* \u2014 Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+nl;
+    if(cot.gestionTransf) m+="\uD83D\uDCB8 *Gesti\u00F3n por Transferencia* \u2014 "+cot.gestionTransf+"%"+nl;
+    const hayComent=cot.comentario1||cot.comentario2||cot.comentario3;
+    if(hayComent) m+=nl;
+    if(cot.comentario1) m+="\uD83D\uDCCB Gesti\u00F3n de Cheques al D\u00EDa y Diferidos \u2014 A consultar"+nl;
+    if(cot.comentario2) m+="\uD83D\uDD01 Compra/Venta de USDT por Pesos \u2014 A consultar"+nl;
+    if(cot.comentario3) m+="\uD83D\uDD04 Consultar precio de Canje"+nl;
+    m+=nl+"\u23F0 Precios al "+hora+" hs \u2014 Consultar antes de operar, sujeto a variaci\u00F3n de mercado";
     return m.trim();
-  })();
+  };
+  const copiar=()=>{navigator.clipboard.writeText(buildMsg());};
   const Fld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
   const Num=({k,placeholder})=>(<input type="text" inputMode="decimal" value={cot[k]} onChange={e=>setCot(p=>({...p,[k]:e.target.value}))} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
   return (
     <div style={{padding:"20px 16px",maxWidth:600,margin:"0 auto"}}>
-      <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16}}>COTIZACIONES DEL DÍA</div>
+      <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16}}>COTIZACIONES DEL D\u00CDA</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginBottom:8,letterSpacing:1}}>💵 USD</div>
+          <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB5"} USD</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <Fld label="COMPRA"><Num k="usdC" placeholder="1500"/></Fld>
             <Fld label="VENTA"><Num k="usdV" placeholder="1520"/></Fld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:8,letterSpacing:1}}>💶 EUR</div>
+          <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB6"} EUR</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <Fld label="COMPRA"><Num k="eurC" placeholder="1600"/></Fld>
             <Fld label="VENTA"><Num k="eurV" placeholder="1620"/></Fld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:8,letterSpacing:1}}>🇧🇷 BRL</div>
+          <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83C\uDDE7\uD83C\uDDF7"} BRL</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <Fld label="COMPRA"><Num k="brlC" placeholder="250"/></Fld>
             <Fld label="VENTA"><Num k="brlV" placeholder="260"/></Fld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>🟡 USDT <span style={{color:"#4b5563",fontSize:9}}>% s/USD</span></div>
+          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>% s/USD</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <Fld label="COMPRA %"><Num k="usdtC" placeholder="-1"/></Fld>
             <Fld label="VENTA %"><Num k="usdtV" placeholder="-3"/></Fld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>🔄 CANJE <span style={{color:"#4b5563",fontSize:9}}>%</span></div>
+          <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDD04"} CANJE <span style={{color:"#4b5563",fontSize:9}}>%</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <Fld label="SUBIDA"><Num k="canjeS" placeholder="-1"/></Fld>
             <Fld label="BAJADA"><Num k="canjeB" placeholder="-2"/></Fld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fb923c",fontWeight:700,marginBottom:8,letterSpacing:1}}>💸 GESTIÓN TRANSF.</div>
+          <div style={{fontSize:10,color:"#fb923c",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB8"} GESTI\u00D3N TRANSF.</div>
           <Fld label="%"><Num k="gestionTransf" placeholder="1"/></Fld>
         </div>
       </div>
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
         <div style={{fontSize:10,color:"#6b7280",fontWeight:700,marginBottom:10,letterSpacing:1}}>COMENTARIOS</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {[["comentario1","📋 Gestión de Cheques al Día y Diferidos — A consultar"],["comentario2","🔁 Compra/Venta de USDT por Pesos — A consultar"],["comentario3","🔄 Consultar precio de Canje"]].map(([k,txt])=>(
+          {[["comentario1","\uD83D\uDCCB Gesti\u00F3n de Cheques al D\u00EDa y Diferidos \u2014 A consultar"],["comentario2","\uD83D\uDD01 Compra/Venta de USDT por Pesos \u2014 A consultar"],["comentario3","\uD83D\uDD04 Consultar precio de Canje"]].map(([k,txt])=>(
             <div key={k} onClick={()=>setCot(p=>({...p,[k]:!p[k]}))} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 8px",borderRadius:6,background:cot[k]?"rgba(56,189,248,0.06)":"rgba(255,255,255,0.02)",border:"1px solid "+(cot[k]?"#38bdf822":"#1f2937")}}>
               <div style={{width:14,height:14,borderRadius:3,background:cot[k]?"#38bdf8":"transparent",border:"1px solid "+(cot[k]?"#38bdf8":"#374151"),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {cot[k]&&<span style={{fontSize:10,color:"#0f1623",fontWeight:900}}>✓</span>}
+                {cot[k]&&<span style={{fontSize:10,color:"#0f1623",fontWeight:900}}>{"\u2713"}</span>}
               </div>
               <span style={{fontSize:11,color:cot[k]?"#e2e8f0":"#4b5563"}}>{txt}</span>
             </div>
@@ -330,10 +286,10 @@ function PantallaCotizaciones() {
       </div>
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
         <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
-        <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{previewMsg}</pre>
+        <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{buildMsg()}</pre>
       </div>
       <button onClick={copiar} style={{width:"100%",padding:"13px",borderRadius:8,background:"rgba(56,189,248,0.08)",border:"1px solid #38bdf844",color:"#38bdf8",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
-        📋 COPIAR MENSAJE
+        {"\uD83D\uDCCB"} COPIAR MENSAJE
       </button>
     </div>
   );
