@@ -205,7 +205,7 @@ function PantallaCotizaciones() {
   const [cot,setCot]=useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canjeS:"",canjeB:"",gestionTransf:"",comentario1:true,comentario2:true,comentario3:true});
   const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
   const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n)||v==="")return "";return (n>=0?"+":"")+n+"%";};
-  const buildMsg=()=>{
+  const preview=useMemo(()=>{
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const nl="\n";
     let m="\uD83C\uDFE6 *STS*"+nl;
@@ -223,8 +223,8 @@ function PantallaCotizaciones() {
     if(cot.comentario3) m+="\uD83D\uDD04 Consultar precio de Canje"+nl;
     m+=nl+"\u23F0 Precios al "+hora+" hs \u2014 Consultar antes de operar, sujeto a variaci\u00F3n de mercado";
     return m.trim();
-  };
-  const copiar=()=>{navigator.clipboard.writeText(buildMsg());};
+  },[cot]);
+  const copiar=()=>{navigator.clipboard.writeText(preview);};
   const Fld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
   const Num=({k,placeholder})=>(<input type="text" inputMode="decimal" value={cot[k]} onChange={e=>setCot(p=>({...p,[k]:e.target.value}))} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
   return (
@@ -286,7 +286,7 @@ function PantallaCotizaciones() {
       </div>
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
         <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
-        <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{buildMsg()}</pre>
+        <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{preview}</pre>
       </div>
       <button onClick={copiar} style={{width:"100%",padding:"13px",borderRadius:8,background:"rgba(56,189,248,0.08)",border:"1px solid #38bdf844",color:"#38bdf8",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
         {"\uD83D\uDCCB"} COPIAR MENSAJE
