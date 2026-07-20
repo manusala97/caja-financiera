@@ -201,6 +201,9 @@ function MiniLineChart({ series=[], labels=[], height=180 }) {
 // ─────────────────────────────────────────────
 // PANTALLA ANÁLISIS CPP — NUEVA
 // ─────────────────────────────────────────────
+const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
+const CotNum=({value,onChange,placeholder})=>(<input type="text" inputMode="decimal" value={value} onChange={onChange} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
+
 function PantallaCotizaciones() {
   const [cot,setCot]=useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canjeS:"",canjeB:"",gestionTransf:"",comentario1:true,comentario2:true,comentario3:true});
   const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
@@ -225,8 +228,7 @@ function PantallaCotizaciones() {
     return m.trim();
   },[cot]);
   const copiar=()=>{navigator.clipboard.writeText(preview);};
-  const Fld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
-  const Num=({k,placeholder})=>(<input type="text" inputMode="decimal" value={cot[k]} onChange={e=>setCot(p=>({...p,[k]:e.target.value}))} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
+
   return (
     <div style={{padding:"20px 16px",maxWidth:600,margin:"0 auto"}}>
       <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16}}>COTIZACIONES DEL D\u00CDA</div>
@@ -234,41 +236,41 @@ function PantallaCotizaciones() {
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB5"} USD</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <Fld label="COMPRA"><Num k="usdC" placeholder="1500"/></Fld>
-            <Fld label="VENTA"><Num k="usdV" placeholder="1520"/></Fld>
+            <CotFld label="COMPRA"><CotNum value={cot.usdC} onChange={e=>setCot(p=>({...p,usdC:e.target.value}))} placeholder="1500"/></CotFld>
+            <CotFld label="VENTA"><CotNum value={cot.usdV} onChange={e=>setCot(p=>({...p,usdV:e.target.value}))} placeholder="1520"/></CotFld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB6"} EUR</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <Fld label="COMPRA"><Num k="eurC" placeholder="1600"/></Fld>
-            <Fld label="VENTA"><Num k="eurV" placeholder="1620"/></Fld>
+            <CotFld label="COMPRA"><CotNum value={cot.eurC} onChange={e=>setCot(p=>({...p,eurC:e.target.value}))} placeholder="1600"/></CotFld>
+            <CotFld label="VENTA"><CotNum value={cot.eurV} onChange={e=>setCot(p=>({...p,eurV:e.target.value}))} placeholder="1620"/></CotFld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83C\uDDE7\uD83C\uDDF7"} BRL</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <Fld label="COMPRA"><Num k="brlC" placeholder="250"/></Fld>
-            <Fld label="VENTA"><Num k="brlV" placeholder="260"/></Fld>
+            <CotFld label="COMPRA"><CotNum value={cot.brlC} onChange={e=>setCot(p=>({...p,brlC:e.target.value}))} placeholder="250"/></CotFld>
+            <CotFld label="VENTA"><CotNum value={cot.brlV} onChange={e=>setCot(p=>({...p,brlV:e.target.value}))} placeholder="260"/></CotFld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>% s/USD</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <Fld label="COMPRA %"><Num k="usdtC" placeholder="-1"/></Fld>
-            <Fld label="VENTA %"><Num k="usdtV" placeholder="-3"/></Fld>
+            <CotFld label="COMPRA %"><CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="-1"/></CotFld>
+            <CotFld label="VENTA %"><CotNum value={cot.usdtV} onChange={e=>setCot(p=>({...p,usdtV:e.target.value}))} placeholder="-3"/></CotFld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDD04"} CANJE <span style={{color:"#4b5563",fontSize:9}}>%</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <Fld label="SUBIDA"><Num k="canjeS" placeholder="-1"/></Fld>
-            <Fld label="BAJADA"><Num k="canjeB" placeholder="-2"/></Fld>
+            <CotFld label="SUBIDA"><CotNum value={cot.canjeS} onChange={e=>setCot(p=>({...p,canjeS:e.target.value}))} placeholder="-1"/></CotFld>
+            <CotFld label="BAJADA"><CotNum value={cot.canjeB} onChange={e=>setCot(p=>({...p,canjeB:e.target.value}))} placeholder="-2"/></CotFld>
           </div>
         </div>
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#fb923c",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB8"} GESTI\u00D3N TRANSF.</div>
-          <Fld label="%"><Num k="gestionTransf" placeholder="1"/></Fld>
+          <CotFld label="%"><CotNum value={cot.gestionTransf} onChange={e=>setCot(p=>({...p,gestionTransf:e.target.value}))} placeholder="1"/></CotFld>
         </div>
       </div>
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
