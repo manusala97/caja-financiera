@@ -228,6 +228,29 @@ function PantallaCotizaciones() {
     return m.trim();
   },[cot]);
   const copiar=()=>{navigator.clipboard.writeText(preview);};
+  const [publicando,setPublicando]=useState(false);
+  const [ultimaPublicacion,setUltimaPublicacion]=useState(null);
+  const publicar=async()=>{
+    setPublicando(true);
+    try {
+      const datos={
+        usdC:cot.usdC,usdV:cot.usdV,
+        eurC:cot.eurC,eurV:cot.eurV,
+        brlC:cot.brlC,brlV:cot.brlV,
+        usdtC:cot.usdtC,usdtV:cot.usdtV,
+        canjeS:cot.canjeS,canjeB:cot.canjeB,
+        gestionTransf:cot.gestionTransf,
+        comentario1:cot.comentario1,
+        comentario2:cot.comentario2,
+        comentario3:cot.comentario3,
+        updated_at:new Date().toISOString()
+      };
+      await SB.from("cotizaciones_publicas").upsert({id:"current",datos,updated_at:new Date().toISOString()},{onConflict:"id"});
+      const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+      setUltimaPublicacion(hora);
+    } catch(e){ console.error(e); }
+    setPublicando(false);
+  };
 
   return (
     <div style={{padding:"20px 16px",maxWidth:600,margin:"0 auto"}}>
@@ -290,9 +313,15 @@ function PantallaCotizaciones() {
         <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
         <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{preview}</pre>
       </div>
-      <button onClick={copiar} style={{width:"100%",padding:"13px",borderRadius:8,background:"rgba(56,189,248,0.08)",border:"1px solid #38bdf844",color:"#38bdf8",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
-        {"\uD83D\uDCCB"} COPIAR MENSAJE
-      </button>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <button onClick={copiar} style={{width:"100%",padding:"13px",borderRadius:8,background:"rgba(56,189,248,0.08)",border:"1px solid #38bdf844",color:"#38bdf8",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+          {"\uD83D\uDCCB"} COPIAR MENSAJE
+        </button>
+        <button onClick={publicar} disabled={publicando} style={{width:"100%",padding:"13px",borderRadius:8,background:publicando?"rgba(255,255,255,0.02)":"rgba(74,222,128,0.08)",border:"1px solid "+(publicando?"#1f2937":"#4ade8044"),color:publicando?"#374151":"#4ade80",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:publicando?"not-allowed":"pointer",letterSpacing:1,opacity:publicando?0.6:1}}>
+          {publicando?"\u23F3 Publicando...":"\uD83D\uDE80 Publicar precios en panel p\u00FAblico"}
+        </button>
+        {ultimaPublicacion&&<div style={{textAlign:"center",fontSize:11,color:"#4ade80"}}>{"\u2713 Publicado a las "+ultimaPublicacion+" hs \u2014 el panel ya tiene los precios actualizados"}</div>}
+      </div>
     </div>
   );
 }
