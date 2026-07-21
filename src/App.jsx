@@ -227,7 +227,7 @@ function PantallaCotizaciones() {
     if(!base||!ratio) return "";
     return Math.round(parseFloat(ratio)*base).toLocaleString("es-AR");
   };
-  const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n)||v==="")return "";return (n>=0?"+":"")+n+"%";};
+  const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n)||v==="")return "";return (n>=0?"+":"-")+Math.abs(n)+"%";};
 
   const preview=useMemo(()=>{
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
@@ -238,8 +238,8 @@ function PantallaCotizaciones() {
     if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+nl;
     if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+nl;
     if(cot.gbpC||cot.gbpV) m+="\uD83C\uDDEC\uD83C\uDDE7 *GBP* \u2014 Compra: $"+cot.gbpC+" | Venta: $"+cot.gbpV+nl;
-    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD"+nl;
-    if(cot.usdtArsC||cot.usdtArsV) m+="\uD83D\uDFE1 *USDT $* \u2014 Compra: $"+cot.usdtArsC+" | Venta: $"+cot.usdtArsV+nl;
+    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT vs USD* \u2014 Compra: "+signoPct(cot.usdtC)+" USD | Venta: "+signoPct(cot.usdtV)+" USD"+nl;
+    if(cot.usdtArsC||cot.usdtArsV) m+="\uD83D\uDFE1 *USDT vs ARS* \u2014 Compra: $"+cot.usdtArsC+" | Venta: $"+cot.usdtArsV+nl;
     if(cot.canjeS||cot.canjeB) m+="\uD83D\uDD04 *Canje* \u2014 Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+nl;
     const hayComent=cot.comentario1||cot.comentario2||cot.comentario3||cot.comentario4;
     if(hayComent) m+=nl;
