@@ -205,28 +205,50 @@ const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"col
 const CotNum=({value,onChange,placeholder})=>(<input type="text" inputMode="decimal" value={value} onChange={onChange} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
 
 function PantallaCotizaciones() {
-  const [cot,setCot]=useState({usdC:"",usdV:"",eurC:"",eurV:"",brlC:"",brlV:"",usdtC:"",usdtV:"",canjeS:"",canjeB:"",gestionTransf:"",comentario1:true,comentario2:true,comentario3:true});
+  const [cot,setCot]=useState({
+    usdC:"",usdV:"",
+    eurC:"",eurV:"",
+    brlC:"",brlV:"",
+    gbpC:"",gbpV:"",
+    usdtC:"",usdtV:"",
+    canjeS:"",canjeB:"",
+    comentario1:true,comentario2:true,comentario3:true,comentario4:true
+  });
   const hoyFmt=new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).replace(/^./,s=>s.toUpperCase());
+
+  // Calcular ARS desde cotiz vs USD
+  const usdMid=()=>{
+    const c2=parseFloat(cot.usdC||0), v=parseFloat(cot.usdV||0);
+    return (c2+v)/2||v||c2||0;
+  };
+  const toARS=(ratio,punta)=>{
+    const base=punta==="C"?parseFloat(cot.usdC||0):parseFloat(cot.usdV||0);
+    if(!base||!ratio) return "";
+    return Math.round(parseFloat(ratio)*base).toLocaleString("es-AR");
+  };
   const signoPct=(v)=>{const n=parseFloat(v);if(isNaN(n)||v==="")return "";return (n>=0?"+":"")+n+"%";};
+
   const preview=useMemo(()=>{
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const nl="\n";
     let m="\uD83C\uDFE6 *STS*"+nl;
     m+="\uD83D\uDCC5 "+hoyFmt+nl+nl;
     if(cot.usdC||cot.usdV) m+="\uD83D\uDCB5 *USD* \u2014 Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+nl;
-    if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+nl;
-    if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+nl;
-    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD"+nl;
+    if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+toARS(cot.eurC,"C")+" | Venta: $"+toARS(cot.eurV,"V")+nl;
+    if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+toARS(cot.brlC,"C")+" | Venta: $"+toARS(cot.brlV,"V")+nl;
+    if(cot.gbpC||cot.gbpV) m+="\uD83C\uDDEC\uD83C\uDDE7 *GBP* \u2014 Compra: $"+toARS(cot.gbpC,"C")+" | Venta: $"+toARS(cot.gbpV,"V")+nl;
+    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: $"+cot.usdtC+" | Venta: $"+cot.usdtV+nl;
     if(cot.canjeS||cot.canjeB) m+="\uD83D\uDD04 *Canje* \u2014 Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+nl;
-    if(cot.gestionTransf) m+="\uD83D\uDCB8 *Gesti\u00F3n por Transferencia* \u2014 "+cot.gestionTransf+"%"+nl;
-    const hayComent=cot.comentario1||cot.comentario2||cot.comentario3;
+    const hayComent=cot.comentario1||cot.comentario2||cot.comentario3||cot.comentario4;
     if(hayComent) m+=nl;
     if(cot.comentario1) m+="\uD83D\uDCCB Gesti\u00F3n de Cheques al D\u00EDa y Diferidos \u2014 A consultar"+nl;
     if(cot.comentario2) m+="\uD83D\uDD01 Compra/Venta de USDT por Pesos \u2014 A consultar"+nl;
     if(cot.comentario3) m+="\uD83D\uDD04 Consultar precio de Canje"+nl;
+    if(cot.comentario4) m+="\uD83D\uDCB8 Gesti\u00F3n por Transferencia \u2014 A consultar"+nl;
     m+=nl+"\u23F0 Precios al "+hora+" hs \u2014 Consultar antes de operar, sujeto a variaci\u00F3n de mercado";
     return m.trim();
   },[cot]);
+
   const copiar=()=>{navigator.clipboard.writeText(preview);};
   const [publicando,setPublicando]=useState(false);
   const [ultimaPublicacion,setUltimaPublicacion]=useState(null);
@@ -237,53 +259,79 @@ function PantallaCotizaciones() {
         usdC:cot.usdC,usdV:cot.usdV,
         eurC:cot.eurC,eurV:cot.eurV,
         brlC:cot.brlC,brlV:cot.brlV,
+        gbpC:cot.gbpC,gbpV:cot.gbpV,
         usdtC:cot.usdtC,usdtV:cot.usdtV,
         canjeS:cot.canjeS,canjeB:cot.canjeB,
-        gestionTransf:cot.gestionTransf,
-        comentario1:cot.comentario1,
-        comentario2:cot.comentario2,
-        comentario3:cot.comentario3,
+        comentario1:cot.comentario1,comentario2:cot.comentario2,
+        comentario3:cot.comentario3,comentario4:cot.comentario4,
         updated_at:new Date().toISOString()
       };
-      await SB.from("cotizaciones_publicas").upsert({id:"current",datos,updated_at:new Date().toISOString()},{onConflict:"id"});
-      const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-      setUltimaPublicacion(hora);
+      const fechaHoy=new Date().toISOString().split("T")[0];
+      await SB.from("cotizaciones_publicas").upsert({id:fechaHoy,fecha:fechaHoy,datos,updated_at:new Date().toISOString()},{onConflict:"id"});
+      await SB.from("cotizaciones_publicas").upsert({id:"current",fecha:fechaHoy,datos,updated_at:new Date().toISOString()},{onConflict:"id"});
+      setUltimaPublicacion(new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}));
     } catch(e){ console.error(e); }
     setPublicando(false);
   };
 
+  // Helper: card de moneda vs USD con preview ARS calculado
+  const CardRatio=({label,color,kC,kV,phC,phV})=>{
+    const arsC=toARS(cot[kC],"C"), arsV=toARS(cot[kV],"V");
+    return (
+      <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+        <div style={{fontSize:10,color,fontWeight:700,marginBottom:8,letterSpacing:1}}>{label}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <CotFld label="COMPRA vs USD">
+            <CotNum value={cot[kC]} onChange={e=>setCot(p=>({...p,[kC]:e.target.value}))} placeholder={phC}/>
+            {arsC&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>≈ ${arsC}</span>}
+          </CotFld>
+          <CotFld label="VENTA vs USD">
+            <CotNum value={cot[kV]} onChange={e=>setCot(p=>({...p,[kV]:e.target.value}))} placeholder={phV}/>
+            {arsV&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>≈ ${arsV}</span>}
+          </CotFld>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div style={{padding:"20px 16px",maxWidth:600,margin:"0 auto"}}>
+    <div style={{padding:"20px 16px",maxWidth:620,margin:"0 auto"}}>
       <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16}}>COTIZACIONES DEL D\u00CDA</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+
+        {/* USD — base en pesos */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB5"} USD</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <CotFld label="COMPRA"><CotNum value={cot.usdC} onChange={e=>setCot(p=>({...p,usdC:e.target.value}))} placeholder="1500"/></CotFld>
-            <CotFld label="VENTA"><CotNum value={cot.usdV} onChange={e=>setCot(p=>({...p,usdV:e.target.value}))} placeholder="1520"/></CotFld>
+            <CotFld label="COMPRA $"><CotNum value={cot.usdC} onChange={e=>setCot(p=>({...p,usdC:e.target.value}))} placeholder="1500"/></CotFld>
+            <CotFld label="VENTA $"><CotNum value={cot.usdV} onChange={e=>setCot(p=>({...p,usdV:e.target.value}))} placeholder="1520"/></CotFld>
           </div>
         </div>
+
+        {/* USDT — directo en pesos */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB6"} EUR</div>
+          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>en pesos</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <CotFld label="COMPRA"><CotNum value={cot.eurC} onChange={e=>setCot(p=>({...p,eurC:e.target.value}))} placeholder="1600"/></CotFld>
-            <CotFld label="VENTA"><CotNum value={cot.eurV} onChange={e=>setCot(p=>({...p,eurV:e.target.value}))} placeholder="1620"/></CotFld>
+            <CotFld label="COMPRA $"><CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="1480"/></CotFld>
+            <CotFld label="VENTA $"><CotNum value={cot.usdtV} onChange={e=>setCot(p=>({...p,usdtV:e.target.value}))} placeholder="1495"/></CotFld>
           </div>
+          {(cot.usdtC||cot.usdtV)&&usdMid()>0&&<div style={{marginTop:6,fontSize:10,color:"#4b5563"}}>
+            {cot.usdtC&&"vs USD: "+(parseFloat(cot.usdtC)/usdMid()*100-100).toFixed(1)+"% compra"}
+            {cot.usdtC&&cot.usdtV&&" · "}
+            {cot.usdtV&&(parseFloat(cot.usdtV)/usdMid()*100-100).toFixed(1)+"% venta"}
+          </div>}
         </div>
-        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83C\uDDE7\uD83C\uDDF7"} BRL</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <CotFld label="COMPRA"><CotNum value={cot.brlC} onChange={e=>setCot(p=>({...p,brlC:e.target.value}))} placeholder="250"/></CotFld>
-            <CotFld label="VENTA"><CotNum value={cot.brlV} onChange={e=>setCot(p=>({...p,brlV:e.target.value}))} placeholder="260"/></CotFld>
-          </div>
-        </div>
-        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>% s/USD</span></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <CotFld label="COMPRA %"><CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="-1"/></CotFld>
-            <CotFld label="VENTA %"><CotNum value={cot.usdtV} onChange={e=>setCot(p=>({...p,usdtV:e.target.value}))} placeholder="-3"/></CotFld>
-          </div>
-        </div>
+
+        {/* EUR vs USD */}
+        <CardRatio label={"\uD83D\uDCB6 EUR"} color="#a78bfa" kC="eurC" kV="eurV" phC="1.09" phV="1.18"/>
+
+        {/* BRL vs USD */}
+        <CardRatio label={"\uD83C\uDDE7\uD83C\uDDF7 BRL"} color="#4ade80" kC="brlC" kV="brlV" phC="0.20" phV="0.22"/>
+
+        {/* GBP vs USD */}
+        <CardRatio label={"\uD83C\uDDEC\uD83C\uDDE7 GBP"} color="#e879f9" kC="gbpC" kV="gbpV" phC="1.27" phV="1.29"/>
+
+        {/* Canje */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
           <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDD04"} CANJE <span style={{color:"#4b5563",fontSize:9}}>%</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -291,15 +339,19 @@ function PantallaCotizaciones() {
             <CotFld label="BAJADA"><CotNum value={cot.canjeB} onChange={e=>setCot(p=>({...p,canjeB:e.target.value}))} placeholder="-2"/></CotFld>
           </div>
         </div>
-        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fb923c",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB8"} GESTI\u00D3N TRANSF.</div>
-          <CotFld label="%"><CotNum value={cot.gestionTransf} onChange={e=>setCot(p=>({...p,gestionTransf:e.target.value}))} placeholder="1"/></CotFld>
-        </div>
+
       </div>
+
+      {/* Comentarios */}
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
         <div style={{fontSize:10,color:"#6b7280",fontWeight:700,marginBottom:10,letterSpacing:1}}>COMENTARIOS</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {[["comentario1","\uD83D\uDCCB Gesti\u00F3n de Cheques al D\u00EDa y Diferidos \u2014 A consultar"],["comentario2","\uD83D\uDD01 Compra/Venta de USDT por Pesos \u2014 A consultar"],["comentario3","\uD83D\uDD04 Consultar precio de Canje"]].map(([k,txt])=>(
+          {[
+            ["comentario1","\uD83D\uDCCB Gesti\u00F3n de Cheques al D\u00EDa y Diferidos \u2014 A consultar"],
+            ["comentario2","\uD83D\uDD01 Compra/Venta de USDT por Pesos \u2014 A consultar"],
+            ["comentario3","\uD83D\uDD04 Consultar precio de Canje"],
+            ["comentario4","\uD83D\uDCB8 Gesti\u00F3n por Transferencia \u2014 A consultar"],
+          ].map(([k,txt])=>(
             <div key={k} onClick={()=>setCot(p=>({...p,[k]:!p[k]}))} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 8px",borderRadius:6,background:cot[k]?"rgba(56,189,248,0.06)":"rgba(255,255,255,0.02)",border:"1px solid "+(cot[k]?"#38bdf822":"#1f2937")}}>
               <div style={{width:14,height:14,borderRadius:3,background:cot[k]?"#38bdf8":"transparent",border:"1px solid "+(cot[k]?"#38bdf8":"#374151"),flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {cot[k]&&<span style={{fontSize:10,color:"#0f1623",fontWeight:900}}>{"\u2713"}</span>}
@@ -309,10 +361,13 @@ function PantallaCotizaciones() {
           ))}
         </div>
       </div>
+
+      {/* Vista previa */}
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
         <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
         <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{preview}</pre>
       </div>
+
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         <button onClick={copiar} style={{width:"100%",padding:"13px",borderRadius:8,background:"rgba(56,189,248,0.08)",border:"1px solid #38bdf844",color:"#38bdf8",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
           {"\uD83D\uDCCB"} COPIAR MENSAJE
@@ -325,6 +380,7 @@ function PantallaCotizaciones() {
     </div>
   );
 }
+
 
 function PantallaAnalisis() {
   const [cargando, setCargando] = useState(true);
