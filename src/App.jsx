@@ -237,7 +237,7 @@ function PantallaCotizaciones() {
     if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+toARS(cot.eurC,"C")+" | Venta: $"+toARS(cot.eurV,"V")+nl;
     if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+toARS(cot.brlC,"C")+" | Venta: $"+toARS(cot.brlV,"V")+nl;
     if(cot.gbpC||cot.gbpV) m+="\uD83C\uDDEC\uD83C\uDDE7 *GBP* \u2014 Compra: $"+toARS(cot.gbpC,"C")+" | Venta: $"+toARS(cot.gbpV,"V")+nl;
-    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: $"+cot.usdtC+" | Venta: $"+cot.usdtV+nl;
+    if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD"+nl;
     if(cot.canjeS||cot.canjeB) m+="\uD83D\uDD04 *Canje* \u2014 Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+nl;
     const hayComent=cot.comentario1||cot.comentario2||cot.comentario3||cot.comentario4;
     if(hayComent) m+=nl;
@@ -308,18 +308,19 @@ function PantallaCotizaciones() {
           </div>
         </div>
 
-        {/* USDT — directo en pesos */}
+        {/* USDT — % sobre USD */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>en pesos</span></div>
+          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>% s/USD</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <CotFld label="COMPRA $"><CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="1480"/></CotFld>
-            <CotFld label="VENTA $"><CotNum value={cot.usdtV} onChange={e=>setCot(p=>({...p,usdtV:e.target.value}))} placeholder="1495"/></CotFld>
+            <CotFld label="COMPRA %">
+              <CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="+0.25"/>
+              {cot.usdtC&&usdMid()>0&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>{"≈ $"+Math.round(usdMid()*(1+parseFloat(cot.usdtC)/100)).toLocaleString("es-AR")}</span>}
+            </CotFld>
+            <CotFld label="VENTA %">
+              <CotNum value={cot.usdtV} onChange={e=>setCot(p=>({...p,usdtV:e.target.value}))} placeholder="-3"/>
+              {cot.usdtV&&usdMid()>0&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>{"≈ $"+Math.round(usdMid()*(1+parseFloat(cot.usdtV)/100)).toLocaleString("es-AR")}</span>}
+            </CotFld>
           </div>
-          {(cot.usdtC||cot.usdtV)&&usdMid()>0&&<div style={{marginTop:6,fontSize:10,color:"#4b5563"}}>
-            {cot.usdtC&&"vs USD: "+(parseFloat(cot.usdtC)/usdMid()*100-100).toFixed(1)+"% compra"}
-            {cot.usdtC&&cot.usdtV&&" · "}
-            {cot.usdtV&&(parseFloat(cot.usdtV)/usdMid()*100-100).toFixed(1)+"% venta"}
-          </div>}
         </div>
 
         {/* EUR vs USD */}
