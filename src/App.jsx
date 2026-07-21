@@ -235,9 +235,9 @@ function PantallaCotizaciones() {
     let m="\uD83C\uDFE6 *STS*"+nl;
     m+="\uD83D\uDCC5 "+hoyFmt+nl+nl;
     if(cot.usdC||cot.usdV) m+="\uD83D\uDCB5 *USD* \u2014 Compra: $"+cot.usdC+" | Venta: $"+cot.usdV+nl;
-    if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+toARS(cot.eurC,"C")+" | Venta: $"+toARS(cot.eurV,"V")+nl;
-    if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+toARS(cot.brlC,"C")+" | Venta: $"+toARS(cot.brlV,"V")+nl;
-    if(cot.gbpC||cot.gbpV) m+="\uD83C\uDDEC\uD83C\uDDE7 *GBP* \u2014 Compra: $"+toARS(cot.gbpC,"C")+" | Venta: $"+toARS(cot.gbpV,"V")+nl;
+    if(cot.eurC||cot.eurV) m+="\uD83D\uDCB6 *EUR* \u2014 Compra: $"+cot.eurC+" | Venta: $"+cot.eurV+nl;
+    if(cot.brlC||cot.brlV) m+="\uD83C\uDDE7\uD83C\uDDF7 *BRL* \u2014 Compra: $"+cot.brlC+" | Venta: $"+cot.brlV+nl;
+    if(cot.gbpC||cot.gbpV) m+="\uD83C\uDDEC\uD83C\uDDE7 *GBP* \u2014 Compra: $"+cot.gbpC+" | Venta: $"+cot.gbpV+nl;
     if(cot.usdtC||cot.usdtV) m+="\uD83D\uDFE1 *USDT* \u2014 Compra: "+signoPct(cot.usdtC)+" | Venta: "+signoPct(cot.usdtV)+" s/USD"+nl;
     if(cot.usdtArsC||cot.usdtArsV) m+="\uD83D\uDFE1 *USDT $* \u2014 Compra: $"+cot.usdtArsC+" | Venta: $"+cot.usdtArsV+nl;
     if(cot.canjeS||cot.canjeB) m+="\uD83D\uDD04 *Canje* \u2014 Subida: "+signoPct(cot.canjeS)+" | Bajada: "+signoPct(cot.canjeB)+nl;
@@ -317,11 +317,9 @@ function PantallaCotizaciones() {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <CotFld label="COMPRA %">
               <CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="+0.25"/>
-              {cot.usdtC&&usdMid()>0&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>{"≈ $"+Math.round(usdMid()*(1+parseFloat(cot.usdtC)/100)).toLocaleString("es-AR")}</span>}
             </CotFld>
             <CotFld label="VENTA %">
               <CotNum value={cot.usdtV} onChange={e=>setCot(p=>({...p,usdtV:e.target.value}))} placeholder="-3"/>
-              {cot.usdtV&&usdMid()>0&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>{"≈ $"+Math.round(usdMid()*(1+parseFloat(cot.usdtV)/100)).toLocaleString("es-AR")}</span>}
             </CotFld>
           </div>
         </div>
@@ -336,13 +334,31 @@ function PantallaCotizaciones() {
         </div>
 
         {/* EUR vs USD */}
-        <CardRatio label={"\uD83D\uDCB6 EUR"} color="#a78bfa" kC="eurC" kV="eurV" phC="1.09" phV="1.18"/>
+        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+          <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDCB6"} EUR</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <CotFld label="COMPRA $"><CotNum value={cot.eurC} onChange={e=>setCot(p=>({...p,eurC:e.target.value}))} placeholder="1650"/></CotFld>
+            <CotFld label="VENTA $"><CotNum value={cot.eurV} onChange={e=>setCot(p=>({...p,eurV:e.target.value}))} placeholder="1800"/></CotFld>
+          </div>
+        </div>
 
         {/* BRL vs USD */}
-        <CardRatio label={"\uD83C\uDDE7\uD83C\uDDF7 BRL"} color="#4ade80" kC="brlC" kV="brlV" phC="0.20" phV="0.22"/>
+        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+          <div style={{fontSize:10,color:"#4ade80",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83C\uDDE7\uD83C\uDDF7"} BRL</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <CotFld label="COMPRA $"><CotNum value={cot.brlC} onChange={e=>setCot(p=>({...p,brlC:e.target.value}))} placeholder="280"/></CotFld>
+            <CotFld label="VENTA $"><CotNum value={cot.brlV} onChange={e=>setCot(p=>({...p,brlV:e.target.value}))} placeholder="300"/></CotFld>
+          </div>
+        </div>
 
         {/* GBP vs USD */}
-        <CardRatio label={"\uD83C\uDDEC\uD83C\uDDE7 GBP"} color="#e879f9" kC="gbpC" kV="gbpV" phC="1.27" phV="1.29"/>
+        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+          <div style={{fontSize:10,color:"#e879f9",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83C\uDDEC\uD83C\uDDE7"} GBP</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <CotFld label="COMPRA $"><CotNum value={cot.gbpC} onChange={e=>setCot(p=>({...p,gbpC:e.target.value}))} placeholder="1900"/></CotFld>
+            <CotFld label="VENTA $"><CotNum value={cot.gbpV} onChange={e=>setCot(p=>({...p,gbpV:e.target.value}))} placeholder="2000"/></CotFld>
+          </div>
+        </div>
 
         {/* Canje */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
