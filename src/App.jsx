@@ -1482,7 +1482,7 @@ function AppInterna({ usuario }) {
   const [ultimaCotiz, setUltimaCotiz] = useState({ARS:"",BRL:"",GBP:"",EUR:"",USDT:"1"});
   const [gastos, setGastos] = useState([]);
   const [formGasto, setFormGasto] = useState({categoria:"Alquiler",monto:"",moneda:"ARS",nota:"",fecha:hoy,usaCC:false});
-  const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Otros"];
+  const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Fondo de Reserva","Otros"];
   const [socios, setSocios] = useState([]);
   const [nuevoSocio, setNuevoSocio] = useState({nombre:"",monto:""});
   const [editSaldo, setEditSaldo] = useState(null);
@@ -4747,7 +4747,20 @@ function AppInterna({ usuario }) {
                   const vPos=varUSD!==null&&varUSD>-1;
                   return (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
-                    {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
+                    {(()=>{
+                const totalFR=liquidaciones.reduce((s,l)=>s+(l.reserva||0),0);
+                const totalRet=gastos.filter(g=>g.categoria==="Fondo de Reserva"&&g.moneda==="USD").reduce((s,g)=>s+Number(g.monto||0),0);
+                const fondoDisp=Math.max(0,totalFR-totalRet);
+                return totalFR>0?(
+                  <Card sx={{flex:"1 1 160px",border:"1px solid #6366f133",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>FONDO DE RESERVA</div>
+                    <div style={{fontSize:18,fontWeight:700,color:"#a5b4fc"}}>{fmtUSD(fondoDisp)}</div>
+                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>disponible de {fmtUSD(totalFR)} acumulado</div>
+                    {totalRet>0&&<div style={{fontSize:10,color:"#f87171",marginTop:2}}>-{fmtUSD(totalRet)} retirado</div>}
+                  </Card>
+                ):null;
+              })()}
+              {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
                       <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
                       <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioActual)}</div>
                       <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
@@ -5094,6 +5107,9 @@ function AppInterna({ usuario }) {
                     const mv={id:Date.now(),hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota};
                     await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:formGasto.fecha,tipo:"ingreso_transf",moneda:formGasto.moneda,monto,nota});
                     setClientes(p=>p.map(x=>x.id!==cId?x:{...x,movimientos:[...x.movimientos,mv]}));
+                  } else if(formGasto.categoria==="Fondo de Reserva"){
+                    // Fondo de reserva: NO sale de caja física, es solo contable
+                    notify("Retiro del Fondo de Reserva registrado — no impacta caja");
                   } else {
                     // Sale de caja fisica
                     const ns=await leerSaldoFresco(); ns[formGasto.moneda]=(ns[formGasto.moneda]||0)-monto;
@@ -5111,10 +5127,14 @@ function AppInterna({ usuario }) {
                 {gastos.length===0&&<div style={{color:"#374151",fontSize:12}}>Sin gastos registrados</div>}
                 {gastos.map(g=>{
                   const mon=MONEDAS.find(m=>m.id===g.moneda);
+                  const esFondo=g.categoria==="Fondo de Reserva";
                   return (
                     <div key={g.id} style={{borderBottom:"1px solid #1a1a1a",padding:"8px 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                       <div>
-                        <div style={{fontSize:11,color:"#f87171",fontWeight:700}}>{g.categoria}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:11,color:esFondo?"#a5b4fc":"#f87171",fontWeight:700}}>{g.categoria}</span>
+                          {esFondo&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:"rgba(99,102,241,0.15)",color:"#6366f1"}}>no impacta caja</span>}
+                        </div>
                         <div style={{fontSize:13,fontWeight:700,color:"#fff",marginTop:1}}>{mon?.simbolo}{fmt(g.monto)} {g.moneda}</div>
                         {g.nota&&<div style={{fontSize:11,color:"#4b5563",marginTop:1}}>{g.nota}</div>}
                       </div>
@@ -5626,7 +5646,10 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
               {socios.length>0&&ultimoCierre?.total_usd&&(()=>{
                 const patrimonioFinal=parse(liquidacion.patrimonioManual)||ultimoCierre.total_usd;
                 const inversionTotal=total;
-                const reservaAcumAnterior=parse(liquidacion.reservaAcumulada)||0;
+                // Calcular fondo de reserva automáticamente desde liquidaciones pasadas y gastos
+                const totalFondoIngresado=liquidaciones.reduce((s,l)=>s+(l.reserva||0),0);
+                const totalFondoRetirado=gastos.filter(g=>g.categoria==="Fondo de Reserva"&&g.moneda==="USD").reduce((s,g)=>s+Number(g.monto||0),0);
+                const reservaAcumAnterior=Math.max(0,totalFondoIngresado-totalFondoRetirado);
                 // Ganancia real = patrimonio final - inversión - reservas acumuladas de meses anteriores
                 const gananciaBruta=patrimonioFinal-inversionTotal-reservaAcumAnterior;
                 const empleadosCalc=(liquidacion.empleados||[]).map(emp=>{
@@ -5668,14 +5691,37 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             <Inp type="number" placeholder={fmtUSD(ultimoCierre.total_usd)+" (ultimo cierre)"} value={liquidacion.patrimonioManual}
                               onChange={e=>setLiquidacion(l=>({...l,patrimonioManual:e.target.value}))}/>
                           </div>
-                          <div style={{marginBottom:10}}>
-                            <Lbl>Reserva acumulada meses anteriores (USD) <span style={{color:"#4b5563",fontSize:9}}>se resta de la ganancia</span></Lbl>
-                            <Inp type="number" placeholder="0" value={liquidacion.reservaAcumulada}
-                              onChange={e=>setLiquidacion(l=>({...l,reservaAcumulada:e.target.value}))}/>
-                            {reservaAcumAnterior>0&&<div style={{fontSize:10,color:"#6366f1",marginTop:3}}>
-                              Ganancia ajustada: USD {fmt(Math.round(gananciaBruta))} (sin las reservas previas)
-                            </div>}
-                          </div>
+                          {(()=>{
+                            // Calcular fondo de reserva automáticamente
+                            const totalIngresado=liquidaciones.reduce((s,l)=>s+(l.reserva||0),0);
+                            const totalRetirado=gastos.filter(g=>g.categoria==="Fondo de Reserva"&&g.moneda==="USD").reduce((s,g)=>s+Number(g.monto||0),0);
+                            const fondoDisponible=totalIngresado-totalRetirado;
+                            return (
+                              <div style={{marginBottom:10,background:"rgba(99,102,241,0.05)",border:"1px solid #6366f122",borderRadius:8,padding:"10px 12px"}}>
+                                <div style={{fontSize:9,letterSpacing:2,color:"#6366f1",marginBottom:8,fontWeight:700}}>FONDO DE RESERVA</div>
+                                <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}}>
+                                  <div>
+                                    <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>Acumulado</div>
+                                    <div style={{fontSize:13,fontWeight:700,color:"#a5b4fc"}}>{fmtUSD(totalIngresado)}</div>
+                                  </div>
+                                  <div>
+                                    <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>Retirado</div>
+                                    <div style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{fmtUSD(totalRetirado)}</div>
+                                  </div>
+                                  <div>
+                                    <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>Disponible</div>
+                                    <div style={{fontSize:13,fontWeight:700,color:fondoDisponible>0?"#4ade80":"#f87171"}}>{fmtUSD(fondoDisponible)}</div>
+                                  </div>
+                                </div>
+                                <div style={{fontSize:10,color:"#6366f1",marginTop:3}}>
+                                  Se resta automáticamente de la ganancia bruta
+                                </div>
+                                {reservaAcumAnterior>0&&<div style={{fontSize:10,color:"#6366f1",marginTop:3}}>
+                                  Ganancia ajustada: USD {fmt(Math.round(gananciaBruta))} (sin el fondo de reserva)
+                                </div>}
+                              </div>
+                            );
+                          })()}
                           {[
                             ["Patrimonio final",fmtUSD(patrimonioFinal),"#4ade80"],
                             ["Inversion socios",fmtUSD(inversionTotal),"#9ca3af"],
