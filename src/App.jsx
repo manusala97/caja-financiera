@@ -1485,6 +1485,9 @@ function AppInterna({ usuario }) {
   const CATS_GASTO=["Alquiler","Expensas","Luz","Internet","Sueldos","Impuestos","Fondo de Reserva","Otros"];
   const [socios, setSocios] = useState([]);
   const [nuevoSocio, setNuevoSocio] = useState({nombre:"",monto:""});
+  const [aportes, setAportes] = useState([]); // historial de aportes de capital
+  const [nuevoAporte, setNuevoAporte] = useState({socioId:"",monto:"",fecha:hoy,nota:""});
+  const [mostrarAportes, setMostrarAportes] = useState(false);
   const [editSaldo, setEditSaldo] = useState(null);
   const [editSaldoV, setEditSaldoV] = useState("");
   const [editCell, setEditCell] = useState(null);
@@ -1672,6 +1675,8 @@ function AppInterna({ usuario }) {
         // Socios
         const {data:sociosData} = await SB.from("socios").select("*").order("nombre");
         if (sociosData) setSocios(sociosData);
+        const {data:aportesData} = await SB.from("aportes_capital").select("*").order("fecha",{ascending:false});
+        if (aportesData) setAportes(aportesData);
         // Liquidaciones
         const {data:liqData} = await SB.from("liquidaciones").select("*").order("fecha",{ascending:false}).limit(12);
         if (liqData) setLiquidaciones(liqData);
@@ -5591,7 +5596,79 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                   }} style={{marginTop:10,width:"100%",padding:10,borderRadius:7,background:"#0a0a1a",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                     + AGREGAR
                   </button>
-                  <div style={{marginTop:20}}>
+
+                  {/* Aportes de capital */}
+                  <div style={{marginTop:20,borderTop:"1px solid #1f2937",paddingTop:16}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                      <div style={{fontSize:10,letterSpacing:3,color:"#34d399"}}>APORTES DE CAPITAL</div>
+                      <button onClick={()=>setMostrarAportes(v=>!v)}
+                        style={{fontSize:10,padding:"3px 10px",borderRadius:5,background:mostrarAportes?"rgba(52,211,153,0.1)":"transparent",border:"1px solid "+(mostrarAportes?"#34d39944":"#374151"),color:mostrarAportes?"#34d399":"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>
+                        {mostrarAportes?"▾ Ocultar":"+ Nuevo aporte"}
+                      </button>
+                    </div>
+                    {mostrarAportes&&(
+                      <div style={{background:"rgba(52,211,153,0.04)",border:"1px solid #34d39922",borderRadius:8,padding:12,marginBottom:12}}>
+                        <div style={S.grid("1fr 1fr",8)}>
+                          <div>
+                            <Lbl>Socio</Lbl>
+                            <Sel value={nuevoAporte.socioId} onChange={e=>setNuevoAporte(a=>({...a,socioId:e.target.value}))}>
+                              <option value="">-- Elegir --</option>
+                              {socios.map(s=><option key={s.id} value={s.id}>{s.nombre}</option>)}
+                            </Sel>
+                          </div>
+                          <div><Lbl>Monto USD</Lbl><Inp type="number" placeholder="2000" value={nuevoAporte.monto} onChange={e=>setNuevoAporte(a=>({...a,monto:e.target.value}))}/></div>
+                          <div><Lbl>Fecha</Lbl><Inp type="date" value={nuevoAporte.fecha} onChange={e=>setNuevoAporte(a=>({...a,fecha:e.target.value}))}/></div>
+                          <div><Lbl>Nota</Lbl><Inp placeholder="Aporte de capital" value={nuevoAporte.nota} onChange={e=>setNuevoAporte(a=>({...a,nota:e.target.value}))}/></div>
+                        </div>
+                        <button onClick={async()=>{
+                          const monto=parse(nuevoAporte.monto);
+                          if(!nuevoAporte.socioId||!monto){notify("Completá socio y monto",false);return;}
+                          const socio=socios.find(s=>String(s.id)===String(nuevoAporte.socioId));
+                          if(!socio) return;
+                          // 1. Registrar aporte
+                          const {data:ins}=await SB.from("aportes_capital").insert({
+                            socio_id:socio.id,socio_nombre:socio.nombre,
+                            monto,fecha:nuevoAporte.fecha,nota:nuevoAporte.nota||"Aporte de capital"
+                          }).select().single();
+                          if(ins) setAportes(p=>[ins,...p]);
+                          // 2. Actualizar monto del socio
+                          const nuevoMonto=parse(socio.monto)+monto;
+                          await SB.from("socios").update({monto:nuevoMonto}).eq("id",socio.id);
+                          setSocios(p=>p.map(x=>x.id!==socio.id?x:{...x,monto:nuevoMonto}));
+                          // 3. Entrar a caja física
+                          const ns=await leerSaldoFresco(); ns.USD=(ns.USD||0)+monto;
+                          setSaldos(ns); await guardarDia(ns,null,null);
+                          setNuevoAporte({socioId:"",monto:"",fecha:hoy,nota:""});
+                          setMostrarAportes(false);
+                          notify("Aporte registrado ✓ — caja actualizada");
+                        }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(52,211,153,0.08)",border:"1px solid #34d399",color:"#34d399",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                          ✓ Confirmar aporte
+                        </button>
+                      </div>
+                    )}
+                    {/* Historial de aportes */}
+                    {aportes.length>0&&(
+                      <div>
+                        {aportes.slice(0,5).map(a=>(
+                          <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #0f0f0f",fontSize:11}}>
+                            <div>
+                              <span style={{color:"#34d399",fontWeight:700}}>{a.socio_nombre}</span>
+                              <span style={{color:"#4b5563",marginLeft:8}}>{a.fecha}</span>
+                              {a.nota&&<span style={{color:"#374151",marginLeft:6}}>· {a.nota}</span>}
+                            </div>
+                            <span style={{color:"#34d399",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>+{fmtUSD(a.monto)}</span>
+                          </div>
+                        ))}
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",marginTop:4,borderTop:"1px solid #1f2937"}}>
+                          <span style={{fontSize:11,color:"#6b7280"}}>Total aportado</span>
+                          <span style={{fontSize:12,fontWeight:700,color:"#34d399"}}>{fmtUSD(aportes.reduce((s,a)=>s+Number(a.monto),0))}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{marginTop:16,borderTop:"1px solid #1f2937",paddingTop:16}}>
+                    <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:10}}>DISTRIBUCIÓN ACTUAL</div>
                     {socios.map((s,i)=>(
                       <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #1a1a1a"}}>
                         <div style={{width:10,height:10,borderRadius:"50%",background:COLORES[i%COLORES.length],flexShrink:0}}/>
