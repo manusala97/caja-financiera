@@ -566,14 +566,9 @@ function PantallaAnalisis() {
     const FECHA_CORTE = fechaDesde || "2026-04-14";
 
     // ── Punto de arranque ──────────────────────────────────────────────────
-    const diaCorte = dias.find(d => d.id === FECHA_CORTE);
-    const cajaCorte = diaCorte?.caja_ini || {};
-    const stockArranque = parse(cajaCorte.USD || 0);
-    const cierreCorte = cierres.find(c => c.fecha >= FECHA_CORTE) || cierres[0];
-    const cotizArranque =
-      parse(cierreCorte?.cotiz_blue?.compra) ||
-      parse(cierreCorte?.cotiz_blue?.venta) ||
-      parse(cierreCorte?.cotizaciones?.ARS) || 0;
+    // Arrancamos desde cero — el CPP se construye solo desde las compras reales
+    const stockArranque = 0;
+    const cotizArranque = 0;
 
     // Helper: obtener blue mid del día
     const getBlueMid = (fecha) => {
@@ -597,7 +592,7 @@ function PantallaAnalisis() {
 
     // ── Estado por moneda ──────────────────────────────────────────────────
     const estado = {
-      USD:  { stock: stockArranque, cpp: cotizArranque, costoBruto: stockArranque * cotizArranque, ganReal: 0, historial: [], resumenDias: {} },
+      USD:  { stock: 0, cpp: 0, costoBruto: 0, ganReal: 0, historial: [], resumenDias: {} },
       USDT: { stock: 0, cpp: 0, costoBruto: 0, ganReal: 0, historial: [], resumenDias: {} },
       EUR:  { stock: 0, cpp: 0, costoBruto: 0, ganReal: 0, historial: [], resumenDias: {} },
       BRL:  { stock: 0, cpp: 0, costoBruto: 0, ganReal: 0, historial: [], resumenDias: {} },
