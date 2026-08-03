@@ -201,6 +201,121 @@ function MiniLineChart({ series=[], labels=[], height=180 }) {
 // ─────────────────────────────────────────────
 // PANTALLA ANÁLISIS CPP — NUEVA
 // ─────────────────────────────────────────────
+function PantallaPnl({pnlData}) {
+  const fmtU=(v)=>v==null?"—":(v>=0?"+":"")+Number(v).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const pct=(v,t)=>t?((v/t)*100).toFixed(1)+"%":"—";
+  const [pnlDetFecha,setPnlDetFecha]=useState(null);
+
+  const Card2=({label,val,color,sub})=>(
+    <div style={{background:"#0f1623",border:`1px solid ${color}22`,borderRadius:12,padding:"14px 16px",flex:"1 1 140px"}}>
+      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>{label}</div>
+      <div style={{fontSize:18,fontWeight:700,color:(val||0)>=0?color:"#f87171",fontFamily:"monospace"}}>{fmtU(val)}</div>
+      {sub&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>{sub}</div>}
+    </div>
+  );
+
+  const totalN1=pnlData.reduce((s,r)=>s+(r.nivel1||0),0);
+  const totalInterm=pnlData.reduce((s,r)=>s+(r.intermediacion||0),0);
+  const totalFee=pnlData.reduce((s,r)=>s+(r.fee_total||0),0);
+  const totalPos=pnlData.reduce((s,r)=>s+(r.posicion||0),0);
+  const detalle=pnlDetFecha?pnlData.find(r=>r.fecha===pnlDetFecha):null;
+
+  return (
+    <div style={{padding:"20px 16px",maxWidth:900,margin:"0 auto"}}>
+      <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16}}>ANÁLISIS P&L</div>
+
+      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>ACUMULADO HISTÓRICO</div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
+        <Card2 label="RESULTADO TOTAL" val={totalN1} color="#f472b6" sub={`${pnlData.length} días con cierre`}/>
+        <Card2 label="INTERMEDIACIÓN" val={totalInterm} color="#38bdf8" sub={pct(totalInterm,totalN1)+" del total"}/>
+        <Card2 label="FEE INCOME" val={totalFee} color="#4ade80" sub={pct(totalFee,totalN1)+" del total"}/>
+        <Card2 label="POSICIÓN (MERCADO)" val={totalPos} color="#f59e0b" sub={pct(totalPos,totalN1)+" del total"}/>
+      </div>
+
+      {pnlData.length===0&&(
+        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:32,textAlign:"center",color:"#4b5563",fontSize:13}}>
+          Aún no hay datos de P&L. Se generan automáticamente al cerrar la caja cada día.
+        </div>
+      )}
+
+      {pnlData.length>0&&(
+        <div>
+          <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>DETALLE POR DÍA</div>
+          <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden",marginBottom:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 1fr 1fr 60px",gap:0}}>
+              {["FECHA","N1 RESULTADO","INTERMEDIACIÓN","FEE INCOME","POSICIÓN",""].map((h,i)=>(
+                <div key={i} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",letterSpacing:1,fontWeight:700,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+              ))}
+              {pnlData.map(row=>{
+                const n1=row.nivel1||0,interm=row.intermediacion||0,fee=row.fee_total||0,pos=row.posicion||0;
+                const isOpen=pnlDetFecha===row.fecha;
+                return (
+                  <React.Fragment key={row.fecha}>
+                    <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{row.fecha}</div>
+                    <div style={{padding:"10px",fontSize:12,fontWeight:700,color:n1>=0?"#f472b6":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(n1)}</div>
+                    <div style={{padding:"10px",fontSize:12,color:"#38bdf8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(interm)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(interm,n1)}</span></div>
+                    <div style={{padding:"10px",fontSize:12,color:"#4ade80",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(fee)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(fee,n1)}</span></div>
+                    <div style={{padding:"10px",fontSize:12,color:pos>=0?"#f59e0b":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(pos)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(pos,n1)}</span></div>
+                    <div style={{padding:"8px",borderBottom:"1px solid #0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <button onClick={()=>setPnlDetFecha(isOpen?null:row.fecha)}
+                        style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:isOpen?"rgba(244,114,182,0.1)":"transparent",border:"1px solid "+(isOpen?"#f472b6":"#374151"),color:isOpen?"#f472b6":"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>
+                        {isOpen?"▲":"▼"}
+                      </button>
+                    </div>
+                    {isOpen&&detalle&&(
+                      <div style={{gridColumn:"1/-1",background:"#080d14",padding:"14px 16px",borderBottom:"1px solid #1f2937"}}>
+                        <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:10}}>DESGLOSE — {row.fecha}</div>
+                        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:12}}>
+                          {[
+                            {l:"USD/ARS",v:detalle.int_usdars,c:"#38bdf8"},
+                            {l:"USDT/ARS",v:detalle.int_usdtars,c:"#fbbf24"},
+                            {l:"USDT/USD",v:detalle.int_usdtusd,c:"#fbbf24"},
+                            {l:"EUR",v:detalle.int_eur,c:"#a78bfa"},
+                            {l:"BRL",v:detalle.int_brl,c:"#4ade80"},
+                            {l:"Cheq.Día",v:detalle.fee_cheqdia,c:"#4ade80"},
+                            {l:"Cheq.Dif.",v:detalle.fee_cheqdif,c:"#4ade80"},
+                            {l:"Transf.",v:detalle.fee_transf,c:"#4ade80"},
+                            {l:"Canje",v:detalle.fee_canje,c:"#4ade80"},
+                          ].filter(x=>(x.v||0)!==0).map(x=>(
+                            <div key={x.l} style={{background:"rgba(255,255,255,0.02)",border:"1px solid #1f2937",borderRadius:8,padding:"8px 12px",minWidth:100}}>
+                              <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>{x.l}</div>
+                              <div style={{fontSize:13,fontWeight:700,color:x.c,fontFamily:"monospace"}}>{fmtU(x.v)}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {detalle.detalle_ops&&detalle.detalle_ops.length>0&&(
+                          <div>
+                            <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OPERACIONES</div>
+                            <div style={{display:"grid",gridTemplateColumns:"90px 80px 100px 100px 110px 1fr",gap:0,fontSize:10}}>
+                              {["Cruce","Monto","Cotiz.","Costo FIFO","Ganancia USD","Ref. lote"].map((h,i)=>(
+                                <div key={i} style={{padding:"5px 8px",color:"#374151",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>{h}</div>
+                              ))}
+                              {detalle.detalle_ops.map((op,i)=>(
+                                <React.Fragment key={i}>
+                                  <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{op.cruce}</div>
+                                  <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{Number(op.monto||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
+                                  <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.cotiz_op||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
+                                  <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.costo_fifo||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
+                                  <div style={{padding:"5px 8px",color:(op.ganancia_usd||0)>=0?"#38bdf8":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace",fontWeight:700}}>{fmtU(op.ganancia_usd)}</div>
+                                  <div style={{padding:"5px 8px",color:"#374151",borderBottom:"1px solid #0a0a0a",fontSize:9}}>{op.lote_ref}</div>
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
 const CotNum=({value,onChange,placeholder})=>(<input type="text" inputMode="decimal" value={value} onChange={onChange} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
 
@@ -6244,109 +6359,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
 
         {pant==="cotizaciones"&&<PantallaCotizaciones/>}
 
-        {pant==="pnl"&&(()=>{
-          const fmtU=(v)=>v==null?"—":(v>=0?"+":"")+Number(v).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
-          const pct=(v,t)=>t?((v/t)*100).toFixed(1)+"%":"—";
-          const Card2=({label,val,color,sub})=>(
-            <div style={{background:"#0f1623",border:`1px solid ${color}22`,borderRadius:12,padding:"14px 16px",flex:"1 1 140px"}}>
-              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>{label}</div>
-              <div style={{fontSize:18,fontWeight:700,color:val>=0?color:"#f87171",fontFamily:"monospace"}}>{fmtU(val)}</div>
-              {sub&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>{sub}</div>}
-            </div>
-          );
-          const totalN1=pnlData.reduce((s,r)=>s+(r.nivel1||0),0);
-          const totalInterm=pnlData.reduce((s,r)=>s+(r.intermediacion||0),0);
-          const totalFee=pnlData.reduce((s,r)=>s+(r.fee_total||0),0);
-          const totalPos=pnlData.reduce((s,r)=>s+(r.posicion||0),0);
-          const [pnlDetFecha,setPnlDetFecha]=React.useState(null);
-          const detalle=pnlDetFecha?pnlData.find(r=>r.fecha===pnlDetFecha):null;
-          return (
-            <div style={{padding:"20px 16px",maxWidth:900,margin:"0 auto"}}>
-              <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16}}>ANÁLISIS P&L</div>
-
-              {/* KPIs acumulados */}
-              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>ACUMULADO HISTÓRICO</div>
-              <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
-                <Card2 label="RESULTADO TOTAL" val={totalN1} color="#f472b6" sub={`${pnlData.length} días con cierre`}/>
-                <Card2 label="INTERMEDIACIÓN" val={totalInterm} color="#38bdf8" sub={pct(totalInterm,totalN1)+" del total"}/>
-                <Card2 label="FEE INCOME" val={totalFee} color="#4ade80" sub={pct(totalFee,totalN1)+" del total"}/>
-                <Card2 label="POSICIÓN (MERCADO)" val={totalPos} color="#f59e0b" sub={pct(totalPos,totalN1)+" del total"}/>
-              </div>
-
-              {/* Tabla por día */}
-              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>DETALLE POR DÍA</div>
-              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden",marginBottom:20}}>
-                <div style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 1fr 1fr 80px",gap:0}}>
-                  {["FECHA","N1 RESULTADO","INTERMEDIACIÓN","FEE INCOME","POSICIÓN",""].map((h,i)=>(
-                    <div key={i} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",letterSpacing:1,fontWeight:700,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
-                  ))}
-                  {pnlData.map(row=>{
-                    const n1=row.nivel1||0,interm=row.intermediacion||0,fee=row.fee_total||0,pos=row.posicion||0;
-                    const isOpen=pnlDetFecha===row.fecha;
-                    return (
-                      <React.Fragment key={row.fecha}>
-                        <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{row.fecha}</div>
-                        <div style={{padding:"10px",fontSize:12,fontWeight:700,color:n1>=0?"#f472b6":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(n1)}</div>
-                        <div style={{padding:"10px",fontSize:12,color:"#38bdf8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(interm)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(interm,n1)}</span></div>
-                        <div style={{padding:"10px",fontSize:12,color:"#4ade80",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(fee)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(fee,n1)}</span></div>
-                        <div style={{padding:"10px",fontSize:12,color:pos>=0?"#f59e0b":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(pos)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(pos,n1)}</span></div>
-                        <div style={{padding:"8px",borderBottom:"1px solid #0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <button onClick={()=>setPnlDetFecha(isOpen?null:row.fecha)}
-                            style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:isOpen?"rgba(244,114,182,0.1)":"transparent",border:"1px solid "+(isOpen?"#f472b6":"#374151"),color:isOpen?"#f472b6":"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>
-                            {isOpen?"▲":"▼"}
-                          </button>
-                        </div>
-                        {isOpen&&detalle&&(
-                          <div style={{gridColumn:"1/-1",background:"#080d14",padding:"14px 16px",borderBottom:"1px solid #1f2937"}}>
-                            <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:10}}>DESGLOSE — {row.fecha}</div>
-                            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:12}}>
-                              {[
-                                {l:"USD/ARS",v:detalle.int_usdars,c:"#38bdf8"},
-                                {l:"USDT/ARS",v:detalle.int_usdtars,c:"#fbbf24"},
-                                {l:"USDT/USD",v:detalle.int_usdtusd,c:"#fbbf24"},
-                                {l:"EUR",v:detalle.int_eur,c:"#a78bfa"},
-                                {l:"BRL",v:detalle.int_brl,c:"#4ade80"},
-                                {l:"Cheq.Día",v:detalle.fee_cheqdia,c:"#4ade80"},
-                                {l:"Cheq.Dif.",v:detalle.fee_cheqdif,c:"#4ade80"},
-                                {l:"Transf.",v:detalle.fee_transf,c:"#4ade80"},
-                                {l:"Canje",v:detalle.fee_canje,c:"#4ade80"},
-                              ].filter(x=>(x.v||0)!==0).map(x=>(
-                                <div key={x.l} style={{background:"rgba(255,255,255,0.02)",border:"1px solid #1f2937",borderRadius:8,padding:"8px 12px",minWidth:100}}>
-                                  <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>{x.l}</div>
-                                  <div style={{fontSize:13,fontWeight:700,color:x.c,fontFamily:"monospace"}}>{fmtU(x.v)}</div>
-                                </div>
-                              ))}
-                            </div>
-                            {detalle.detalle_ops&&detalle.detalle_ops.length>0&&(
-                              <div>
-                                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OPERACIONES</div>
-                                <div style={{display:"grid",gridTemplateColumns:"100px 80px 100px 100px 100px 1fr",gap:0,fontSize:10}}>
-                                  {["Cruce","Monto","Cotiz.","Costo FIFO","Ganancia USD","Ref. lote"].map((h,i)=>(
-                                    <div key={i} style={{padding:"5px 8px",color:"#374151",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>{h}</div>
-                                  ))}
-                                  {detalle.detalle_ops.map((op,i)=>(
-                                    <React.Fragment key={i}>
-                                      <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{op.cruce}</div>
-                                      <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{Number(op.monto).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
-                                      <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.cotiz_op||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
-                                      <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.costo_fifo||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
-                                      <div style={{padding:"5px 8px",color:(op.ganancia_usd||0)>=0?"#38bdf8":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace",fontWeight:700}}>{fmtU(op.ganancia_usd)}</div>
-                                      <div style={{padding:"5px 8px",color:"#374151",borderBottom:"1px solid #0a0a0a",fontSize:9}}>{op.lote_ref}</div>
-                                    </React.Fragment>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {pant==="pnl"&&<PantallaPnl pnlData={pnlData}/>}
 
       </main>
     </div>
