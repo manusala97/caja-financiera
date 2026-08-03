@@ -931,7 +931,7 @@ function PantallaAnalisis() {
             {l:"GANANCIA REALIZADA",v:(mon.unidad==="ARS"?"$":"USD ")+fmtN(Math.round(mon.ganReal)),c:colorGan(mon.ganReal)},
             {l:"NO REALIZADA",v:mon.noRealizada!=null?(mon.unidad==="ARS"?"$":"USD ")+fmtN(Math.round(mon.noRealizada)):"—",c:colorGan(mon.noRealizada)},
             {l:"MARGEN PROM.",v:pctMargen?pctMargen.toFixed(2)+"%":"—",c:pctMargen>=1?"#4ade80":"#f59e0b"},
-            {l:"VENTAS",v:vts.length+" ops · "+fmtN(volVendido,0)+" "+monedaSel,c:"#64748b"},
+            {l:"VENTAS",v:ventas.length+" ops · "+fmtN(volVendido,0)+" "+monedaSel,c:"#64748b"},
           ].map(({l,v,c})=>(
             <div key={l} style={{padding:"10px 12px",background:"rgba(255,255,255,0.02)",borderRadius:8,border:"1px solid rgba(255,255,255,0.04)"}}>
               <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
