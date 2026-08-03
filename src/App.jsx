@@ -875,8 +875,9 @@ function PantallaAnalisis() {
   const colorGan = v => v==null?"#4b5563":v>=0?"#4ade80":"#f87171";
 
   // ── Moneda seleccionada ──────────────────────────────────────────────────
-  const mon = monedas[monedaSel];
-  const ventas = mon.historial.filter(h=>h.tipo==="venta");
+  const monActiva = monedas[monedaSel] ? monedaSel : "USD";
+  const mon = monedas[monActiva] || {stock:0,cpp:0,ganReal:0,historial:[],resumenDias:[],noRealizada:null,unidad:"ARS",label:"USD",color:"#f59e0b"};
+  const ventas = (mon.historial||[]).filter(h=>h.tipo==="venta");
   const volVendido = ventas.reduce((s,v)=>s+v.monto,0);
   const ganProm = volVendido>0 ? mon.ganReal/volVendido : 0;
   const pctMargen = mon.cpp>0 && ganProm ? (ganProm/mon.cpp*100) : 0;
@@ -891,7 +892,7 @@ function PantallaAnalisis() {
 
       {/* Cards por moneda */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
-        {Object.entries(monedas).filter(([,m])=>m.historial.length>0||m.stock>0).map(([key,m])=>{
+        {Object.entries(monedas||{}).filter(([,m])=>m&&(m.historial?.length>0||m.stock>0)).map(([key,m])=>{
           const vts=m.historial.filter(h=>h.tipo==="venta");
           const vol=vts.reduce((s,v)=>s+v.monto,0);
           const gp=vol>0?m.ganReal/vol:0;
@@ -979,7 +980,7 @@ function PantallaAnalisis() {
       </div>
 
       {/* Resumen por día */}
-      {mon.resumenDias.length>0&&(
+      {(mon.resumenDias||[]).length>0&&(
         <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:14,padding:"18px 20px"}}>
           <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>RESUMEN POR DÍA — {monedaSel}</div>
           <div style={{overflowX:"auto"}}>
