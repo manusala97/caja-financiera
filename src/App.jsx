@@ -637,7 +637,16 @@ function PantallaAnalisis() {
 
     // ── Filtrar y procesar ops ─────────────────────────────────────────────
     const FECHA_HASTA = fechaHasta || "9999-12-31";
-    const opsValidas = ops.filter(o => o.fecha >= FECHA_CORTE && o.fecha <= FECHA_HASTA && (o.tipo === "compra" || o.tipo === "venta"));
+    const opsValidas = ops.filter(o => {
+      if (o.fecha < FECHA_CORTE || o.fecha > FECHA_HASTA) return false;
+      if (o.tipo !== "compra" && o.tipo !== "venta") return false;
+      // Ignorar ops con cotización claramente errónea
+      const cotiz = parse(o.cotizacion);
+      if (cotiz > 100000) return false; // cotización absurda
+      // Ignorar ARS/USD (venta de ARS contra USD — caso mal cargado)
+      if (o.moneda === "ARS" && o.moneda2 === "USD" && parse(o.monto2) > 10000) return false;
+      return true;
+    });
 
     opsValidas.forEach(op => {
       const moneda = op.moneda || "", moneda2 = op.moneda2 || "";
