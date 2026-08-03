@@ -866,6 +866,7 @@ function PantallaAnalisis() {
   if (!resultado) return null;
 
   const { stockUSD, cpp, gananciaRealizada, gananciaNoRealizada, blueActual, historial, resumenDias, cotizArranque, stockArranque, tenencia, monedas } = resultado;
+  if (!monedas) return <div style={{color:"#f87171",padding:20}}>Error en el cálculo CPP. Revisá la consola del browser.</div>;
 
   // ── helpers de formato ───────────────────────────────────────────────────
   const fmtN = (v,dec=0) => v==null?"—":Number(v).toLocaleString("es-AR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
