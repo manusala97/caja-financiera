@@ -532,10 +532,12 @@ function PantallaAnalisis() {
   const [tab, setTab] = useState("estado");
   const [resultado, setResultado] = useState(null);
   const [monedaSel, setMonedaSel] = useState("USD");
+  const [filtroDesde, setFiltroDesde] = useState("2026-04-14");
+  const [filtroHasta, setFiltroHasta] = useState(new Date().toISOString().split("T")[0]);
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => { cargar(filtroDesde, filtroHasta); }, [filtroDesde, filtroHasta]);
 
-  async function cargar() {
+  async function cargar(desde, hasta) {
     setCargando(true); setError("");
     try {
       const [{ data: opsRaw }, { data: cierres }, { data: dias }, { data: movsCC }, { data: diferidosData }] = await Promise.all([
@@ -555,13 +557,13 @@ function PantallaAnalisis() {
         hora: o.hora || o.datos?.hora,
         tipo: o.tipo
       })).filter(o => o.fecha);
-      setResultado(correrCPP(ops, cierres, dias || [], movsCC || [], diferidosData || []));
+      setResultado(correrCPP(ops, cierres, dias || [], movsCC || [], diferidosData || [], desde || filtroDesde, hasta || filtroHasta));
     } catch (e) { setError("Error al cargar: " + e.message); }
     setCargando(false);
   }
 
-  function correrCPP(ops, cierres, dias, movsCC, diferidos) {
-    const FECHA_CORTE = "2026-04-14";
+  function correrCPP(ops, cierres, dias, movsCC, diferidos, fechaDesde, fechaHasta) {
+    const FECHA_CORTE = fechaDesde || "2026-04-14";
 
     // ── Punto de arranque ──────────────────────────────────────────────────
     const diaCorte = dias.find(d => d.id === FECHA_CORTE);
@@ -639,7 +641,8 @@ function PantallaAnalisis() {
     };
 
     // ── Filtrar y procesar ops ─────────────────────────────────────────────
-    const opsValidas = ops.filter(o => o.fecha >= FECHA_CORTE && (o.tipo === "compra" || o.tipo === "venta"));
+    const FECHA_HASTA = fechaHasta || "9999-12-31";
+    const opsValidas = ops.filter(o => o.fecha >= FECHA_CORTE && o.fecha <= FECHA_HASTA && (o.tipo === "compra" || o.tipo === "venta"));
 
     opsValidas.forEach(op => {
       const moneda = op.moneda || "", moneda2 = op.moneda2 || "";
@@ -884,10 +887,29 @@ function PantallaAnalisis() {
 
   return (
     <div style={{padding:"16px 16px 40px"}}>
-      <div style={{fontSize:9,letterSpacing:4,color:"#f59e0b",marginBottom:4,fontWeight:600}}>ANÁLISIS DE STOCK</div>
-      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Costo Promedio Ponderado Móvil</div>
-      <div style={{fontSize:11,color:"#374151",marginBottom:20,padding:"6px 12px",background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:8,display:"inline-block"}}>
-        📅 Análisis desde el 14 de abril 2026 — fecha de inicio del sistema confiable
+      <div style={{fontSize:9,letterSpacing:4,color:"#f59e0b",marginBottom:4,fontWeight:600}}>ANÁLISIS DE OPERACIONES</div>
+      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:12}}>Costo Promedio Ponderado Móvil</div>
+
+      {/* Filtro de fechas */}
+      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:20,background:"rgba(245,158,11,0.04)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:10,padding:"12px 16px"}}>
+        <span style={{fontSize:10,color:"#f59e0b",letterSpacing:1,fontWeight:700}}>PERÍODO</span>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <label style={{fontSize:10,color:"#4b5563"}}>Desde</label>
+          <input type="date" value={filtroDesde} onChange={e=>setFiltroDesde(e.target.value)}
+            style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <label style={{fontSize:10,color:"#4b5563"}}>Hasta</label>
+          <input type="date" value={filtroHasta} onChange={e=>setFiltroHasta(e.target.value)}
+            style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
+        </div>
+        <button onClick={()=>{setFiltroDesde("2026-04-14");setFiltroHasta(new Date().toISOString().split("T")[0]);}}
+          style={{fontSize:10,padding:"5px 12px",borderRadius:6,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>
+          Reset
+        </button>
+        <span style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>
+          {mon.historial.filter(h=>h.fecha>=filtroDesde&&h.fecha<=filtroHasta).length} ops en el período
+        </span>
       </div>
 
       {/* Cards por moneda */}
@@ -904,18 +926,17 @@ function PantallaAnalisis() {
                 borderRadius:12,padding:"14px 16px",cursor:"pointer",minWidth:150,flex:"1 1 150px",
                 transition:"all 0.15s"}}>
               <div style={{fontSize:10,color:m.color,fontWeight:700,marginBottom:8}}>{m.label}</div>
-              <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:"monospace",marginBottom:4}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:"monospace",marginBottom:6}}>
                 {m.unidad==="ARS"?"$":"USD "}{fmtN(Math.round(m.cpp),0)}
                 <span style={{fontSize:10,color:"#4b5563",fontWeight:400,marginLeft:4}}>CPP</span>
               </div>
-              <div style={{fontSize:11,color:"#6b7280",marginBottom:2}}>Stock: {fmtN(m.stock,2)} {key}</div>
-              <div style={{fontSize:11,color:colorGan(m.ganReal)}}>
-                {m.unidad==="ARS"?"$":"USD "}{fmtN(Math.round(m.ganReal))} realizado
+              <div style={{fontSize:11,color:colorGan(m.ganReal),marginBottom:2,fontWeight:600}}>
+                {m.unidad==="ARS"?"$":"USD "}{fmtN(Math.round(m.ganReal))} ganado
               </div>
-              {m.noRealizada!=null&&<div style={{fontSize:10,color:colorGan(m.noRealizada)}}>
-                {m.unidad==="ARS"?"$":"USD "}{fmtN(Math.round(m.noRealizada))} latente
-              </div>}
-              <div style={{fontSize:9,color:"#374151",marginTop:4}}>{m.historial.length} ops · {vts.length} ventas</div>
+              <div style={{fontSize:10,color:"#4b5563",marginBottom:2}}>
+                {vol>0?(m.ganReal/vol).toFixed(0)+" "+m.unidad+"/op":"—"} margen prom.
+              </div>
+              <div style={{fontSize:9,color:"#374151",marginTop:4}}>{m.historial.length} ops · {vol.toFixed(0)} vendido</div>
             </div>
           );
         })}
@@ -925,14 +946,18 @@ function PantallaAnalisis() {
       <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:14,padding:"18px 20px",marginBottom:20}}>
         <div style={{fontSize:10,letterSpacing:2,color:mon.color,marginBottom:14,fontWeight:700}}>{mon.label} — DETALLE</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,marginBottom:16}}>
-          {[
-            {l:"CPP ACTUAL",v:(mon.unidad==="ARS"?"$":"")+fmtN(Math.round(mon.cpp))+(mon.unidad==="USD"?" USD":""),c:mon.color},
-            {l:"STOCK",v:fmtN(mon.stock,2)+" "+monedaSel,c:"#e2e8f0"},
-            {l:"GANANCIA REALIZADA",v:(mon.unidad==="ARS"?"$":"USD ")+fmtN(Math.round(mon.ganReal)),c:colorGan(mon.ganReal)},
-            {l:"NO REALIZADA",v:mon.noRealizada!=null?(mon.unidad==="ARS"?"$":"USD ")+fmtN(Math.round(mon.noRealizada)):"—",c:colorGan(mon.noRealizada)},
-            {l:"MARGEN PROM.",v:pctMargen?pctMargen.toFixed(2)+"%":"—",c:pctMargen>=1?"#4ade80":"#f59e0b"},
-            {l:"VENTAS",v:ventas.length+" ops · "+fmtN(volVendido,0)+" "+monedaSel,c:"#64748b"},
-          ].map(({l,v,c})=>(
+          {(()=>{
+            const volComp=mon.historial.filter(h=>h.tipo==="compra").reduce((s,h)=>s+h.monto,0);
+            const ganPorUni=volVendido>0?mon.ganReal/volVendido:0;
+            return [
+              {l:"CPP ACTUAL",v:(mon.unidad==="ARS"?"$":"")+fmtN(Math.round(mon.cpp),0)+(mon.unidad==="USD"?" USD":""),c:mon.color,hint:"Costo promedio ponderado de tu inventario"},
+              {l:"GANANCIA REALIZADA",v:(mon.unidad==="ARS"?"$":"USD ")+fmtN(Math.round(mon.ganReal)),c:colorGan(mon.ganReal),hint:"Suma de todas las ganancias de ventas cerradas"},
+              {l:"MARGEN POR UNIDAD",v:ganPorUni?((mon.unidad==="ARS"?"$":"")+fmtN(Math.round(ganPorUni))+(mon.unidad==="USD"?" USD":"")):"—",c:ganPorUni>=0?"#4ade80":"#f87171",hint:"Ganancia promedio por "+monedaSel+" vendido"},
+              {l:"MARGEN %",v:pctMargen?pctMargen.toFixed(2)+"%":"—",c:pctMargen>=1?"#4ade80":"#f59e0b",hint:"Margen sobre el CPP"},
+              {l:"VOLUMEN COMPRADO",v:fmtN(volComp,0)+" "+monedaSel,c:"#38bdf8",hint:"Total comprado en el período"},
+              {l:"VOLUMEN VENDIDO",v:fmtN(volVendido,0)+" "+monedaSel+" · "+ventas.length+" ventas",c:"#a78bfa",hint:"Total vendido en el período"},
+            ];
+          })().map(({l,v,c,hint})=>(
             <div key={l} style={{padding:"10px 12px",background:"rgba(255,255,255,0.02)",borderRadius:8,border:"1px solid rgba(255,255,255,0.04)"}}>
               <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
               <div style={{fontSize:14,fontWeight:700,color:c,fontFamily:"monospace"}}>{v}</div>
