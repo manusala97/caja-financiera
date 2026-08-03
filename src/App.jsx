@@ -531,6 +531,7 @@ function PantallaAnalisis() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState("estado");
   const [resultado, setResultado] = useState(null);
+  const [monedaSel, setMonedaSel] = useState("USD");
 
   useEffect(() => { cargar(); }, []);
 
@@ -859,8 +860,6 @@ function PantallaAnalisis() {
       detalleDias,
     };
   }
-
-  const [monedaSel, setMonedaSel] = useState("USD");
 
   if (cargando) return <div style={{color:"#475569",padding:40,textAlign:"center"}}>Calculando CPP...</div>;
   if (error) return <div style={{color:"#f87171",padding:20}}>{error}</div>;
