@@ -1521,6 +1521,7 @@ function AppInterna({ usuario }) {
   const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId|"op_simultanea", monto:"", impactaCaja:true, cotizSim:"", clienteSim:"", monedaSim:"USD", impactaCajaSim:true, clienteSimId:"", clienteSimBuscar:""}]
   const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  const [pnlData, setPnlData] = useState([]);
   const [resolviendo, setResolviendo] = useState(null); // {opId, pi, monto, nota, op}
   const [resolverLineas, setResolverLineas] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", buscar:""}]
   const [buscarResolverDrop, setBuscarResolverDrop] = useState({});
@@ -1677,6 +1678,8 @@ function AppInterna({ usuario }) {
         if (sociosData) setSocios(sociosData);
         const {data:aportesData} = await SB.from("aportes_capital").select("*").order("fecha",{ascending:false});
         if (aportesData) setAportes(aportesData);
+        const {data:pnlRows} = await SB.from("pnl_diario").select("*").order("fecha",{ascending:false});
+        if (pnlRows) setPnlData(pnlRows);
         // Liquidaciones
         const {data:liqData} = await SB.from("liquidaciones").select("*").order("fecha",{ascending:false}).limit(12);
         if (liqData) setLiquidaciones(liqData);
@@ -1781,12 +1784,154 @@ function AppInterna({ usuario }) {
     await SB.from("dias").upsert({id:hoy, caja_ini:cajaData, abierta:true},{onConflict:"id"});
   }
 
+  async function calcularPnlFifo(fechaCierre, cotizCierre, totalUSD, totalAyer) {
+    // Cargar inventario FIFO del día anterior
+    const {data:lotesAnt} = await SB.from("inventario_fifo").select("*").lt("fecha", fechaCierre).order("lote_id");
+    // Reconstruir FIFO state
+    const fifo = {USD:[], USDT:[], EUR:[], BRL:[], GBP:[]};
+    (lotesAnt||[]).forEach(l => { if(fifo[l.moneda]) fifo[l.moneda].push({id:l.lote_id,costo_ars:Number(l.costo_ars),cantidad:Number(l.cantidad),fecha_compra:l.fecha_compra,hora_compra:l.hora_compra,cruce:l.cruce_origen}); });
+
+    // Cargar ops del día ordenadas por hora
+    const {data:opsData} = await SB.from("operaciones").select("tipo,datos,hora").eq("fecha", fechaCierre).order("hora");
+    const opsHoy = (opsData||[]).map(o=>({...o.datos, tipo_op:o.tipo}));
+
+    const pnl = {usdars:0, usdtars:0, usdtusd:0, eur:0, brl:0, gbp:0};
+    const fee = {cheqdia:0, cheqdif:0, transf:0, canje:0};
+    const detalleOps = [];
+    let loteIdCounter = (lotesAnt||[]).reduce((m,l)=>Math.max(m,l.lote_id),0);
+
+    const parseFn = v => { try{return parseFloat(v||0)||0}catch{return 0} };
+    const cotizN = parseFn(cotizCierre?.ARS) || 1;
+
+    const consumirFifo = (moneda, cantidad) => {
+      let restante = cantidad;
+      const consumidos = [];
+      while(restante > 0.001 && fifo[moneda].length > 0) {
+        const lote = fifo[moneda][0];
+        if(lote.cantidad <= restante + 0.001) {
+          consumidos.push({...lote, cantidad_consumida: lote.cantidad});
+          restante -= lote.cantidad;
+          fifo[moneda].shift();
+        } else {
+          consumidos.push({...lote, cantidad_consumida: restante});
+          fifo[moneda][0] = {...lote, cantidad: lote.cantidad - restante};
+          restante = 0;
+        }
+      }
+      return consumidos;
+    };
+
+    for(const op of opsHoy) {
+      const tipo = op.tipo_op;
+      const moneda = op.moneda||"", moneda2 = op.moneda2||"";
+      const monto = parseFn(op.monto), cotizOp = parseFn(op.cotizacion);
+
+      if(tipo === "cheque_dia") {
+        fee.cheqdia += parseFn(op.ccom) / cotizN;
+      } else if(tipo === "cheque_dif") {
+        const dn=parseFn(op.dn), pago=parseFn(op.monto), tasa=parseFn(op.te||op.tasaEndoso||1.9)/100;
+        fee.cheqdif += (dn*(1-tasa)-pago)/cotizN;
+      } else if(tipo === "transferencia") {
+        fee.transf += parseFn(op.tcom)/cotizN;
+      } else if(tipo === "venta" && moneda==="USD" && moneda2==="USD") {
+        fee.canje += monto * parseFn(op.tpct||op.pct||0) / 100;
+      } else if(tipo === "compra" && monto && cotizOp) {
+        loteIdCounter++;
+        let costoArs = 0;
+        if(moneda==="USD" && moneda2==="ARS") costoArs=cotizOp;
+        else if(moneda==="USDT" && moneda2==="ARS") costoArs=cotizOp;
+        else if(moneda==="USDT" && moneda2==="USD") costoArs=cotizOp*cotizN;
+        else if(moneda==="EUR" && moneda2==="ARS") costoArs=cotizOp;
+        else if(moneda==="BRL" && moneda2==="ARS") costoArs=cotizOp;
+        else if(moneda==="GBP" && moneda2==="ARS") costoArs=cotizOp;
+        if(costoArs && fifo[moneda]) {
+          fifo[moneda].push({id:loteIdCounter,costo_ars:costoArs,cantidad:monto,fecha_compra:fechaCierre,hora_compra:op.hora||"",cruce:`${moneda}/${moneda2}`});
+        }
+      } else if(tipo === "venta" && monto && cotizOp) {
+        if(moneda==="USD" && moneda2==="ARS") {
+          const cons=consumirFifo("USD",monto);
+          cons.forEach(l=>{
+            const ganArs=(cotizOp-l.costo_ars)*l.cantidad_consumida;
+            const ganUsd=ganArs/cotizN;
+            pnl.usdars+=ganUsd;
+            detalleOps.push({cruce:"USD/ARS",monto:l.cantidad_consumida,cotiz_op:cotizOp,costo_fifo:l.costo_ars,ganancia_usd:ganUsd,ganancia_ars:ganArs,lote_ref:`Lote #${l.id} @ $${l.costo_ars?.toFixed(0)}`});
+          });
+        } else if(moneda==="USDT" && moneda2==="ARS") {
+          const cons=consumirFifo("USDT",monto);
+          cons.forEach(l=>{
+            const ganArs=(cotizOp-l.costo_ars)*l.cantidad_consumida;
+            const ganUsd=ganArs/cotizN;
+            pnl.usdtars+=ganUsd;
+            detalleOps.push({cruce:"USDT/ARS",monto:l.cantidad_consumida,cotiz_op:cotizOp,costo_fifo:l.costo_ars,ganancia_usd:ganUsd,ganancia_ars:ganArs,lote_ref:`Lote #${l.id} @ $${l.costo_ars?.toFixed(0)}`});
+          });
+        } else if(moneda==="USDT" && moneda2==="USD") {
+          const cons=consumirFifo("USDT",monto);
+          cons.forEach(l=>{
+            const precioArs=cotizOp*cotizN;
+            const ganArs=(precioArs-l.costo_ars)*l.cantidad_consumida;
+            const ganUsd=ganArs/cotizN;
+            pnl.usdtusd+=ganUsd;
+            detalleOps.push({cruce:"USDT/USD",monto:l.cantidad_consumida,cotiz_op:cotizOp,costo_fifo:l.costo_ars/cotizN,ganancia_usd:ganUsd,ganancia_ars:ganArs,lote_ref:`Lote #${l.id} @ $${l.costo_ars?.toFixed(0)}`});
+          });
+        } else if(moneda==="EUR" && moneda2==="ARS") {
+          const cons=consumirFifo("EUR",monto);
+          cons.forEach(l=>{
+            const ganArs=(cotizOp-l.costo_ars)*l.cantidad_consumida;
+            const ganUsd=ganArs/cotizN;
+            pnl.eur+=ganUsd;
+            detalleOps.push({cruce:"EUR/ARS",monto:l.cantidad_consumida,cotiz_op:cotizOp,costo_fifo:l.costo_ars,ganancia_usd:ganUsd,ganancia_ars:ganArs,lote_ref:`Lote #${l.id} @ $${l.costo_ars?.toFixed(0)}`});
+          });
+        } else if(moneda==="BRL" && moneda2==="ARS") {
+          const cons=consumirFifo("BRL",monto);
+          cons.forEach(l=>{
+            const ganArs=(cotizOp-l.costo_ars)*l.cantidad_consumida;
+            const ganUsd=ganArs/cotizN;
+            pnl.brl+=ganUsd;
+            detalleOps.push({cruce:"BRL/ARS",monto:l.cantidad_consumida,cotiz_op:cotizOp,costo_fifo:l.costo_ars,ganancia_usd:ganUsd,ganancia_ars:ganArs,lote_ref:`Lote #${l.id} @ $${l.costo_ars?.toFixed(0)}`});
+          });
+        }
+      }
+    }
+
+    // Guardar inventario FIFO actualizado
+    const lotesNuevos = [];
+    Object.entries(fifo).forEach(([moneda,lotes])=>{
+      lotes.forEach(l=>{
+        lotesNuevos.push({fecha:fechaCierre,moneda,lote_id:l.id,costo_ars:l.costo_ars,cantidad:l.cantidad,fecha_compra:l.fecha_compra,hora_compra:l.hora_compra,cruce_origen:l.cruce});
+      });
+    });
+    // Borrar lotes anteriores del día y reemplazar
+    await SB.from("inventario_fifo").delete().eq("fecha",fechaCierre);
+    if(lotesNuevos.length>0) await SB.from("inventario_fifo").insert(lotesNuevos);
+
+    // Calcular P&L
+    const cierreAyer = cierres.filter(c=>c.fecha<fechaCierre).sort((a,b)=>b.fecha.localeCompare(a.fecha))[0];
+    const nivel1 = totalUSD - (cierreAyer?.total_usd||totalUSD);
+    const intermediacion = pnl.usdars+pnl.usdtars+pnl.usdtusd+pnl.eur+pnl.brl+pnl.gbp;
+    const feeTotal = fee.cheqdia+fee.cheqdif+fee.transf+fee.canje;
+    const posicion = nivel1 - intermediacion - feeTotal;
+
+    const pnlRecord = {
+      fecha:fechaCierre, nivel1, intermediacion,
+      int_usdars:pnl.usdars, int_usdtars:pnl.usdtars, int_usdtusd:pnl.usdtusd,
+      int_eur:pnl.eur, int_brl:pnl.brl, int_gbp:pnl.gbp,
+      fee_total:feeTotal, fee_cheqdia:fee.cheqdia, fee_cheqdif:fee.cheqdif,
+      fee_transf:fee.transf, fee_canje:fee.canje,
+      posicion, detalle_ops:detalleOps,
+      inventario_cierre:Object.fromEntries(Object.entries(fifo).map(([m,ls])=>[m,ls]))
+    };
+    await SB.from("pnl_diario").upsert(pnlRecord,{onConflict:"fecha"});
+    return pnlRecord;
+  }
+
   async function ejecutarCierre(cotiz, totalUSD, cotizBlue={compra:0,venta:0}) {
     const opsHoy=ops.filter(o=>o.fecha===hoy);
     const resumen=Object.fromEntries(Object.entries(TIPOS_OP).map(([id])=>[id,opsHoy.filter(o=>o.tipo===id).length]));
     const cierre={fecha:hoy,saldos_finales:saldos,saldos_iniciales:cajaIni,cotizaciones:cotiz,total_usd:totalUSD,ops_resumen:resumen,cotiz_blue:cotizBlue};
     await SB.from("cierres").upsert(cierre,{onConflict:"fecha"});
     setCierres(p=>{const sin=p.filter(c=>c.fecha!==hoy);return [...sin,cierre].sort((a,b)=>a.fecha.localeCompare(b.fecha));});
+    // Calcular P&L FIFO al cerrar
+    try { await calcularPnlFifo(hoy, cotiz, totalUSD, null); } catch(e) { console.error("P&L FIFO error:",e); }
     setCajaCerrada(true); setShowModalCierre(false);
     notify("Caja cerrada correctamente");
   }
@@ -2341,6 +2486,7 @@ function AppInterna({ usuario }) {
     {id:"inversiones",label:"Inversiones",c:"#2dd4bf"},
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cotizaciones",label:"Cotizaciones",c:"#38bdf8"},
+    {id:"pnl",label:"P&L",c:"#f472b6"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre"].includes(p.id));
 
@@ -6097,6 +6243,110 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
         {pant==="analisis"&&<PantallaAnalisis/>}
 
         {pant==="cotizaciones"&&<PantallaCotizaciones/>}
+
+        {pant==="pnl"&&(()=>{
+          const fmtU=(v)=>v==null?"—":(v>=0?"+":"")+Number(v).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+          const pct=(v,t)=>t?((v/t)*100).toFixed(1)+"%":"—";
+          const Card2=({label,val,color,sub})=>(
+            <div style={{background:"#0f1623",border:`1px solid ${color}22`,borderRadius:12,padding:"14px 16px",flex:"1 1 140px"}}>
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>{label}</div>
+              <div style={{fontSize:18,fontWeight:700,color:val>=0?color:"#f87171",fontFamily:"monospace"}}>{fmtU(val)}</div>
+              {sub&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>{sub}</div>}
+            </div>
+          );
+          const totalN1=pnlData.reduce((s,r)=>s+(r.nivel1||0),0);
+          const totalInterm=pnlData.reduce((s,r)=>s+(r.intermediacion||0),0);
+          const totalFee=pnlData.reduce((s,r)=>s+(r.fee_total||0),0);
+          const totalPos=pnlData.reduce((s,r)=>s+(r.posicion||0),0);
+          const [pnlDetFecha,setPnlDetFecha]=React.useState(null);
+          const detalle=pnlDetFecha?pnlData.find(r=>r.fecha===pnlDetFecha):null;
+          return (
+            <div style={{padding:"20px 16px",maxWidth:900,margin:"0 auto"}}>
+              <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16}}>ANÁLISIS P&L</div>
+
+              {/* KPIs acumulados */}
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>ACUMULADO HISTÓRICO</div>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
+                <Card2 label="RESULTADO TOTAL" val={totalN1} color="#f472b6" sub={`${pnlData.length} días con cierre`}/>
+                <Card2 label="INTERMEDIACIÓN" val={totalInterm} color="#38bdf8" sub={pct(totalInterm,totalN1)+" del total"}/>
+                <Card2 label="FEE INCOME" val={totalFee} color="#4ade80" sub={pct(totalFee,totalN1)+" del total"}/>
+                <Card2 label="POSICIÓN (MERCADO)" val={totalPos} color="#f59e0b" sub={pct(totalPos,totalN1)+" del total"}/>
+              </div>
+
+              {/* Tabla por día */}
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>DETALLE POR DÍA</div>
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden",marginBottom:20}}>
+                <div style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 1fr 1fr 80px",gap:0}}>
+                  {["FECHA","N1 RESULTADO","INTERMEDIACIÓN","FEE INCOME","POSICIÓN",""].map((h,i)=>(
+                    <div key={i} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",letterSpacing:1,fontWeight:700,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+                  ))}
+                  {pnlData.map(row=>{
+                    const n1=row.nivel1||0,interm=row.intermediacion||0,fee=row.fee_total||0,pos=row.posicion||0;
+                    const isOpen=pnlDetFecha===row.fecha;
+                    return (
+                      <React.Fragment key={row.fecha}>
+                        <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{row.fecha}</div>
+                        <div style={{padding:"10px",fontSize:12,fontWeight:700,color:n1>=0?"#f472b6":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(n1)}</div>
+                        <div style={{padding:"10px",fontSize:12,color:"#38bdf8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(interm)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(interm,n1)}</span></div>
+                        <div style={{padding:"10px",fontSize:12,color:"#4ade80",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(fee)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(fee,n1)}</span></div>
+                        <div style={{padding:"10px",fontSize:12,color:pos>=0?"#f59e0b":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(pos)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(pos,n1)}</span></div>
+                        <div style={{padding:"8px",borderBottom:"1px solid #0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <button onClick={()=>setPnlDetFecha(isOpen?null:row.fecha)}
+                            style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:isOpen?"rgba(244,114,182,0.1)":"transparent",border:"1px solid "+(isOpen?"#f472b6":"#374151"),color:isOpen?"#f472b6":"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>
+                            {isOpen?"▲":"▼"}
+                          </button>
+                        </div>
+                        {isOpen&&detalle&&(
+                          <div style={{gridColumn:"1/-1",background:"#080d14",padding:"14px 16px",borderBottom:"1px solid #1f2937"}}>
+                            <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:10}}>DESGLOSE — {row.fecha}</div>
+                            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:12}}>
+                              {[
+                                {l:"USD/ARS",v:detalle.int_usdars,c:"#38bdf8"},
+                                {l:"USDT/ARS",v:detalle.int_usdtars,c:"#fbbf24"},
+                                {l:"USDT/USD",v:detalle.int_usdtusd,c:"#fbbf24"},
+                                {l:"EUR",v:detalle.int_eur,c:"#a78bfa"},
+                                {l:"BRL",v:detalle.int_brl,c:"#4ade80"},
+                                {l:"Cheq.Día",v:detalle.fee_cheqdia,c:"#4ade80"},
+                                {l:"Cheq.Dif.",v:detalle.fee_cheqdif,c:"#4ade80"},
+                                {l:"Transf.",v:detalle.fee_transf,c:"#4ade80"},
+                                {l:"Canje",v:detalle.fee_canje,c:"#4ade80"},
+                              ].filter(x=>(x.v||0)!==0).map(x=>(
+                                <div key={x.l} style={{background:"rgba(255,255,255,0.02)",border:"1px solid #1f2937",borderRadius:8,padding:"8px 12px",minWidth:100}}>
+                                  <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>{x.l}</div>
+                                  <div style={{fontSize:13,fontWeight:700,color:x.c,fontFamily:"monospace"}}>{fmtU(x.v)}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {detalle.detalle_ops&&detalle.detalle_ops.length>0&&(
+                              <div>
+                                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OPERACIONES</div>
+                                <div style={{display:"grid",gridTemplateColumns:"100px 80px 100px 100px 100px 1fr",gap:0,fontSize:10}}>
+                                  {["Cruce","Monto","Cotiz.","Costo FIFO","Ganancia USD","Ref. lote"].map((h,i)=>(
+                                    <div key={i} style={{padding:"5px 8px",color:"#374151",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>{h}</div>
+                                  ))}
+                                  {detalle.detalle_ops.map((op,i)=>(
+                                    <React.Fragment key={i}>
+                                      <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{op.cruce}</div>
+                                      <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{Number(op.monto).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
+                                      <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.cotiz_op||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
+                                      <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.costo_fifo||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
+                                      <div style={{padding:"5px 8px",color:(op.ganancia_usd||0)>=0?"#38bdf8":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace",fontWeight:700}}>{fmtU(op.ganancia_usd)}</div>
+                                      <div style={{padding:"5px 8px",color:"#374151",borderBottom:"1px solid #0a0a0a",fontSize:9}}>{op.lote_ref}</div>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </main>
     </div>
