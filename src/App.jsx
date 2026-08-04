@@ -544,7 +544,7 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
                       );
                     })}
                   </div>
-                  {canDrill=nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
+                  {nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
                 </div>
               ):<div style={{textAlign:"center",color:"#374151",padding:32,fontSize:12}}>Sin datos en el rango seleccionado</div>}
             </div>
