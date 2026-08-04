@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 
@@ -483,14 +483,14 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
                 {/* Breadcrumb drill-down */}
                 <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
                   {breadcrumb.map((b,i)=>(
-                    <React.Fragment key={i}>
+                    <Fragment key={i}>
                       <span onClick={()=>setDrillPath(drillPath.slice(0,i===0?0:i))}
                         style={{color:i===breadcrumb.length-1?"#e2e8f0":"#f472b6",cursor:i<breadcrumb.length-1?"pointer":"default",
                           textDecoration:i<breadcrumb.length-1?"underline":"none"}}>
                         {b}
                       </span>
                       {i<breadcrumb.length-1&&<span style={{color:"#374151"}}> › </span>}
-                    </React.Fragment>
+                    </Fragment>
                   ))}
                 </div>
               </div>
