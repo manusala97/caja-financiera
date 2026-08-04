@@ -316,6 +316,283 @@ function PantallaPnl({pnlData}) {
   );
 }
 
+function PantallaCppDashboard({resultado, fmtN, colorGan}) {
+  const [objetivoMensual, setObjetivoMensual] = useState(2500);
+  const [jerarquia, setJerarquia] = useState("mes");
+  const [drillPath, setDrillPath] = useState([]);
+  const [sliderMin, setSliderMin] = useState(0);
+  const [sliderMax, setSliderMax] = useState(100);
+  const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
+
+        const histUSD = resultado.monedas?.USD?.historial || [];
+        const todosLosDias = [...new Set(histUSD.map(h=>h.fecha))].sort();
+        const blueHist = resultado.blueHistory || [];
+
+        // ── Helpers de agrupación ──────────────────────────────────────
+        const getMesKey  = f => f.slice(0,7);
+        const getSemKey  = f => { const d=new Date(f); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1); const l=new Date(d); l.setDate(diff); return l.toISOString().split("T")[0]; };
+        const getDiaKey  = f => f;
+
+        // Agrupar por nivel
+        const agrupar = (nivel, filtroFechas) => {
+          const grupos = {};
+          histUSD.forEach(h => {
+            if(filtroFechas && (h.fecha < filtroFechas[0] || h.fecha > filtroFechas[1])) return;
+            const key = nivel==="mes" ? getMesKey(h.fecha) : nivel==="semana" ? getSemKey(h.fecha) : getDiaKey(h.fecha);
+            if(!grupos[key]) grupos[key] = {key, label:key, ganancia:0, volumen:0, ops:0, compras:0, dias:[]};
+            if(h.tipo==="venta"){
+              grupos[key].ganancia += h.gananciaOp||0;
+              grupos[key].volumen  += h.monto||0;
+              grupos[key].ops      += 1;
+            } else {
+              grupos[key].compras += h.monto||0;
+            }
+            if(!grupos[key].dias.includes(h.fecha)) grupos[key].dias.push(h.fecha);
+          });
+          return Object.values(grupos).sort((a,b)=>a.key.localeCompare(b.key));
+        };
+
+        // Slider: convertir % a fecha
+        const allDates = todosLosDias;
+        const idxMin = Math.floor(sliderMin/100*(allDates.length-1));
+        const idxMax = Math.ceil(sliderMax/100*(allDates.length-1));
+        const fechaSliderMin = allDates[idxMin] || allDates[0];
+        const fechaSliderMax = allDates[idxMax] || allDates[allDates.length-1];
+
+        // Drill-down: determinar qué mostrar
+        const nivelActual = drillPath.length===0 ? jerarquia :
+                            drillPath.length===1 ? (jerarquia==="mes"?"semana":"dia") : "dia";
+        const filtroFechas = [fechaSliderMin, fechaSliderMax];
+
+        let datos = [];
+        if(drillPath.length===0){
+          datos = agrupar(jerarquia, filtroFechas);
+        } else if(drillPath.length===1){
+          const parent = drillPath[0];
+          const subFiltro = jerarquia==="mes"
+            ? [parent.key+"-01", parent.key+"-31"]
+            : [parent.key, new Date(new Date(parent.key).getTime()+6*86400000).toISOString().split("T")[0]];
+          datos = agrupar(jerarquia==="mes"?"semana":"dia", [
+            Math.max(filtroFechas[0], subFiltro[0]) > filtroFechas[0] ? subFiltro[0] : filtroFechas[0],
+            subFiltro[1]
+          ]);
+        } else {
+          datos = agrupar("dia", [drillPath[1].key, drillPath[1].key]);
+        }
+
+        const maxGan = Math.max(...datos.map(s=>Math.abs(s.ganancia)), 1);
+        const BAR_H = 120;
+
+        // Breadcrumb
+        const breadcrumb = ["Todo", ...drillPath.map(p=>p.key)];
+
+        // Mes actual para objetivo
+        const hoyStr = new Date().toISOString().split("T")[0];
+        const mesActual = hoyStr.slice(0,7);
+        const ganMesARS = histUSD.filter(h=>h.tipo==="venta"&&h.fecha.startsWith(mesActual)).reduce((s,h)=>s+(h.gananciaOp||0),0);
+        const blueRef = resultado.blueActual || 1500;
+        const ganMesUSD = ganMesARS / blueRef;
+        const diasMes = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+        const diaHoy = new Date().getDate();
+        const diasRestantes = diasMes - diaHoy;
+        const falta = Math.max(0, objetivoMensual - ganMesUSD);
+        const porDia = diasRestantes > 0 ? falta/diasRestantes : 0;
+        const pctObjetivo = Math.min(100, ganMesUSD/objetivoMensual*100);
+
+        // Semana actual vs anterior
+        const semsArr = agrupar("semana", null).slice(-2);
+        const semActual = semsArr[semsArr.length-1];
+        const semAnterior = semsArr[semsArr.length-2];
+
+  return (
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16,fontWeight:700}}>📊 PERFORMANCE — COMPRA/VENTA USD</div>
+
+            {/* ── Objetivo mensual ── */}
+            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OBJETIVO MENSUAL — {mesActual}</div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+                    <span style={{fontSize:24,fontWeight:700,color:"#f472b6",fontFamily:"monospace"}}>
+                      USD {fmtN(Math.round(ganMesUSD),0)}
+                    </span>
+                    <span style={{fontSize:14,color:"#374151"}}>/</span>
+                    <span style={{fontSize:14,color:"#6b7280"}}>USD</span>
+                    <input type="number" value={objetivoMensual} onChange={e=>setObjetivoMensual(Number(e.target.value))}
+                      style={{width:80,background:"transparent",border:"none",borderBottom:"1px solid #374151",color:"#e2e8f0",fontFamily:"monospace",fontSize:16,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                  </div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PARA LLEGAR</div>
+                  <div style={{fontSize:20,fontWeight:700,color:porDia<100?"#4ade80":"#f59e0b",fontFamily:"monospace"}}>
+                    USD {fmtN(Math.round(porDia),0)}<span style={{fontSize:11,fontWeight:400}}>/día</span>
+                  </div>
+                  <div style={{fontSize:10,color:"#374151"}}>{diasRestantes} días restantes · faltan USD {fmtN(Math.round(falta),0)}</div>
+                </div>
+              </div>
+              <div style={{background:"#080d14",borderRadius:6,height:8,overflow:"hidden"}}>
+                <div style={{height:"100%",width:pctObjetivo+"%",background:"linear-gradient(90deg,#6366f1,#f472b6)",borderRadius:6}}/>
+              </div>
+              <div style={{fontSize:10,color:"#374151",marginTop:4}}>{pctObjetivo.toFixed(1)}% completado</div>
+            </div>
+
+            {/* ── Comparativa semanas ── */}
+            {semActual&&semAnterior&&(
+              <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+                {[{l:"SEMANA ACTUAL",d:semActual,c:"#f472b6"},{l:"SEMANA ANTERIOR",d:semAnterior,c:"#374151"}].map(({l,d,c})=>(
+                  <div key={l} style={{flex:"1 1 180px",background:"#0f1623",border:`1px solid ${c}44`,borderRadius:12,padding:"12px 14px"}}>
+                    <div style={{fontSize:9,color:c,letterSpacing:2,marginBottom:8,fontWeight:700}}>{l}</div>
+                    <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:d.ganancia>=0?"#4ade80":"#f87171",marginBottom:4}}>
+                      ${fmtN(Math.round(d.ganancia))}
+                    </div>
+                    <div style={{fontSize:10,color:"#4b5563"}}>{d.ops} ventas · {fmtN(Math.round(d.volumen),0)} USD · desde {d.key}</div>
+                  </div>
+                ))}
+                <div style={{flex:"1 1 180px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:"12px 14px"}}>
+                  <div style={{fontSize:9,color:"#6b7280",letterSpacing:2,marginBottom:8,fontWeight:700}}>VARIACIÓN</div>
+                  {(()=>{ const diff=semActual.ganancia-semAnterior.ganancia; const pct=semAnterior.ganancia?(diff/Math.abs(semAnterior.ganancia)*100):0; return (
+                    <>
+                      <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:diff>=0?"#4ade80":"#f87171",marginBottom:4}}>
+                        {diff>=0?"+":""}{fmtN(Math.round(diff))} ARS
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:pct>=0?"#4ade80":"#f87171"}}>{pct>=0?"+":""}{pct.toFixed(1)}%</div>
+                      <div style={{fontSize:10,color:"#374151",marginTop:4}}>{diff>=0?"↑ Mejor":"↓ Por debajo"} que la semana pasada</div>
+                    </>
+                  );})()}
+                </div>
+              </div>
+            )}
+
+            {/* ── Gráfico interactivo ── */}
+            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+
+              {/* Controles */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:14}}>
+                <div style={{display:"flex",gap:6}}>
+                  {["mes","semana","dia"].map(n=>(
+                    <button key={n} onClick={()=>{setJerarquia(n);setDrillPath([]);}}
+                      style={{padding:"5px 14px",borderRadius:6,border:"1px solid "+(jerarquia===n?"#f472b6":"#1f2937"),
+                        background:jerarquia===n?"rgba(244,114,182,0.1)":"transparent",
+                        color:jerarquia===n?"#f472b6":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,
+                        textTransform:"capitalize"}}>
+                      {n==="mes"?"Mensual":n==="semana"?"Semanal":"Diario"}
+                    </button>
+                  ))}
+                </div>
+                {/* Breadcrumb drill-down */}
+                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+                  {breadcrumb.map((b,i)=>(
+                    <React.Fragment key={i}>
+                      <span onClick={()=>setDrillPath(drillPath.slice(0,i===0?0:i))}
+                        style={{color:i===breadcrumb.length-1?"#e2e8f0":"#f472b6",cursor:i<breadcrumb.length-1?"pointer":"default",
+                          textDecoration:i<breadcrumb.length-1?"underline":"none"}}>
+                        {b}
+                      </span>
+                      {i<breadcrumb.length-1&&<span style={{color:"#374151"}}> › </span>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+
+              {/* Slider de rango */}
+              <div style={{marginBottom:16,padding:"0 4px"}}>
+                <div style={{fontSize:9,color:"#374151",letterSpacing:1,marginBottom:6}}>RANGO: {fechaSliderMin} — {fechaSliderMax}</div>
+                <div style={{position:"relative",height:20,display:"flex",alignItems:"center"}}>
+                  <div style={{position:"absolute",left:0,right:0,height:3,background:"#1f2937",borderRadius:2}}/>
+                  <div style={{position:"absolute",left:sliderMin+"%",right:(100-sliderMax)+"%",height:3,background:"#f472b6",borderRadius:2}}/>
+                  <input type="range" min="0" max="100" value={sliderMin}
+                    onChange={e=>setSliderMin(Math.min(Number(e.target.value),sliderMax-5))}
+                    style={{position:"absolute",width:"100%",opacity:0,cursor:"pointer",height:20,margin:0}}/>
+                  <input type="range" min="0" max="100" value={sliderMax}
+                    onChange={e=>setSliderMax(Math.max(Number(e.target.value),sliderMin+5))}
+                    style={{position:"absolute",width:"100%",opacity:0,cursor:"pointer",height:20,margin:0}}/>
+                  <div style={{position:"absolute",left:"calc("+sliderMin+"% - 6px)",width:12,height:12,borderRadius:"50%",background:"#f472b6",border:"2px solid #0f1623",pointerEvents:"none"}}/>
+                  <div style={{position:"absolute",left:"calc("+sliderMax+"% - 6px)",width:12,height:12,borderRadius:"50%",background:"#f472b6",border:"2px solid #0f1623",pointerEvents:"none"}}/>
+                </div>
+              </div>
+
+              {/* Barras */}
+              {datos.length>0?(
+                <div style={{overflowX:"auto"}}>
+                  <div style={{display:"flex",alignItems:"flex-end",gap:6,minWidth:Math.max(datos.length*50,300),height:BAR_H+60,paddingBottom:28,position:"relative"}}>
+                    {datos.map((s,i)=>{
+                      const h = Math.max(Math.abs(s.ganancia)/maxGan*BAR_H, 3);
+                      const isLast = i===datos.length-1;
+                      const canDrill = nivelActual!=="dia";
+                      return (
+                        <div key={s.key} style={{flex:1,minWidth:40,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:canDrill?"pointer":"default"}}
+                          onClick={()=>{ if(canDrill) setDrillPath([...drillPath,s]); }}>
+                          <div style={{fontSize:9,color:s.ganancia>=0?"#4ade80":"#f87171",fontFamily:"monospace",whiteSpace:"nowrap"}}>
+                            {s.ganancia>=0?"+":""}{fmtN(Math.round(s.ganancia/1000),0)}k
+                          </div>
+                          <div style={{
+                            width:"100%",height:h,
+                            background:isLast?"#f472b6":s.ganancia>=0?"#6366f1":"#f87171",
+                            borderRadius:"4px 4px 0 0",
+                            opacity:isLast?1:0.7,
+                            transition:"height 0.3s",
+                            position:"relative"
+                          }}>
+                            {canDrill&&<div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:10,color:"rgba(255,255,255,0.4)"}}>▼</div>}
+                          </div>
+                          <div style={{fontSize:8,color:isLast?"#f472b6":"#374151",fontFamily:"monospace",whiteSpace:"nowrap",textAlign:"center",maxWidth:50,overflow:"hidden",textOverflow:"ellipsis"}}>
+                            {s.key.slice(5)}
+                          </div>
+                          <div style={{fontSize:8,color:"#374151"}}>{s.ops}v</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {canDrill=nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
+                </div>
+              ):<div style={{textAlign:"center",color:"#374151",padding:32,fontSize:12}}>Sin datos en el rango seleccionado</div>}
+            </div>
+
+            {/* ── Evolución Blue ── */}
+            {blueHist.length>1&&(()=>{
+              const blueSlice = blueHist.filter(b=>b.fecha>=fechaSliderMin&&b.fecha<=fechaSliderMax);
+              if(blueSlice.length<2) return null;
+              const vals = blueSlice.map(b=>b.venta);
+              const min = Math.min(...vals), max = Math.max(...vals), range = max-min||1;
+              const W=600, H=80, pad=8;
+              const xOf = i => pad+(i/(vals.length-1))*(W-pad*2);
+              const yOf = v => H-pad-((v-min)/range)*(H-pad*2);
+              const pts = vals.map((v,i)=>`${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(" ");
+              const area = `M${xOf(0)},${yOf(vals[0])} `+vals.slice(1).map((v,i)=>`L${xOf(i+1)},${yOf(v)}`).join(" ")+` L${xOf(vals.length-1)},${H} L${xOf(0)},${H} Z`;
+              return (
+                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2}}>EVOLUCIÓN DÓLAR BLUE (VENTA)</div>
+                    <div style={{display:"flex",gap:16,fontSize:11,fontFamily:"monospace"}}>
+                      <span style={{color:"#374151"}}>Min: <span style={{color:"#f87171"}}>${fmtN(min)}</span></span>
+                      <span style={{color:"#374151"}}>Max: <span style={{color:"#4ade80"}}>${fmtN(max)}</span></span>
+                      <span style={{color:"#374151"}}>Actual: <span style={{color:"#e2e8f0"}}>${fmtN(vals[vals.length-1])}</span></span>
+                    </div>
+                  </div>
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,overflow:"visible"}}>
+                    <defs>
+                      <linearGradient id="blueGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#4ade80" stopOpacity="0.3"/>
+                        <stop offset="100%" stopColor="#4ade80" stopOpacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <path d={area} fill="url(#blueGrad)"/>
+                    <polyline points={pts} fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx={xOf(vals.length-1)} cy={yOf(vals[vals.length-1])} r="3" fill="#4ade80"/>
+                  </svg>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
+                    <span>{blueSlice[0]?.fecha}</span>
+                    <span>{blueSlice[blueSlice.length-1]?.fecha}</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        );
+  );
+}
+
 const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
 const CotNum=({value,onChange,placeholder})=>(<input type="text" inputMode="decimal" value={value} onChange={onChange} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
 
@@ -922,275 +1199,7 @@ function PantallaAnalisis() {
         </span>
       </div>
 
-      {/* ── DASHBOARD DE PERFORMANCE ─────────────────────────────── */}
-      {(()=>{
-        const histUSD = resultado.monedas?.USD?.historial || [];
-        const todosLosDias = [...new Set(histUSD.map(h=>h.fecha))].sort();
-        const blueHist = resultado.blueHistory || [];
-
-        // ── Helpers de agrupación ──────────────────────────────────────
-        const getMesKey  = f => f.slice(0,7);
-        const getSemKey  = f => { const d=new Date(f); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1); const l=new Date(d); l.setDate(diff); return l.toISOString().split("T")[0]; };
-        const getDiaKey  = f => f;
-
-        // Agrupar por nivel
-        const agrupar = (nivel, filtroFechas) => {
-          const grupos = {};
-          histUSD.forEach(h => {
-            if(filtroFechas && (h.fecha < filtroFechas[0] || h.fecha > filtroFechas[1])) return;
-            const key = nivel==="mes" ? getMesKey(h.fecha) : nivel==="semana" ? getSemKey(h.fecha) : getDiaKey(h.fecha);
-            if(!grupos[key]) grupos[key] = {key, label:key, ganancia:0, volumen:0, ops:0, compras:0, dias:[]};
-            if(h.tipo==="venta"){
-              grupos[key].ganancia += h.gananciaOp||0;
-              grupos[key].volumen  += h.monto||0;
-              grupos[key].ops      += 1;
-            } else {
-              grupos[key].compras += h.monto||0;
-            }
-            if(!grupos[key].dias.includes(h.fecha)) grupos[key].dias.push(h.fecha);
-          });
-          return Object.values(grupos).sort((a,b)=>a.key.localeCompare(b.key));
-        };
-
-        // Slider: convertir % a fecha
-        const allDates = todosLosDias;
-        const idxMin = Math.floor(sliderMin/100*(allDates.length-1));
-        const idxMax = Math.ceil(sliderMax/100*(allDates.length-1));
-        const fechaSliderMin = allDates[idxMin] || allDates[0];
-        const fechaSliderMax = allDates[idxMax] || allDates[allDates.length-1];
-
-        // Drill-down: determinar qué mostrar
-        const nivelActual = drillPath.length===0 ? jerarquia :
-                            drillPath.length===1 ? (jerarquia==="mes"?"semana":"dia") : "dia";
-        const filtroFechas = [fechaSliderMin, fechaSliderMax];
-
-        let datos = [];
-        if(drillPath.length===0){
-          datos = agrupar(jerarquia, filtroFechas);
-        } else if(drillPath.length===1){
-          const parent = drillPath[0];
-          const subFiltro = jerarquia==="mes"
-            ? [parent.key+"-01", parent.key+"-31"]
-            : [parent.key, new Date(new Date(parent.key).getTime()+6*86400000).toISOString().split("T")[0]];
-          datos = agrupar(jerarquia==="mes"?"semana":"dia", [
-            Math.max(filtroFechas[0], subFiltro[0]) > filtroFechas[0] ? subFiltro[0] : filtroFechas[0],
-            subFiltro[1]
-          ]);
-        } else {
-          datos = agrupar("dia", [drillPath[1].key, drillPath[1].key]);
-        }
-
-        const maxGan = Math.max(...datos.map(s=>Math.abs(s.ganancia)), 1);
-        const BAR_H = 120;
-
-        // Breadcrumb
-        const breadcrumb = ["Todo", ...drillPath.map(p=>p.key)];
-
-        // Mes actual para objetivo
-        const hoyStr = new Date().toISOString().split("T")[0];
-        const mesActual = hoyStr.slice(0,7);
-        const ganMesARS = histUSD.filter(h=>h.tipo==="venta"&&h.fecha.startsWith(mesActual)).reduce((s,h)=>s+(h.gananciaOp||0),0);
-        const blueRef = resultado.blueActual || 1500;
-        const ganMesUSD = ganMesARS / blueRef;
-        const diasMes = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
-        const diaHoy = new Date().getDate();
-        const diasRestantes = diasMes - diaHoy;
-        const falta = Math.max(0, objetivoMensual - ganMesUSD);
-        const porDia = diasRestantes > 0 ? falta/diasRestantes : 0;
-        const pctObjetivo = Math.min(100, ganMesUSD/objetivoMensual*100);
-
-        // Semana actual vs anterior
-        const semsArr = agrupar("semana", null).slice(-2);
-        const semActual = semsArr[semsArr.length-1];
-        const semAnterior = semsArr[semsArr.length-2];
-
-        return (
-          <div style={{marginBottom:24}}>
-            <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16,fontWeight:700}}>📊 PERFORMANCE — COMPRA/VENTA USD</div>
-
-            {/* ── Objetivo mensual ── */}
-            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8,marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OBJETIVO MENSUAL — {mesActual}</div>
-                  <div style={{display:"flex",alignItems:"baseline",gap:8}}>
-                    <span style={{fontSize:24,fontWeight:700,color:"#f472b6",fontFamily:"monospace"}}>
-                      USD {fmtN(Math.round(ganMesUSD),0)}
-                    </span>
-                    <span style={{fontSize:14,color:"#374151"}}>/</span>
-                    <span style={{fontSize:14,color:"#6b7280"}}>USD</span>
-                    <input type="number" value={objetivoMensual} onChange={e=>setObjetivoMensual(Number(e.target.value))}
-                      style={{width:80,background:"transparent",border:"none",borderBottom:"1px solid #374151",color:"#e2e8f0",fontFamily:"monospace",fontSize:16,fontWeight:700,outline:"none",textAlign:"center"}}/>
-                  </div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PARA LLEGAR</div>
-                  <div style={{fontSize:20,fontWeight:700,color:porDia<100?"#4ade80":"#f59e0b",fontFamily:"monospace"}}>
-                    USD {fmtN(Math.round(porDia),0)}<span style={{fontSize:11,fontWeight:400}}>/día</span>
-                  </div>
-                  <div style={{fontSize:10,color:"#374151"}}>{diasRestantes} días restantes · faltan USD {fmtN(Math.round(falta),0)}</div>
-                </div>
-              </div>
-              <div style={{background:"#080d14",borderRadius:6,height:8,overflow:"hidden"}}>
-                <div style={{height:"100%",width:pctObjetivo+"%",background:"linear-gradient(90deg,#6366f1,#f472b6)",borderRadius:6}}/>
-              </div>
-              <div style={{fontSize:10,color:"#374151",marginTop:4}}>{pctObjetivo.toFixed(1)}% completado</div>
-            </div>
-
-            {/* ── Comparativa semanas ── */}
-            {semActual&&semAnterior&&(
-              <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
-                {[{l:"SEMANA ACTUAL",d:semActual,c:"#f472b6"},{l:"SEMANA ANTERIOR",d:semAnterior,c:"#374151"}].map(({l,d,c})=>(
-                  <div key={l} style={{flex:"1 1 180px",background:"#0f1623",border:`1px solid ${c}44`,borderRadius:12,padding:"12px 14px"}}>
-                    <div style={{fontSize:9,color:c,letterSpacing:2,marginBottom:8,fontWeight:700}}>{l}</div>
-                    <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:d.ganancia>=0?"#4ade80":"#f87171",marginBottom:4}}>
-                      ${fmtN(Math.round(d.ganancia))}
-                    </div>
-                    <div style={{fontSize:10,color:"#4b5563"}}>{d.ops} ventas · {fmtN(Math.round(d.volumen),0)} USD · desde {d.key}</div>
-                  </div>
-                ))}
-                <div style={{flex:"1 1 180px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:"12px 14px"}}>
-                  <div style={{fontSize:9,color:"#6b7280",letterSpacing:2,marginBottom:8,fontWeight:700}}>VARIACIÓN</div>
-                  {(()=>{ const diff=semActual.ganancia-semAnterior.ganancia; const pct=semAnterior.ganancia?(diff/Math.abs(semAnterior.ganancia)*100):0; return (
-                    <>
-                      <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:diff>=0?"#4ade80":"#f87171",marginBottom:4}}>
-                        {diff>=0?"+":""}{fmtN(Math.round(diff))} ARS
-                      </div>
-                      <div style={{fontSize:13,fontWeight:700,color:pct>=0?"#4ade80":"#f87171"}}>{pct>=0?"+":""}{pct.toFixed(1)}%</div>
-                      <div style={{fontSize:10,color:"#374151",marginTop:4}}>{diff>=0?"↑ Mejor":"↓ Por debajo"} que la semana pasada</div>
-                    </>
-                  );})()}
-                </div>
-              </div>
-            )}
-
-            {/* ── Gráfico interactivo ── */}
-            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-
-              {/* Controles */}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:14}}>
-                <div style={{display:"flex",gap:6}}>
-                  {["mes","semana","dia"].map(n=>(
-                    <button key={n} onClick={()=>{setJerarquia(n);setDrillPath([]);}}
-                      style={{padding:"5px 14px",borderRadius:6,border:"1px solid "+(jerarquia===n?"#f472b6":"#1f2937"),
-                        background:jerarquia===n?"rgba(244,114,182,0.1)":"transparent",
-                        color:jerarquia===n?"#f472b6":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,
-                        textTransform:"capitalize"}}>
-                      {n==="mes"?"Mensual":n==="semana"?"Semanal":"Diario"}
-                    </button>
-                  ))}
-                </div>
-                {/* Breadcrumb drill-down */}
-                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
-                  {breadcrumb.map((b,i)=>(
-                    <React.Fragment key={i}>
-                      <span onClick={()=>setDrillPath(drillPath.slice(0,i===0?0:i))}
-                        style={{color:i===breadcrumb.length-1?"#e2e8f0":"#f472b6",cursor:i<breadcrumb.length-1?"pointer":"default",
-                          textDecoration:i<breadcrumb.length-1?"underline":"none"}}>
-                        {b}
-                      </span>
-                      {i<breadcrumb.length-1&&<span style={{color:"#374151"}}> › </span>}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-
-              {/* Slider de rango */}
-              <div style={{marginBottom:16,padding:"0 4px"}}>
-                <div style={{fontSize:9,color:"#374151",letterSpacing:1,marginBottom:6}}>RANGO: {fechaSliderMin} — {fechaSliderMax}</div>
-                <div style={{position:"relative",height:20,display:"flex",alignItems:"center"}}>
-                  <div style={{position:"absolute",left:0,right:0,height:3,background:"#1f2937",borderRadius:2}}/>
-                  <div style={{position:"absolute",left:sliderMin+"%",right:(100-sliderMax)+"%",height:3,background:"#f472b6",borderRadius:2}}/>
-                  <input type="range" min="0" max="100" value={sliderMin}
-                    onChange={e=>setSliderMin(Math.min(Number(e.target.value),sliderMax-5))}
-                    style={{position:"absolute",width:"100%",opacity:0,cursor:"pointer",height:20,margin:0}}/>
-                  <input type="range" min="0" max="100" value={sliderMax}
-                    onChange={e=>setSliderMax(Math.max(Number(e.target.value),sliderMin+5))}
-                    style={{position:"absolute",width:"100%",opacity:0,cursor:"pointer",height:20,margin:0}}/>
-                  <div style={{position:"absolute",left:"calc("+sliderMin+"% - 6px)",width:12,height:12,borderRadius:"50%",background:"#f472b6",border:"2px solid #0f1623",pointerEvents:"none"}}/>
-                  <div style={{position:"absolute",left:"calc("+sliderMax+"% - 6px)",width:12,height:12,borderRadius:"50%",background:"#f472b6",border:"2px solid #0f1623",pointerEvents:"none"}}/>
-                </div>
-              </div>
-
-              {/* Barras */}
-              {datos.length>0?(
-                <div style={{overflowX:"auto"}}>
-                  <div style={{display:"flex",alignItems:"flex-end",gap:6,minWidth:Math.max(datos.length*50,300),height:BAR_H+60,paddingBottom:28,position:"relative"}}>
-                    {datos.map((s,i)=>{
-                      const h = Math.max(Math.abs(s.ganancia)/maxGan*BAR_H, 3);
-                      const isLast = i===datos.length-1;
-                      const canDrill = nivelActual!=="dia";
-                      return (
-                        <div key={s.key} style={{flex:1,minWidth:40,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:canDrill?"pointer":"default"}}
-                          onClick={()=>{ if(canDrill) setDrillPath([...drillPath,s]); }}>
-                          <div style={{fontSize:9,color:s.ganancia>=0?"#4ade80":"#f87171",fontFamily:"monospace",whiteSpace:"nowrap"}}>
-                            {s.ganancia>=0?"+":""}{fmtN(Math.round(s.ganancia/1000),0)}k
-                          </div>
-                          <div style={{
-                            width:"100%",height:h,
-                            background:isLast?"#f472b6":s.ganancia>=0?"#6366f1":"#f87171",
-                            borderRadius:"4px 4px 0 0",
-                            opacity:isLast?1:0.7,
-                            transition:"height 0.3s",
-                            position:"relative"
-                          }}>
-                            {canDrill&&<div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:10,color:"rgba(255,255,255,0.4)"}}>▼</div>}
-                          </div>
-                          <div style={{fontSize:8,color:isLast?"#f472b6":"#374151",fontFamily:"monospace",whiteSpace:"nowrap",textAlign:"center",maxWidth:50,overflow:"hidden",textOverflow:"ellipsis"}}>
-                            {s.key.slice(5)}
-                          </div>
-                          <div style={{fontSize:8,color:"#374151"}}>{s.ops}v</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {canDrill=nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
-                </div>
-              ):<div style={{textAlign:"center",color:"#374151",padding:32,fontSize:12}}>Sin datos en el rango seleccionado</div>}
-            </div>
-
-            {/* ── Evolución Blue ── */}
-            {blueHist.length>1&&(()=>{
-              const blueSlice = blueHist.filter(b=>b.fecha>=fechaSliderMin&&b.fecha<=fechaSliderMax);
-              if(blueSlice.length<2) return null;
-              const vals = blueSlice.map(b=>b.venta);
-              const min = Math.min(...vals), max = Math.max(...vals), range = max-min||1;
-              const W=600, H=80, pad=8;
-              const xOf = i => pad+(i/(vals.length-1))*(W-pad*2);
-              const yOf = v => H-pad-((v-min)/range)*(H-pad*2);
-              const pts = vals.map((v,i)=>`${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(" ");
-              const area = `M${xOf(0)},${yOf(vals[0])} `+vals.slice(1).map((v,i)=>`L${xOf(i+1)},${yOf(v)}`).join(" ")+` L${xOf(vals.length-1)},${H} L${xOf(0)},${H} Z`;
-              return (
-                <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2}}>EVOLUCIÓN DÓLAR BLUE (VENTA)</div>
-                    <div style={{display:"flex",gap:16,fontSize:11,fontFamily:"monospace"}}>
-                      <span style={{color:"#374151"}}>Min: <span style={{color:"#f87171"}}>${fmtN(min)}</span></span>
-                      <span style={{color:"#374151"}}>Max: <span style={{color:"#4ade80"}}>${fmtN(max)}</span></span>
-                      <span style={{color:"#374151"}}>Actual: <span style={{color:"#e2e8f0"}}>${fmtN(vals[vals.length-1])}</span></span>
-                    </div>
-                  </div>
-                  <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,overflow:"visible"}}>
-                    <defs>
-                      <linearGradient id="blueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#4ade80" stopOpacity="0.3"/>
-                        <stop offset="100%" stopColor="#4ade80" stopOpacity="0"/>
-                      </linearGradient>
-                    </defs>
-                    <path d={area} fill="url(#blueGrad)"/>
-                    <polyline points={pts} fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx={xOf(vals.length-1)} cy={yOf(vals[vals.length-1])} r="3" fill="#4ade80"/>
-                  </svg>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
-                    <span>{blueSlice[0]?.fecha}</span>
-                    <span>{blueSlice[blueSlice.length-1]?.fecha}</span>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        );
-      })()}
+         {resultado&&<PantallaCppDashboard resultado={resultado} fmtN={fmtN} colorGan={colorGan}/>}
 
 
       {/* Cards por moneda */}
