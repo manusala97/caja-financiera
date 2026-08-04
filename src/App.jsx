@@ -590,7 +590,6 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
             })()}
           </div>
         );
-  );
 }
 
 const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
