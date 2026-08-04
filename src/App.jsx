@@ -534,6 +534,7 @@ function PantallaAnalisis() {
   const [monedaSel, setMonedaSel] = useState("USD");
   const [filtroDesde, setFiltroDesde] = useState("2026-04-14");
   const [filtroHasta, setFiltroHasta] = useState(new Date().toISOString().split("T")[0]);
+  const [objetivoMensual, setObjetivoMensual] = useState(2500);
 
   useEffect(() => { cargar(filtroDesde, filtroHasta); }, [filtroDesde, filtroHasta]);
 
@@ -719,6 +720,7 @@ function PantallaAnalisis() {
       resumenDias: Object.values(estado.USD.resumenDias),
       cotizArranque, stockArranque,
       tenencia,
+      blueHistory: cierres.map(ci=>({fecha:ci.fecha,compra:parse(ci.cotiz_blue?.compra),venta:parse(ci.cotiz_blue?.venta)})).filter(b=>b.venta>0),
       // Nueva estructura multi-moneda
       monedas: {
         USD:  { ...estado.USD,  resumenDias: Object.values(estado.USD.resumenDias),  noRealizada: noRealizadaUSD,  unidad: "ARS", label: "💵 USD",  color: "#f59e0b" },
@@ -1038,6 +1040,184 @@ function PantallaAnalisis() {
           </div>
         </div>
       )}
+
+      {/* ── DASHBOARD DE PERFORMANCE ─────────────────────────────── */}
+      {(()=>{
+        // Solo para USD por ahora
+        const histUSD = resultado.monedas?.USD?.historial || [];
+
+        // Agrupar ganancia realizada por semana
+        const getWeekKey = (fecha) => {
+          const d = new Date(fecha);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day===0?-6:1);
+          const lun = new Date(d.setDate(diff));
+          return lun.toISOString().split("T")[0];
+        };
+
+        const semanas = {};
+        histUSD.forEach(h => {
+          if(h.tipo!=="venta") return;
+          const wk = getWeekKey(h.fecha);
+          if(!semanas[wk]) semanas[wk] = {semana:wk,ganancia:0,volumen:0,ops:0,compras:0};
+          semanas[wk].ganancia += h.gananciaOp||0;
+          semanas[wk].volumen += h.monto||0;
+          semanas[wk].ops += 1;
+        });
+        histUSD.forEach(h => {
+          if(h.tipo!=="compra") return;
+          const wk = getWeekKey(h.fecha);
+          if(!semanas[wk]) semanas[wk] = {semana:wk,ganancia:0,volumen:0,ops:0,compras:0};
+          semanas[wk].compras += h.monto||0;
+        });
+
+        const semanasArr = Object.values(semanas).sort((a,b)=>a.semana.localeCompare(b.semana));
+        const ultimas8 = semanasArr.slice(-8);
+
+        // Mes actual
+        const hoyStr = new Date().toISOString().split("T")[0];
+        const mesActual = hoyStr.slice(0,7);
+        const ganMes = histUSD.filter(h=>h.tipo==="venta"&&h.fecha.startsWith(mesActual)).reduce((s,h)=>s+(h.gananciaOp||0),0);
+        const diasMes = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+        const diaHoy = new Date().getDate();
+        const diasRestantes = diasMes - diaHoy;
+        const falta = Math.max(0, objetivoMensual - ganMes/1500); // aprox USD
+        const porDia = diasRestantes > 0 ? falta/diasRestantes : 0;
+        const pctObjetivo = Math.min(100, (ganMes/1500)/objetivoMensual*100);
+
+        // Semana actual vs anterior
+        const semActual = ultimas8[ultimas8.length-1];
+        const semAnterior = ultimas8[ultimas8.length-2];
+
+        // Datos del blue para el gráfico
+        const blueData = (resultado.tenencia?.blueHistory||[]).slice(-30);
+
+        // Barras
+        const maxGan = Math.max(...ultimas8.map(s=>Math.abs(s.ganancia)), 1);
+        const BAR_H = 80;
+
+        return (
+          <div style={{marginTop:24}}>
+            <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16,fontWeight:700}}>📊 PERFORMANCE — COMPRA/VENTA USD</div>
+
+            {/* Objetivo del mes */}
+            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>OBJETIVO MENSUAL</div>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:22,fontWeight:700,color:"#f472b6",fontFamily:"monospace"}}>
+                      USD {fmtN(Math.round(ganMes/1500),0)}
+                    </span>
+                    <span style={{fontSize:14,color:"#374151"}}>/ </span>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:14,color:"#6b7280"}}>USD</span>
+                      <input type="number" value={objetivoMensual} onChange={e=>setObjetivoMensual(Number(e.target.value))}
+                        style={{width:80,background:"transparent",border:"none",borderBottom:"1px solid #374151",color:"#e2e8f0",fontFamily:"monospace",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/>
+                    </div>
+                  </div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PARA LLEGAR AL OBJETIVO</div>
+                  <div style={{fontSize:16,fontWeight:700,color:porDia<50?"#4ade80":"#f59e0b",fontFamily:"monospace"}}>
+                    USD {fmtN(Math.round(porDia),0)}/día
+                  </div>
+                  <div style={{fontSize:10,color:"#374151"}}>{diasRestantes} días restantes</div>
+                </div>
+              </div>
+              {/* Barra de progreso */}
+              <div style={{background:"#080d14",borderRadius:6,height:10,overflow:"hidden"}}>
+                <div style={{height:"100%",width:pctObjetivo+"%",background:"linear-gradient(90deg,#6366f1,#f472b6)",borderRadius:6,transition:"width 0.5s"}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:10,color:"#374151"}}>
+                <span>{pctObjetivo.toFixed(1)}% completado</span>
+                <span>Faltan USD {fmtN(Math.round(falta),0)}</span>
+              </div>
+            </div>
+
+            {/* Comparativa semana actual vs anterior */}
+            {semActual&&semAnterior&&(
+              <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+                {[
+                  {label:"SEMANA ACTUAL",data:semActual,color:"#f472b6"},
+                  {label:"SEMANA ANTERIOR",data:semAnterior,color:"#374151"},
+                ].map(({label,data,color})=>(
+                  <div key={label} style={{flex:"1 1 200px",background:"#0f1623",border:`1px solid ${color}33`,borderRadius:12,padding:"14px 16px"}}>
+                    <div style={{fontSize:9,color:color,letterSpacing:2,marginBottom:10,fontWeight:700}}>{label}</div>
+                    <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:data.ganancia>=0?"#4ade80":"#f87171",marginBottom:6}}>
+                      ARS {fmtN(Math.round(data.ganancia))}
+                    </div>
+                    <div style={{fontSize:11,color:"#4b5563"}}>{data.ops} ventas · {fmtN(data.volumen,0)} USD</div>
+                    <div style={{fontSize:10,color:"#374151",marginTop:2}}>Desde: {data.semana}</div>
+                  </div>
+                ))}
+                <div style={{flex:"1 1 200px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:"14px 16px"}}>
+                  <div style={{fontSize:9,color:"#6b7280",letterSpacing:2,marginBottom:10,fontWeight:700}}>VARIACIÓN</div>
+                  {(()=>{
+                    const diff = semActual.ganancia - semAnterior.ganancia;
+                    const pct = semAnterior.ganancia ? (diff/Math.abs(semAnterior.ganancia)*100) : 0;
+                    return (
+                      <>
+                        <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:diff>=0?"#4ade80":"#f87171",marginBottom:6}}>
+                          {diff>=0?"+":""}{fmtN(Math.round(diff))} ARS
+                        </div>
+                        <div style={{fontSize:14,fontWeight:700,color:pct>=0?"#4ade80":"#f87171"}}>
+                          {pct>=0?"+":""}{pct.toFixed(1)}%
+                        </div>
+                        <div style={{fontSize:10,color:"#374151",marginTop:4}}>
+                          {diff>=0?"↑ Mejor que la semana pasada":"↓ Por debajo de la semana pasada"}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Gráfico de barras — ganancia por semana */}
+            {ultimas8.length>0&&(
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:16}}>
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:16}}>GANANCIA REALIZADA POR SEMANA (ARS) — ÚLTIMAS 8 SEMANAS</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:8,height:BAR_H+40,paddingBottom:24,position:"relative"}}>
+                  {ultimas8.map((s,i)=>{
+                    const h = Math.abs(s.ganancia)/maxGan * BAR_H;
+                    const isActual = i===ultimas8.length-1;
+                    const label = s.semana.slice(5); // MM-DD
+                    return (
+                      <div key={s.semana} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>
+                          {s.ganancia>=0?"+":""}{fmtN(Math.round(s.ganancia/1000),0)}k
+                        </div>
+                        <div style={{
+                          width:"100%",height:Math.max(h,3),
+                          background:isActual?"#f472b6":s.ganancia>=0?"#6366f1":"#f87171",
+                          borderRadius:"4px 4px 0 0",
+                          opacity:isActual?1:0.6,
+                          transition:"height 0.3s"
+                        }}/>
+                        <div style={{fontSize:8,color:isActual?"#f472b6":"#374151",fontFamily:"monospace",whiteSpace:"nowrap"}}>{label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Evolución blue */}
+            {blueData.length>1&&(
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>EVOLUCIÓN DÓLAR BLUE</div>
+                <LineChart data={blueData.map(b=>parse(b?.venta||0))} color="#4ade80" height={80}/>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#374151",marginTop:4}}>
+                  <span>{blueData[0]?.fecha||""}</span>
+                  <span>{blueData[blueData.length-1]?.fecha||""}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
     </div>
   );
 }
