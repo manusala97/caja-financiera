@@ -1776,7 +1776,7 @@ function AppInterna({ usuario }) {
   const [socios, setSocios] = useState([]);
   const [nuevoSocio, setNuevoSocio] = useState({nombre:"",monto:""});
   const [aportes, setAportes] = useState([]); // historial de aportes de capital
-  const [nuevoAporte, setNuevoAporte] = useState({socioId:"",monto:"",fecha:hoy,nota:""});
+  const [nuevoAporte, setNuevoAporte] = useState({socioId:"",monto:"",fecha:hoy,nota:"",tipo:"caja"});
   const [mostrarAportes, setMostrarAportes] = useState(false);
   const [editSaldo, setEditSaldo] = useState(null);
   const [editSaldoV, setEditSaldoV] = useState("");
@@ -6044,6 +6044,24 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                     </div>
                     {mostrarAportes&&(
                       <div style={{background:"rgba(52,211,153,0.04)",border:"1px solid #34d39922",borderRadius:8,padding:12,marginBottom:12}}>
+                        {/* Tipo de aporte */}
+                        <div style={{display:"flex",gap:8,marginBottom:10}}>
+                          {[{v:"caja",l:"💵 Caja física",hint:"Entra USD físico + sube inversión"},{v:"cc",l:"🔄 Desde CC",hint:"Reduce lo que le debés + sube inversión"}].map(opt=>(
+                            <button key={opt.v} onClick={()=>setNuevoAporte(a=>({...a,tipo:opt.v}))}
+                              title={opt.hint}
+                              style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid "+(nuevoAporte.tipo===opt.v?"#34d399":"#1f2937"),
+                                background:nuevoAporte.tipo===opt.v?"rgba(52,211,153,0.1)":"transparent",
+                                color:nuevoAporte.tipo===opt.v?"#34d399":"#4b5563",
+                                fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                              {opt.l}
+                            </button>
+                          ))}
+                        </div>
+                        {nuevoAporte.tipo==="cc"&&(
+                          <div style={{fontSize:10,color:"#f59e0b",background:"rgba(245,158,11,0.06)",border:"1px solid #f59e0b22",borderRadius:6,padding:"6px 10px",marginBottom:8}}>
+                            ⚠ Se generará un <strong>retiro_transf (DEBE)</strong> en la CC del socio para compensar el saldo
+                          </div>
+                        )}
                         <div style={S.grid("1fr 1fr",8)}>
                           <div>
                             <Lbl>Socio</Lbl>
@@ -6061,22 +6079,41 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           if(!nuevoAporte.socioId||!monto){notify("Completá socio y monto",false);return;}
                           const socio=socios.find(s=>String(s.id)===String(nuevoAporte.socioId));
                           if(!socio) return;
+                          const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                          const notaAporte=nuevoAporte.nota||(nuevoAporte.tipo==="cc"?"Conversión CC a capital":"Aporte de capital");
                           // 1. Registrar aporte
                           const {data:ins}=await SB.from("aportes_capital").insert({
                             socio_id:socio.id,socio_nombre:socio.nombre,
-                            monto,fecha:nuevoAporte.fecha,nota:nuevoAporte.nota||"Aporte de capital"
+                            monto,fecha:nuevoAporte.fecha,nota:notaAporte,tipo:nuevoAporte.tipo
                           }).select().single();
                           if(ins) setAportes(p=>[ins,...p]);
                           // 2. Actualizar monto del socio
                           const nuevoMonto=parse(socio.monto)+monto;
                           await SB.from("socios").update({monto:nuevoMonto}).eq("id",socio.id);
                           setSocios(p=>p.map(x=>x.id!==socio.id?x:{...x,monto:nuevoMonto}));
-                          // 3. Entrar a caja física
-                          const ns=await leerSaldoFresco(); ns.USD=(ns.USD||0)+monto;
-                          setSaldos(ns); await guardarDia(ns,null,null);
-                          setNuevoAporte({socioId:"",monto:"",fecha:hoy,nota:""});
+                          if(nuevoAporte.tipo==="caja"){
+                            // Caja física: entra USD
+                            const ns=await leerSaldoFresco(); ns.USD=(ns.USD||0)+monto;
+                            setSaldos(ns); await guardarDia(ns,null,null);
+                            notify("Aporte registrado ✓ — USD ingresados a caja");
+                          } else {
+                            // Desde CC: generar retiro_transf (DEBE) en la CC del socio
+                            // Buscar cliente CC del socio por nombre
+                            const clSocio=clientes.find(cl=>
+                              cl.nombre.toLowerCase().includes(socio.nombre.split(" ")[0].toLowerCase())
+                            );
+                            if(clSocio){
+                              const notaCC=`Conversión CC a capital — aporte USD ${monto.toLocaleString("es-AR")}`;
+                              const mv={id:Date.now(),hora,fecha:nuevoAporte.fecha,tipo:"retiro_transf",moneda:"USD",monto,nota:notaCC};
+                              await SB.from("movimientos_cc").insert({cliente_id:clSocio.id,hora,fecha:nuevoAporte.fecha,tipo:"retiro_transf",moneda:"USD",monto,nota:notaCC});
+                              setClientes(p=>p.map(cl=>cl.id!==clSocio.id?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+                              notify("Aporte registrado ✓ — CC del socio reducida en USD "+monto.toLocaleString("es-AR"));
+                            } else {
+                              notify("Aporte registrado ✓ — no se encontró CC del socio (buscalo manualmente)",false);
+                            }
+                          }
+                          setNuevoAporte({socioId:"",monto:"",fecha:hoy,nota:"",tipo:"caja"});
                           setMostrarAportes(false);
-                          notify("Aporte registrado ✓ — caja actualizada");
                         }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(52,211,153,0.08)",border:"1px solid #34d399",color:"#34d399",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                           ✓ Confirmar aporte
                         </button>
