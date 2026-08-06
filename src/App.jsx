@@ -6099,9 +6099,14 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           } else {
                             // Desde CC: generar retiro_transf (DEBE) en la CC del socio
                             // Buscar cliente CC del socio por nombre
-                            const clSocio=clientes.find(cl=>
-                              cl.nombre.toLowerCase().includes(socio.nombre.split(" ")[0].toLowerCase())
-                            );
+                            // Mapa fijo de socios a sus CC
+                            const SOCIO_CC_MAP = {
+                              "GONZALO SPADAFORA": 121,
+                              "MANUEL SALA": 130,
+                              "MATIAS SPERANZA": 134,
+                            };
+                            const ccId = SOCIO_CC_MAP[socio.nombre.toUpperCase()];
+                            const clSocio = ccId ? clientes.find(cl=>cl.id===ccId) : null;
                             if(clSocio){
                               const notaCC=`Conversión CC a capital — aporte USD ${monto.toLocaleString("es-AR")}`;
                               const mv={id:Date.now(),hora,fecha:nuevoAporte.fecha,tipo:"retiro_transf",moneda:"USD",monto,nota:notaCC};
