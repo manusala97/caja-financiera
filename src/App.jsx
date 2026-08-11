@@ -592,6 +592,355 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
         );
 }
 
+function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, notify}) {
+  const [formR, setFormR] = useState({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [buscarCl, setBuscarCl] = useState("");
+  const [buscarCC, setBuscarCC] = useState("");
+  const [filtroBuscar, setFiltroBuscar] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
+  const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
+
+  const hoyDate = new Date();
+  const dias72 = (fecha) => {
+    const d = new Date(fecha);
+    d.setDate(d.getDate()+3);
+    return d;
+  };
+  const horasRestantes = (fecha) => {
+    const vence = dias72(fecha);
+    const diff = vence - hoyDate;
+    return Math.floor(diff / (1000*60*60));
+  };
+
+  const RECAUDADORAS = {
+    maltu: {label:"Maltu", color:"#38bdf8", pctDefault:1},
+    devi:  {label:"Devi",  color:"#f472b6", pctDefault:2.7},
+  };
+
+  // Calcular totales por recaudadora
+  const totales = Object.fromEntries(Object.keys(RECAUDADORAS).map(k=>([k,{
+    pendiente: recaudTransf.filter(t=>t.recaudadora===k&&t.estado==="pendiente").reduce((s,t)=>s+Number(t.neto_recaudadora||0),0),
+    acreditado: recaudTransf.filter(t=>t.recaudadora===k&&t.estado==="acreditado").reduce((s,t)=>s+Number(t.neto_recaudadora||0),0),
+    ganancia: recaudTransf.filter(t=>t.recaudadora===k).reduce((s,t)=>s+Number(t.ganancia||0),0),
+    count: recaudTransf.filter(t=>t.recaudadora===k).length,
+  }])));
+
+  // Filtros
+  const filtradas = recaudTransf.filter(t=>{
+    if(filtroEstado!=="todos"&&t.estado!==filtroEstado) return false;
+    if(filtroBuscar&&!t.cliente_nombre?.toLowerCase().includes(filtroBuscar.toLowerCase())) return false;
+    return true;
+  });
+
+  const cambiarEstado = async(id, nuevoEstado, t) => {
+    await SB.from("recaudadora_transferencias").update({estado:nuevoEstado}).eq("id",id);
+    setRecaudTransf(p=>p.map(x=>x.id!==id?x:{...x,estado:nuevoEstado}));
+    // Si pasa a "acreditado" → impactar CC recaudadora (retiro = nos debe)
+    // Si pasa a "pagado" → impactar CC cliente (ingreso = le debemos el neto)
+    if(nuevoEstado==="acreditado"){
+      notify("Marcado como acreditado");
+    } else if(nuevoEstado==="pagado"){
+      notify("Marcado como pagado al cliente");
+    }
+  };
+
+  const guardarTransf = async() => {
+    const monto = parse(formR.montoEnviado);
+    if(!formR.clienteId||!monto){notify("Completá cliente y monto",false);return;}
+    const cl = clientes.find(x=>x.id===Number(formR.clienteId));
+    const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+    const {data:ins} = await SB.from("recaudadora_transferencias").insert({
+      cliente_id:Number(formR.clienteId),
+      cliente_nombre:cl?cl.nombre+" "+(cl.apellido||""):"",
+      recaudadora:formR.recaudadora,
+      monto_enviado:monto,
+      pct_recaudadora:parse(formR.pctRecaud),
+      pct_comision:parse(formR.pctComision),
+      fecha:formR.fecha,
+      hora,
+      estado:"pendiente",
+      nota:formR.nota,
+    }).select().single();
+    if(ins){
+      setRecaudTransf(p=>[ins,...p]);
+      // Impactar CC del cliente con neto_cliente (ingreso = le debemos)
+      const netoCliente = monto*(1-parse(formR.pctComision)/100);
+      const notaCC = `Recaudadora ${formR.recaudadora.toUpperCase()} — $${fmt(monto)} enviado — neto cliente $${fmt(netoCliente)}`;
+      await SB.from("movimientos_cc").insert({
+        cliente_id:Number(formR.clienteId),hora,fecha:formR.fecha,
+        tipo:"ingreso_transf",moneda:"ARS",monto:netoCliente,nota:notaCC
+      });
+      // Impactar CC de la recaudadora (retiro = nos debe)
+      const clRecaud = clientes.find(x=>x.nombre?.toLowerCase().includes(formR.recaudadora));
+      if(clRecaud){
+        const netoRecaud = monto*(1-parse(formR.pctRecaud)/100);
+        const notaRecaudCC = `Transferencia cliente ${cl?.nombre||""} — $${fmt(monto)} — nos debe $${fmt(netoRecaud)}`;
+        await SB.from("movimientos_cc").insert({
+          cliente_id:clRecaud.id,hora,fecha:formR.fecha,
+          tipo:"retiro_transf",moneda:"ARS",monto:netoRecaud,nota:notaRecaudCC
+        });
+      }
+      setMostrarForm(false);
+      setFormR({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
+      setBuscarCl(""); setBuscarCC("");
+      notify("Transferencia registrada ✓ — CC actualizadas");
+    }
+  };
+
+  const clFiltrados = clientes.filter(cl=>!cl.oculto&&(cl.nombre+" "+(cl.apellido||"")).toLowerCase().includes(buscarCl.toLowerCase())).slice(0,8);
+
+  const estadoColor = {pendiente:"#f59e0b", acreditado:"#38bdf8", pagado:"#4ade80"};
+  const estadoLabel = {pendiente:"⏳ Pendiente", acreditado:"✓ Acreditado", pagado:"💰 Pagado"};
+
+  return (
+    <div style={{padding:"16px 16px 40px",maxWidth:1100,margin:"0 auto"}}>
+      <div style={{fontSize:10,letterSpacing:3,color:"#e879f9",marginBottom:4,fontWeight:700}}>RECAUDADORA</div>
+      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:20}}>Gestión de Transferencias</div>
+
+      {/* Cards por recaudadora */}
+      <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        {Object.entries(RECAUDADORAS).map(([key,r])=>(
+          <div key={key} style={{flex:"1 1 200px",background:"#0f1623",border:`1px solid ${r.color}33`,borderRadius:14,padding:"16px 18px"}}>
+            <div style={{fontSize:10,color:r.color,fontWeight:700,letterSpacing:2,marginBottom:12}}>{r.label.toUpperCase()}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>PENDIENTE DE COBRAR</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#f59e0b",fontFamily:"monospace"}}>${fmt(totales[key].pendiente)}</div>
+              </div>
+              <div>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>ACREDITADO</div>
+                <div style={{fontSize:16,fontWeight:700,color:"#38bdf8",fontFamily:"monospace"}}>${fmt(totales[key].acreditado)}</div>
+              </div>
+              <div>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>GANANCIA TOTAL</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#4ade80",fontFamily:"monospace"}}>${fmt(totales[key].ganancia)}</div>
+              </div>
+              <div>
+                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>OPERACIONES</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#6b7280"}}>{totales[key].count}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Alertas 72hs */}
+        {(()=>{
+          const alertas = recaudTransf.filter(t=>t.estado==="pendiente"&&horasRestantes(t.fecha)<=72&&horasRestantes(t.fecha)>0);
+          const vencidas = recaudTransf.filter(t=>t.estado==="pendiente"&&horasRestantes(t.fecha)<=0);
+          return (alertas.length>0||vencidas.length>0)&&(
+            <div style={{flex:"1 1 200px",background:"#0f1623",border:"1px solid #f8717133",borderRadius:14,padding:"16px 18px"}}>
+              <div style={{fontSize:10,color:"#f87171",fontWeight:700,letterSpacing:2,marginBottom:12}}>⚠ ALERTAS 72HS</div>
+              {vencidas.map(t=>(
+                <div key={t.id} style={{fontSize:11,color:"#f87171",marginBottom:4,fontWeight:700}}>
+                  🔴 VENCIDA — {t.cliente_nombre} · ${fmt(t.neto_recaudadora)} ({t.recaudadora})
+                </div>
+              ))}
+              {alertas.map(t=>(
+                <div key={t.id} style={{fontSize:11,color:"#f59e0b",marginBottom:4}}>
+                  🟡 {horasRestantes(t.fecha)}hs restantes — {t.cliente_nombre} · ${fmt(t.neto_recaudadora)} ({t.recaudadora})
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Controles */}
+      <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <input placeholder="Buscar cliente..." value={filtroBuscar} onChange={e=>setFiltroBuscar(e.target.value)}
+          style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:7,padding:"7px 12px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",flex:"1 1 160px"}}/>
+        <div style={{display:"flex",gap:6}}>
+          {["todos","pendiente","acreditado","pagado"].map(e=>(
+            <button key={e} onClick={()=>setFiltroEstado(e)}
+              style={{padding:"6px 12px",borderRadius:6,border:"1px solid "+(filtroEstado===e?"#e879f9":"#1f2937"),
+                background:filtroEstado===e?"rgba(232,121,249,0.1)":"transparent",
+                color:filtroEstado===e?"#e879f9":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600,textTransform:"capitalize"}}>
+              {e==="todos"?"Todos":estadoLabel[e]}
+            </button>
+          ))}
+        </div>
+        <button onClick={()=>setMostrarForm(v=>!v)}
+          style={{padding:"8px 18px",borderRadius:8,background:"rgba(232,121,249,0.1)",border:"1px solid #e879f944",color:"#e879f9",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,marginLeft:"auto"}}>
+          + Nueva transferencia
+        </button>
+      </div>
+
+      {/* Formulario nueva transferencia */}
+      {mostrarForm&&(
+        <div style={{background:"rgba(232,121,249,0.04)",border:"1px solid #e879f922",borderRadius:12,padding:"16px 18px",marginBottom:16}}>
+          <div style={{fontSize:10,color:"#e879f9",letterSpacing:2,marginBottom:14,fontWeight:700}}>NUEVA TRANSFERENCIA</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10,marginBottom:12}}>
+
+            {/* Cliente */}
+            <div style={{position:"relative",gridColumn:"span 2"}}>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>CLIENTE</label>
+              {formR.clienteId?(
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <div style={{flex:1,padding:"7px 10px",background:"rgba(232,121,249,0.08)",border:"1px solid #e879f944",borderRadius:6,fontSize:12,color:"#e879f9",fontWeight:600}}>
+                    {clientes.find(x=>x.id===Number(formR.clienteId))?.nombre}
+                  </div>
+                  <button onClick={()=>{setFormR(f=>({...f,clienteId:""}));setBuscarCl("");}}
+                    style={{padding:"5px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button>
+                </div>
+              ):(
+                <div>
+                  <input placeholder="Buscar cliente..." value={buscarCl} onChange={e=>setBuscarCl(e.target.value)}
+                    style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+                  {buscarCl&&(
+                    <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:100,maxHeight:160,overflowY:"auto",marginTop:2}}>
+                      {clFiltrados.map(cl=>(
+                        <div key={cl.id} onClick={()=>{setFormR(f=>({...f,clienteId:String(cl.id)}));setBuscarCl("");}}
+                          style={{padding:"8px 12px",cursor:"pointer",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                          {cl.nombre} {cl.apellido||""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Recaudadora */}
+            <div>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>RECAUDADORA</label>
+              <div style={{display:"flex",gap:6}}>
+                {Object.entries(RECAUDADORAS).map(([k,r])=>(
+                  <button key={k} onClick={()=>setFormR(f=>({...f,recaudadora:k,pctRecaud:r.pctDefault}))}
+                    style={{flex:1,padding:"7px",borderRadius:6,border:`1px solid ${formR.recaudadora===k?r.color+"66":"#1f2937"}`,
+                      background:formR.recaudadora===k?`rgba(${k==="maltu"?"56,189,248":"244,114,182"},0.1)`:"transparent",
+                      color:formR.recaudadora===k?r.color:"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Monto */}
+            <div>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>MONTO ENVIADO $</label>
+              <input type="number" placeholder="1000000" value={formR.montoEnviado} onChange={e=>setFormR(f=>({...f,montoEnviado:e.target.value}))}
+                style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+            </div>
+
+            {/* % Recaudadora */}
+            <div>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>% RECAUDADORA</label>
+              <input type="number" step="0.1" value={formR.pctRecaud} onChange={e=>setFormR(f=>({...f,pctRecaud:e.target.value}))}
+                style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+            </div>
+
+            {/* % Comisión cliente */}
+            <div>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>% TU COMISIÓN</label>
+              <input type="number" step="0.1" value={formR.pctComision} onChange={e=>setFormR(f=>({...f,pctComision:e.target.value}))}
+                style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+            </div>
+
+            {/* Fecha */}
+            <div>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>FECHA</label>
+              <input type="date" value={formR.fecha} onChange={e=>setFormR(f=>({...f,fecha:e.target.value}))}
+                style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+            </div>
+
+            {/* Nota */}
+            <div style={{gridColumn:"span 2"}}>
+              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>NOTA</label>
+              <input placeholder="Opcional..." value={formR.nota} onChange={e=>setFormR(f=>({...f,nota:e.target.value}))}
+                style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+            </div>
+          </div>
+
+          {/* Preview de montos */}
+          {formR.montoEnviado&&(
+            <div style={{display:"flex",gap:12,marginBottom:12,flexWrap:"wrap"}}>
+              {[
+                {l:"Enviado por cliente",v:parse(formR.montoEnviado),c:"#e2e8f0"},
+                {l:`Recaudadora cobra (${formR.pctRecaud}%)`,v:parse(formR.montoEnviado)*parse(formR.pctRecaud)/100,c:"#f87171"},
+                {l:"Neto que te paga recaudadora",v:parse(formR.montoEnviado)*(1-parse(formR.pctRecaud)/100),c:"#38bdf8"},
+                {l:`Tu comisión (${formR.pctComision}%)`,v:parse(formR.montoEnviado)*parse(formR.pctComision)/100,c:"#4ade80"},
+                {l:"Neto al cliente",v:parse(formR.montoEnviado)*(1-parse(formR.pctComision)/100),c:"#a78bfa"},
+                {l:"Tu ganancia",v:parse(formR.montoEnviado)*(parse(formR.pctComision)-parse(formR.pctRecaud))/100,c:"#f59e0b"},
+              ].map(({l,v,c})=>(
+                <div key={l} style={{flex:"1 1 130px",background:"rgba(255,255,255,0.02)",borderRadius:8,padding:"8px 10px",border:"1px solid rgba(255,255,255,0.04)"}}>
+                  <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>{l}</div>
+                  <div style={{fontSize:14,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmt(Math.round(v))}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{setMostrarForm(false);setBuscarCl("");}}
+              style={{flex:1,padding:"9px",borderRadius:7,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>
+              Cancelar
+            </button>
+            <button onClick={guardarTransf}
+              style={{flex:2,padding:"9px",borderRadius:7,background:"rgba(232,121,249,0.1)",border:"1px solid #e879f9",color:"#e879f9",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+              ✓ Registrar transferencia
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tabla de transferencias */}
+      <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"100px 1fr 80px 110px 110px 110px 80px 110px 100px",gap:0}}>
+          {["Fecha","Cliente","Recaud.","Enviado","Neto recaud.","Neto cliente","Ganancia","Vence 72hs","Estado"].map(h=>(
+            <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+          ))}
+          {filtradas.length===0&&(
+            <div style={{gridColumn:"1/-1",padding:32,textAlign:"center",color:"#374151",fontSize:13}}>Sin transferencias registradas</div>
+          )}
+          {filtradas.map(t=>{
+            const hrs = horasRestantes(t.fecha);
+            const alertColor = hrs<=0?"#f87171":hrs<=24?"#f59e0b":hrs<=48?"#fbbf24":"#374151";
+            const venceLabel = hrs<=0?"VENCIDA":hrs<=72?hrs+"hs":"—";
+            return (
+              <Fragment key={t.id}>
+                <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{t.fecha}</div>
+                <div style={{padding:"10px",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontWeight:600}}>
+                  {t.cliente_nombre}
+                  {t.nota&&<div style={{fontSize:10,color:"#374151"}}>{t.nota}</div>}
+                </div>
+                <div style={{padding:"10px",borderBottom:"1px solid #0a0a0a"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:RECAUDADORAS[t.recaudadora]?.color||"#e2e8f0",background:`rgba(${t.recaudadora==="maltu"?"56,189,248":"244,114,182"},0.1)`,padding:"2px 8px",borderRadius:4}}>
+                    {t.recaudadora?.toUpperCase()}
+                  </span>
+                </div>
+                <div style={{padding:"10px",fontSize:12,fontFamily:"monospace",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a"}}>${fmt(t.monto_enviado)}</div>
+                <div style={{padding:"10px",fontSize:12,fontFamily:"monospace",color:"#38bdf8",borderBottom:"1px solid #0a0a0a"}}>${fmt(t.neto_recaudadora)}</div>
+                <div style={{padding:"10px",fontSize:12,fontFamily:"monospace",color:"#a78bfa",borderBottom:"1px solid #0a0a0a"}}>${fmt(t.neto_cliente)}</div>
+                <div style={{padding:"10px",fontSize:12,fontFamily:"monospace",color:"#4ade80",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>${fmt(t.ganancia)}</div>
+                <div style={{padding:"10px",fontSize:11,color:alertColor,fontWeight:hrs<=72?700:400,borderBottom:"1px solid #0a0a0a"}}>{venceLabel}</div>
+                <div style={{padding:"8px 6px",borderBottom:"1px solid #0a0a0a",display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+                  {t.estado==="pendiente"&&(
+                    <button onClick={()=>cambiarEstado(t.id,"acreditado",t)}
+                      style={{fontSize:9,padding:"3px 6px",borderRadius:4,background:"rgba(56,189,248,0.1)",border:"1px solid #38bdf844",color:"#38bdf8",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                      Acreditar
+                    </button>
+                  )}
+                  {t.estado==="acreditado"&&(
+                    <button onClick={()=>cambiarEstado(t.id,"pagado",t)}
+                      style={{fontSize:9,padding:"3px 6px",borderRadius:4,background:"rgba(74,222,128,0.1)",border:"1px solid #4ade8044",color:"#4ade80",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                      Pagar cliente
+                    </button>
+                  )}
+                  <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:`rgba(${t.estado==="pendiente"?"245,158,11":t.estado==="acreditado"?"56,189,248":"74,222,128"},0.1)`,color:estadoColor[t.estado],fontWeight:600}}>
+                    {t.estado==="pendiente"?"⏳":t.estado==="acreditado"?"✓":"💰"}
+                  </span>
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
 const CotNum=({value,onChange,placeholder})=>(<input type="text" inputMode="decimal" value={value} onChange={onChange} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
 
@@ -1812,6 +2161,11 @@ function AppInterna({ usuario }) {
   const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
   const [pnlData, setPnlData] = useState([]);
+  const [recaudTransf, setRecaudTransf] = useState([]);
+  const [formRecaud, setFormRecaud] = useState({clienteId:"",clienteNombre:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,hora:"",nota:"",ccPagoId:""});
+  const [mostrarFormRecaud, setMostrarFormRecaud] = useState(false);
+  const [buscarClienteRecaud, setBuscarClienteRecaud] = useState("");
+  const [buscarCCPago, setBuscarCCPago] = useState("");
   const [resolviendo, setResolviendo] = useState(null); // {opId, pi, monto, nota, op}
   const [resolverLineas, setResolverLineas] = useState([]); // [{id, tipo:"efectivo"|clienteId, monto:"", buscar:""}]
   const [buscarResolverDrop, setBuscarResolverDrop] = useState({});
@@ -1970,6 +2324,8 @@ function AppInterna({ usuario }) {
         if (aportesData) setAportes(aportesData);
         const {data:pnlRows} = await SB.from("pnl_diario").select("*").order("fecha",{ascending:false});
         if (pnlRows) setPnlData(pnlRows);
+        const {data:recaudRows} = await SB.from("recaudadora_transferencias").select("*").order("fecha",{ascending:false});
+        if (recaudRows) setRecaudTransf(recaudRows);
         // Liquidaciones
         const {data:liqData} = await SB.from("liquidaciones").select("*").order("fecha",{ascending:false}).limit(12);
         if (liqData) setLiquidaciones(liqData);
@@ -2777,6 +3133,7 @@ function AppInterna({ usuario }) {
     {id:"analisis",label:"Análisis CPP",c:"#f59e0b"},
     {id:"cotizaciones",label:"Cotizaciones",c:"#38bdf8"},
     {id:"pnl",label:"P&L",c:"#f472b6"},
+    {id:"recaudadora",label:"Recaudadora",c:"#e879f9"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre"].includes(p.id));
 
@@ -6577,6 +6934,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
         {pant==="cotizaciones"&&<PantallaCotizaciones/>}
 
         {pant==="pnl"&&<PantallaPnl pnlData={pnlData}/>}
+        {pant==="recaudadora"&&<PantallaRecaudadora recaudTransf={recaudTransf} setRecaudTransf={setRecaudTransf} clientes={clientes} hoy={hoy} SB={SB} notify={notify}/>}
 
       </main>
     </div>
