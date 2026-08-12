@@ -1092,6 +1092,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
           })}
         </div>
       </div>)}
+    </div>
   );
 }
 
