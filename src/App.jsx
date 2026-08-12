@@ -598,6 +598,8 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
   const [buscarCl, setBuscarCl] = useState("");
   const [buscarCC, setBuscarCC] = useState("");
   const [filtroBuscar, setFiltroBuscar] = useState("");
+  const [vistaRecaud, setVistaRecaud] = useState("transferencias");
+  const [clienteSelRecaud, setClienteSelRecaud] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
   const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -747,8 +749,140 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
         })()}
       </div>
 
+      {/* Toggle vista */}
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        {[{v:"transferencias",l:"📋 Transferencias"},{v:"clientes",l:"👥 Por cliente"}].map(opt=>(
+          <button key={opt.v} onClick={()=>{setVistaRecaud(opt.v);setClienteSelRecaud(null);}}
+            style={{padding:"7px 18px",borderRadius:8,border:"1px solid "+(vistaRecaud===opt.v?"#e879f9":"#1f2937"),
+              background:vistaRecaud===opt.v?"rgba(232,121,249,0.1)":"transparent",
+              color:vistaRecaud===opt.v?"#e879f9":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+            {opt.l}
+          </button>
+        ))}
+      </div>
+
+      {/* Vista por cliente */}
+      {vistaRecaud==="clientes"&&(()=>{
+        // Agrupar por cliente
+        const porCliente = {};
+        recaudTransf.forEach(t=>{
+          const key = t.cliente_id||t.cliente_nombre;
+          if(!porCliente[key]) porCliente[key] = {
+            clienteId:t.cliente_id, nombre:t.cliente_nombre,
+            transferencias:[], totalEnviado:0,
+            pendiente:0, acreditado:0, pagado:0, ganancia:0
+          };
+          porCliente[key].transferencias.push(t);
+          porCliente[key].totalEnviado += Number(t.monto_enviado||0);
+          porCliente[key].ganancia += Number(t.ganancia||0);
+          if(t.estado==="pendiente") porCliente[key].pendiente += Number(t.neto_cliente||0);
+          else if(t.estado==="acreditado") porCliente[key].acreditado += Number(t.neto_cliente||0);
+          else if(t.estado==="pagado") porCliente[key].pagado += Number(t.neto_cliente||0);
+        });
+        const clientes_arr = Object.values(porCliente).sort((a,b)=>(b.pendiente+b.acreditado)-(a.pendiente+a.acreditado));
+
+        if(clienteSelRecaud){
+          const cl = porCliente[clienteSelRecaud];
+          if(!cl) return null;
+          return (
+            <div>
+              <button onClick={()=>setClienteSelRecaud(null)}
+                style={{fontSize:11,color:"#e879f9",background:"transparent",border:"none",cursor:"pointer",fontFamily:"inherit",marginBottom:12,padding:0}}>
+                ← Volver a clientes
+              </button>
+              <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>{cl.nombre}</div>
+              <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                {[
+                  {l:"⏳ Pendiente de cobrar",v:cl.pendiente,c:"#f59e0b"},
+                  {l:"✓ Acreditado sin pagar",v:cl.acreditado,c:"#38bdf8"},
+                  {l:"💰 Pagado al cliente",v:cl.pagado,c:"#4ade80"},
+                  {l:"Ganancia total",v:cl.ganancia,c:"#f472b6"},
+                ].map(({l,v,c2,c})=>(
+                  <div key={l} style={{flex:"1 1 140px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
+                    <div style={{fontSize:9,color:"#4b5563",marginBottom:4}}>{l}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmt(Math.round(v))}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Tabla de transferencias del cliente */}
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"90px 80px 110px 110px 80px 80px 110px",gap:0}}>
+                  {["Fecha","Recaud.","Enviado","Neto cliente","Vence","Ganancia","Estado"].map(h=>(
+                    <div key={h} style={{padding:"7px 10px",fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+                  ))}
+                  {cl.transferencias.map(t=>{
+                    const hrs=horasRestantes(t.fecha);
+                    const alertColor=hrs<=0?"#f87171":hrs<=24?"#f59e0b":hrs<=48?"#fbbf24":"#374151";
+                    return (
+                      <Fragment key={t.id}>
+                        <div style={{padding:"8px 10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{t.fecha}</div>
+                        <div style={{padding:"8px 10px",borderBottom:"1px solid #0a0a0a"}}>
+                          <span style={{fontSize:10,fontWeight:700,color:RECAUDADORAS[t.recaudadora]?.color,background:`rgba(${t.recaudadora==="maltu"?"56,189,248":"244,114,182"},0.1)`,padding:"2px 6px",borderRadius:4}}>
+                            {t.recaudadora?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{padding:"8px 10px",fontSize:12,fontFamily:"monospace",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a"}}>${fmt(t.monto_enviado)}</div>
+                        <div style={{padding:"8px 10px",fontSize:12,fontFamily:"monospace",color:"#a78bfa",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>${fmt(t.neto_cliente)}</div>
+                        <div style={{padding:"8px 10px",fontSize:11,color:alertColor,fontWeight:hrs<=72?700:400,borderBottom:"1px solid #0a0a0a"}}>{hrs<=0?"VENCIDA":hrs<=72?hrs+"hs":"—"}</div>
+                        <div style={{padding:"8px 10px",fontSize:12,fontFamily:"monospace",color:"#4ade80",borderBottom:"1px solid #0a0a0a"}}>${fmt(t.ganancia)}</div>
+                        <div style={{padding:"8px 10px",borderBottom:"1px solid #0a0a0a"}}>
+                          <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:`rgba(${t.estado==="pendiente"?"245,158,11":t.estado==="acreditado"?"56,189,248":"74,222,128"},0.1)`,color:estadoColor[t.estado],fontWeight:600}}>
+                            {estadoLabel[t.estado]}
+                          </span>
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12,marginBottom:16}}>
+            {clientes_arr.map(cl=>(
+              <div key={cl.clienteId||cl.nombre} onClick={()=>setClienteSelRecaud(cl.clienteId||cl.nombre)}
+                style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"16px 18px",cursor:"pointer",transition:"border-color 0.2s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="#e879f944"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="#1f2937"}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{cl.nombre}</div>
+                  <div style={{fontSize:10,color:"#374151"}}>{cl.transferencias.length} ops</div>
+                </div>
+                {cl.pendiente>0&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:9,color:"#f59e0b",marginBottom:2}}>⏳ PENDIENTE DE COBRAR</div>
+                    <div style={{fontSize:16,fontWeight:700,color:"#f59e0b",fontFamily:"monospace"}}>${fmt(Math.round(cl.pendiente))}</div>
+                  </div>
+                )}
+                {cl.acreditado>0&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:9,color:"#38bdf8",marginBottom:2}}>✓ ACREDITADO SIN PAGAR</div>
+                    <div style={{fontSize:16,fontWeight:700,color:"#38bdf8",fontFamily:"monospace"}}>${fmt(Math.round(cl.acreditado))}</div>
+                  </div>
+                )}
+                {cl.pagado>0&&(
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:9,color:"#4ade80",marginBottom:2}}>💰 PAGADO</div>
+                    <div style={{fontSize:14,color:"#4ade80",fontFamily:"monospace"}}>${fmt(Math.round(cl.pagado))}</div>
+                  </div>
+                )}
+                <div style={{borderTop:"1px solid #1f2937",paddingTop:8,marginTop:4,display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:10,color:"#374151"}}>Ganancia</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#f472b6",fontFamily:"monospace"}}>${fmt(Math.round(cl.ganancia))}</span>
+                </div>
+              </div>
+            ))}
+            {clientes_arr.length===0&&(
+              <div style={{color:"#374151",fontSize:13,padding:32}}>Sin transferencias registradas</div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Controles */}
-      <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+      {vistaRecaud==="transferencias"&&<div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         <input placeholder="Buscar cliente..." value={filtroBuscar} onChange={e=>setFiltroBuscar(e.target.value)}
           style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:7,padding:"7px 12px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",flex:"1 1 160px"}}/>
         <div style={{display:"flex",gap:6}}>
@@ -765,7 +899,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
           style={{padding:"8px 18px",borderRadius:8,background:"rgba(232,121,249,0.1)",border:"1px solid #e879f944",color:"#e879f9",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,marginLeft:"auto"}}>
           + Nueva transferencia
         </button>
-      </div>
+      </div>}
 
       {/* Formulario nueva transferencia */}
       {mostrarForm&&(
@@ -886,7 +1020,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       )}
 
       {/* Tabla de transferencias */}
-      <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,overflow:"hidden"}}>
+      {vistaRecaud==="transferencias"&&<div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"100px 1fr 80px 110px 110px 110px 80px 110px 100px",gap:0}}>
           {["Fecha","Cliente","Recaud.","Enviado","Neto recaud.","Neto cliente","Ganancia","Vence 72hs","Estado"].map(h=>(
             <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
@@ -931,13 +1065,34 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
                   <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:`rgba(${t.estado==="pendiente"?"245,158,11":t.estado==="acreditado"?"56,189,248":"74,222,128"},0.1)`,color:estadoColor[t.estado],fontWeight:600}}>
                     {t.estado==="pendiente"?"⏳":t.estado==="acreditado"?"✓":"💰"}
                   </span>
+                  <button onClick={async()=>{
+                    if(!window.confirm("¿Borrar esta transferencia? Se revertirán los movimientos en CC del cliente y la recaudadora.")) return;
+                    // 1. Buscar y borrar movimientos CC relacionados por nota
+                    const notaCC = `Recaudadora ${t.recaudadora?.toUpperCase()} — $${fmt(t.monto_enviado)} enviado`;
+                    const {data:movsCC} = await SB.from("movimientos_cc").select("id").ilike("nota", `%${notaCC}%`);
+                    if(movsCC&&movsCC.length>0){
+                      await SB.from("movimientos_cc").delete().in("id", movsCC.map(m=>m.id));
+                    }
+                    // 2. Borrar la transferencia
+                    await SB.from("recaudadora_transferencias").delete().eq("id",t.id);
+                    setRecaudTransf(p=>p.filter(x=>x.id!==t.id));
+                    // 3. Actualizar estado local de clientes
+                    setClientes(p=>p.map(cl=>{
+                      const movsBorrados=(movsCC||[]).map(m=>m.id);
+                      if(!movsBorrados.length) return cl;
+                      return {...cl, movimientos:(cl.movimientos||[]).filter(mv=>!movsBorrados.includes(mv.id))};
+                    }));
+                    notify("Transferencia y movimientos CC revertidos ✓");
+                  }} style={{fontSize:9,padding:"3px 6px",borderRadius:4,background:"rgba(248,113,113,0.08)",border:"1px solid #f8717133",color:"#f87171",cursor:"pointer",fontFamily:"inherit"}}>
+                    ✕
+                  </button>
                 </div>
               </Fragment>
             );
           })}
         </div>
       </div>
-    </div>
+    </div>}
   );
 }
 
