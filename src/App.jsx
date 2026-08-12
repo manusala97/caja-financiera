@@ -1020,7 +1020,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       )}
 
       {/* Tabla de transferencias */}
-      {vistaRecaud==="transferencias"&&<div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,overflow:"hidden"}}>
+      {vistaRecaud==="transferencias"&&(<div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"100px 1fr 80px 110px 110px 110px 80px 110px 100px",gap:0}}>
           {["Fecha","Cliente","Recaud.","Enviado","Neto recaud.","Neto cliente","Ganancia","Vence 72hs","Estado"].map(h=>(
             <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
@@ -1092,7 +1092,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
           })}
         </div>
       </div>
-    </div>}
+    </div>)}
   );
 }
 
