@@ -2326,7 +2326,7 @@ function AppInterna({ usuario }) {
   const [buscarResolverDrop, setBuscarResolverDrop] = useState({});
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
-  const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS"});
+  const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS", pctOrigen:"", pctDestino:""});
   const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
@@ -4812,6 +4812,35 @@ function AppInterna({ usuario }) {
                         <div><Lbl>Moneda</Lbl><MonedasSel value={transCC.moneda} onChange={v=>setTransCC(t=>({...t,moneda:v}))}/></div>
                         <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={transCC.monto} onChange={e=>setTransCC(t=>({...t,monto:e.target.value}))}/></div>
                       </div>
+                      <div style={{...S.grid("1fr 1fr",8),marginTop:8}}>
+                        <div>
+                          <Lbl>% Com. origen <span style={{color:"#4b5563",fontSize:9}}>(opcional)</span></Lbl>
+                          <Inp type="number" placeholder="0" value={transCC.pctOrigen} onChange={e=>setTransCC(t=>({...t,pctOrigen:e.target.value}))}/>
+                        </div>
+                        <div>
+                          <Lbl>% Com. destino <span style={{color:"#4b5563",fontSize:9}}>(opcional)</span></Lbl>
+                          <Inp type="number" placeholder="0" value={transCC.pctDestino} onChange={e=>setTransCC(t=>({...t,pctDestino:e.target.value}))}/>
+                        </div>
+                      </div>
+                      {(transCC.pctOrigen||transCC.pctDestino)&&parse(transCC.monto)>0&&(()=>{
+                        const m=parse(transCC.monto);
+                        const comO=m*parse(transCC.pctOrigen)/100;
+                        const comD=m*parse(transCC.pctDestino)/100;
+                        return (
+                          <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                            {transCC.pctOrigen&&<div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(74,222,128,0.06)",border:"1px solid #4ade8022",fontSize:10}}>
+                              <span style={{color:"#4b5563"}}>Origen recibe: </span>
+                              <span style={{color:"#4ade80",fontWeight:700}}>{MONEDAS.find(m=>m.id===transCC.moneda)?.simbolo}{fmt(m-comO)}</span>
+                              <span style={{color:"#374151"}}> (com. ${fmt(comO)})</span>
+                            </div>}
+                            {transCC.pctDestino&&<div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(248,113,113,0.06)",border:"1px solid #f8717122",fontSize:10}}>
+                              <span style={{color:"#4b5563"}}>Destino debe: </span>
+                              <span style={{color:"#f87171",fontWeight:700}}>{MONEDAS.find(m=>m.id===transCC.moneda)?.simbolo}{fmt(m+comD)}</span>
+                              <span style={{color:"#374151"}}> (com. ${fmt(comD)})</span>
+                            </div>}
+                          </div>
+                        );
+                      })()}
                       {/* Mostrar saldos de ambas CCs */}
                       {transCC.destino&&(()=>{
                         const clDest=clientes.find(x=>x.id===Number(transCC.destino));
@@ -4836,17 +4865,24 @@ function AppInterna({ usuario }) {
                         if(!transCC.destino){notify("Elegi una CC destino",false);return;}
                         const cDestId=Number(transCC.destino);
                         const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-                        const nota="Transf. entre CCs → "+(clientes.find(x=>x.id===cDestId)?.nombre||"");
-                        const notaDest="Transf. entre CCs <- "+c.nombre+" "+c.apellido;
-                        // CC origen (ej: SALA): ingreso_transf = nos pagó (HABER = le debemos)
-                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota};
-                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto,nota});
+                        const pctO=parse(transCC.pctOrigen)||0;
+                        const pctD=parse(transCC.pctDestino)||0;
+                        const comO=monto*pctO/100;
+                        const comD=monto*pctD/100;
+                        const montoOrigen=monto-comO; // origen: sale menos (le cobrás al que envía)
+                        const montoDestino=monto+comD; // destino: debe más (recibió el monto + tu comisión)
+                        const clDest=clientes.find(x=>x.id===cDestId);
+                        const nota="Transf. → "+(clDest?.nombre||"")+(pctO?" (com "+pctO+"%)":"");
+                        const notaDest="Transf. ← "+c.nombre+(pctD?" (com "+pctD+"%)":"");
+                        // CC origen: ingreso_transf por el neto que recibe
+                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota};
+                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota});
                         setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
-                        // CC destino (ej: TRESOR 2): retiro_transf = nos debe más (DEBE = me debe)
-                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota:notaDest};
-                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto,nota:notaDest});
+                        // CC destino: retiro_transf por el total + su comisión
+                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest};
+                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest});
                         setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
-                        setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS"});
+                        setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS",pctOrigen:"",pctDestino:""});
                         notify("Transferencia entre CCs registrada ✓");
                       }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                         ⇄ Confirmar transferencia
