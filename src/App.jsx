@@ -4882,8 +4882,27 @@ function AppInterna({ usuario }) {
                         const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest};
                         await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest});
                         setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+                        // Registrar comisión en operaciones si hay comisión
+                        const gananciaTransf = comO + comD;
+                        if(gananciaTransf > 0){
+                          const opTransf = {
+                            tipo:"transferencia",hora,
+                            tn:monto,
+                            tpct:pctO||pctD,
+                            tpctOrigen:pctO,
+                            tcom:gananciaTransf,
+                            monto:gananciaTransf,
+                            tmoneda:transCC.moneda,
+                            ccOrigenId:c.id,
+                            cliente:c.nombre,
+                            nota:`Entre CCs: ${c.nombre} → ${clientes.find(x=>x.id===cDestId)?.nombre||""} (com. ${fmt(gananciaTransf)} ${transCC.moneda})`,
+                            destinos:[{clienteId:cDestId,monto,pct:pctD}]
+                          };
+                          const {data:opIns}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"transferencia",datos:opTransf}).select().single();
+                          if(opIns) setOps(p=>[...p,{...opTransf,id:opIns.id,fecha:hoy}]);
+                        }
                         setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS",pctOrigen:"",pctDestino:""});
-                        notify("Transferencia entre CCs registrada ✓");
+                        notify("Transferencia entre CCs registrada ✓"+(gananciaTransf>0?" — comisión $"+fmt(gananciaTransf)+" registrada":""));
                       }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                         ⇄ Confirmar transferencia
                       </button>
