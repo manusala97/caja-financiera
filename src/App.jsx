@@ -592,6 +592,146 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
         );
 }
 
+function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=null, labelPrincipal="", labelSecundario=""}) {
+  const [jerarquia, setJerarquia] = useState("semana");
+  const [drillPath, setDrillPath] = useState([]);
+  const [sliderMin, setSliderMin] = useState(0);
+  const [sliderMax, setSliderMax] = useState(100);
+
+  // datos: array de {fecha, valor, valor2?}
+  const todosLosDias = [...new Set(datos.map(d=>d.fecha))].sort();
+
+  const getMesKey  = f => f.slice(0,7);
+  const getSemKey  = f => { const d=new Date(f); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1); const l=new Date(d); l.setDate(diff); return l.toISOString().split("T")[0]; };
+
+  const agrupar = (nivel, filtroFechas) => {
+    const grupos = {};
+    datos.forEach(d => {
+      if(filtroFechas && (d.fecha < filtroFechas[0] || d.fecha > filtroFechas[1])) return;
+      const key = nivel==="mes" ? getMesKey(d.fecha) : nivel==="semana" ? getSemKey(d.fecha) : d.fecha;
+      if(!grupos[key]) grupos[key] = {key, valor:0, valor2:0, count:0};
+      grupos[key].valor  += d.valor  || 0;
+      grupos[key].valor2 += d.valor2 || 0;
+      grupos[key].count  += 1;
+    });
+    return Object.values(grupos).sort((a,b)=>a.key.localeCompare(b.key));
+  };
+
+  const idxMin = Math.floor(sliderMin/100*(todosLosDias.length-1));
+  const idxMax = Math.ceil(sliderMax/100*(todosLosDias.length-1));
+  const fechaMin = todosLosDias[idxMin] || todosLosDias[0] || "";
+  const fechaMax = todosLosDias[idxMax] || todosLosDias[todosLosDias.length-1] || "";
+
+  const nivelActual = drillPath.length===0 ? jerarquia : drillPath.length===1 ? (jerarquia==="mes"?"semana":"dia") : "dia";
+  const filtro = [fechaMin, fechaMax];
+
+  let barras = [];
+  if(drillPath.length===0){
+    barras = agrupar(jerarquia, filtro);
+  } else if(drillPath.length===1){
+    const p = drillPath[0];
+    const sub = jerarquia==="mes" ? [p.key+"-01", p.key+"-31"] : [p.key, new Date(new Date(p.key).getTime()+6*86400000).toISOString().split("T")[0]];
+    barras = agrupar(jerarquia==="mes"?"semana":"dia", [sub[0]<filtro[0]?filtro[0]:sub[0], sub[1]]);
+  } else {
+    barras = agrupar("dia", [drillPath[1].key, drillPath[1].key]);
+  }
+
+  const maxVal = Math.max(...barras.map(b=>Math.abs(b.valor)+(b.valor2||0)), 1);
+  const BAR_H = 100;
+  const breadcrumb = ["Todo", ...drillPath.map(p=>p.key)];
+
+  if(todosLosDias.length === 0) return <div style={{color:"#374151",fontSize:12,padding:20,textAlign:"center"}}>Sin datos en el período</div>;
+
+  return (
+    <div>
+      {/* Controles */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:12}}>
+        <div style={{display:"flex",gap:6}}>
+          {["mes","semana","dia"].map(n=>(
+            <button key={n} onClick={()=>{setJerarquia(n);setDrillPath([]);}}
+              style={{padding:"5px 14px",borderRadius:6,border:"1px solid "+(jerarquia===n?colorPrincipal:"#1f2937"),
+                background:jerarquia===n?`rgba(${colorPrincipal==="f472b6"?"244,114,182":"99,102,241"},0.1)`:"transparent",
+                color:jerarquia===n?colorPrincipal:"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>
+              {n==="mes"?"Mensual":n==="semana"?"Semanal":"Diario"}
+            </button>
+          ))}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+          {breadcrumb.map((b,i)=>(
+            <Fragment key={i}>
+              <span onClick={()=>setDrillPath(drillPath.slice(0,i===0?0:i))}
+                style={{color:i===breadcrumb.length-1?"#e2e8f0":colorPrincipal,cursor:i<breadcrumb.length-1?"pointer":"default",
+                  textDecoration:i<breadcrumb.length-1?"underline":"none"}}>
+                {b}
+              </span>
+              {i<breadcrumb.length-1&&<span style={{color:"#374151"}}> › </span>}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Slider */}
+      <div style={{marginBottom:14,padding:"0 4px"}}>
+        <div style={{fontSize:9,color:"#374151",letterSpacing:1,marginBottom:6}}>RANGO: {fechaMin} — {fechaMax}</div>
+        <div style={{position:"relative",height:20,display:"flex",alignItems:"center"}}>
+          <div style={{position:"absolute",left:0,right:0,height:3,background:"#1f2937",borderRadius:2}}/>
+          <div style={{position:"absolute",left:sliderMin+"%",right:(100-sliderMax)+"%",height:3,background:colorPrincipal,borderRadius:2}}/>
+          <input type="range" min="0" max="100" value={sliderMin}
+            onChange={e=>setSliderMin(Math.min(Number(e.target.value),sliderMax-5))}
+            style={{position:"absolute",width:"100%",opacity:0,cursor:"pointer",height:20,margin:0}}/>
+          <input type="range" min="0" max="100" value={sliderMax}
+            onChange={e=>setSliderMax(Math.max(Number(e.target.value),sliderMin+5))}
+            style={{position:"absolute",width:"100%",opacity:0,cursor:"pointer",height:20,margin:0}}/>
+          <div style={{position:"absolute",left:"calc("+sliderMin+"% - 6px)",width:12,height:12,borderRadius:"50%",background:colorPrincipal,border:"2px solid #0f1623",pointerEvents:"none"}}/>
+          <div style={{position:"absolute",left:"calc("+sliderMax+"% - 6px)",width:12,height:12,borderRadius:"50%",background:colorPrincipal,border:"2px solid #0f1623",pointerEvents:"none"}}/>
+        </div>
+      </div>
+
+      {/* Barras */}
+      {barras.length>0?(
+        <div style={{overflowX:"auto"}}>
+          <div style={{display:"flex",alignItems:"flex-end",gap:6,minWidth:Math.max(barras.length*50,300),height:BAR_H+50,paddingBottom:28}}>
+            {barras.map((b,i)=>{
+              const isLast=i===barras.length-1;
+              const canDrill=nivelActual!=="dia";
+              const h1=Math.max(Math.abs(b.valor)/maxVal*BAR_H,2);
+              const h2=colorSecundario?Math.max((b.valor2||0)/maxVal*BAR_H,0):0;
+              return (
+                <div key={b.key} style={{flex:1,minWidth:40,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:canDrill?"pointer":"default"}}
+                  onClick={()=>canDrill&&setDrillPath([...drillPath,b])}>
+                  <div style={{fontSize:9,color:b.valor>=0?"#4ade80":"#f87171",fontFamily:"monospace",whiteSpace:"nowrap"}}>
+                    {b.valor>=0?"+":""}{fmtN(Math.round((b.valor+(b.valor2||0))/1000),0)}k
+                  </div>
+                  <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"stretch",position:"relative"}}>
+                    {h2>0&&<div style={{height:h2,background:isLast?colorSecundario+"cc":colorSecundario,borderRadius:"4px 4px 0 0",opacity:isLast?1:0.7}}/>}
+                    <div style={{height:h1,background:isLast?colorPrincipal:colorPrincipal+"99",borderRadius:h2>0?"0":"4px 4px 0 0",opacity:isLast?1:0.7}}>
+                      {canDrill&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontSize:10,color:"rgba(255,255,255,0.3)"}}>▼</div>}
+                    </div>
+                  </div>
+                  <div style={{fontSize:8,color:isLast?colorPrincipal:"#374151",fontFamily:"monospace",whiteSpace:"nowrap"}}>{b.key.slice(5)}</div>
+                </div>
+              );
+            })}
+          </div>
+          {nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
+        </div>
+      ):<div style={{textAlign:"center",color:"#374151",padding:24,fontSize:12}}>Sin datos en el rango seleccionado</div>}
+
+      {/* Leyenda */}
+      {colorSecundario&&(
+        <div style={{display:"flex",gap:12,marginTop:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+            <div style={{width:10,height:10,borderRadius:2,background:colorPrincipal}}/>{labelPrincipal}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+            <div style={{width:10,height:10,borderRadius:2,background:colorSecundario}}/>{labelSecundario}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, notify}) {
   const [formR, setFormR] = useState({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
   const [mostrarForm, setMostrarForm] = useState(false);
@@ -1314,6 +1454,7 @@ function PantallaAnalisis() {
   const [monedaSel, setMonedaSel] = useState("USD");
   const [filtroDesde, setFiltroDesde] = useState("2026-04-14");
   const [filtroHasta, setFiltroHasta] = useState(new Date().toISOString().split("T")[0]);
+  const [tabAnalisis, setTabAnalisis] = useState("spread"); // spread | transferencias
   const [objetivoMensual, setObjetivoMensual] = useState(2500);
   const [jerarquia, setJerarquia] = useState("mes"); // mes | semana | dia
   const [drillPath, setDrillPath] = useState([]); // [{nivel, key}]
@@ -1744,10 +1885,10 @@ function PantallaAnalisis() {
         </span>
       </div>
 
-         {resultado&&<PantallaCppDashboard resultado={resultado} fmtN={fmtN} colorGan={colorGan}/>}
+         {tabAnalisis==="spread"&&resultado&&<PantallaCppDashboard resultado={resultado} fmtN={fmtN} colorGan={colorGan}/>}
 
 
-      {/* Cards por moneda */}
+      {tabAnalisis==="spread"&&(<>{/* Cards por moneda */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
         {Object.entries(monedas||{}).filter(([,m])=>m&&(m.historial?.length>0||m.stock>0)).map(([key,m])=>{
           const vts=m.historial.filter(h=>h.tipo==="venta");
@@ -1872,8 +2013,10 @@ function PantallaAnalisis() {
 
 
 
+      </>)}
+
       {/* ── SECCIÓN TRANSFERENCIAS ──────────────────────────────────── */}
-      {resultado.transferenciaComisiones&&(()=>{
+      {tabAnalisis==="transferencias"&&resultado.transferenciaComisiones&&(()=>{
         const tc = resultado.transferenciaComisiones;
         const BAR_H = 80;
         const maxGan = Math.max(...tc.semanasArr.map(s=>s.ops+s.recaud),1);
@@ -1898,35 +2041,95 @@ function PantallaAnalisis() {
               ))}
             </div>
 
-            {/* Gráfico barras por semana */}
-            {tc.semanasArr.length>0&&(
+            {/* Gráfico interactivo transferencias */}
+            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS)</div>
+              <GraficoBarras
+                datos={[
+                  ...tc.opsTransf.map(o=>({fecha:o.fecha,valor:parseFloat(o.datos?.tcom||o.tcom||0),valor2:0})),
+                  ...tc.recaudFiltrada.map(t=>({fecha:t.fecha,valor:0,valor2:Number(t.ganancia||0)}))
+                ].filter(d=>d.fecha)}
+                fmtN={fmtN}
+                colorPrincipal="#38bdf8"
+                colorSecundario="#e879f9"
+                labelPrincipal="Ops/Entre CC"
+                labelSecundario="Recaudadora"
+              />
+            </div>
+          </div>
+
+            {/* Listado de operaciones de transferencia */}
+            {tc.opsTransf.length>0&&(
               <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR SEMANA (ARS)</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:6,height:BAR_H+50,paddingBottom:28}}>
-                  {tc.semanasArr.slice(-12).map((s,i,arr)=>{
-                    const total=s.ops+s.recaud;
-                    const hOps=maxGan>0?s.ops/maxGan*BAR_H:0;
-                    const hRec=maxGan>0?s.recaud/maxGan*BAR_H:0;
-                    const isLast=i===arr.length-1;
-                    return (
-                      <div key={s.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{total>0?"$"+fmtN(Math.round(total/1000))+"k":""}</div>
-                        <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"stretch"}}>
-                          {hRec>0&&<div style={{height:hRec,background:isLast?"#f472b6":"#e879f9",borderRadius:"4px 4px 0 0",opacity:isLast?1:0.7}}/>}
-                          {hOps>0&&<div style={{height:hOps,background:isLast?"#60a5fa":"#38bdf8",borderRadius:hRec>0?"0":"4px 4px 0 0",opacity:isLast?1:0.7}}/>}
-                        </div>
-                        <div style={{fontSize:8,color:isLast?"#38bdf8":"#374151",fontFamily:"monospace",whiteSpace:"nowrap"}}>{s.key.slice(5)}</div>
-                      </div>
-                    );
-                  })}
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>OPERACIONES CON COMISIÓN ({tc.opsTransf.length})</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{background:"#080d14"}}>
+                        {["Fecha","Hora","Monto","% Com.","Comisión","Cliente","Nota"].map(h=>(
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...tc.opsTransf].reverse().map((o,i)=>{
+                        const tcom=parseFloat(o.datos?.tcom||o.tcom||0);
+                        const tn=parseFloat(o.datos?.tn||o.tn||0);
+                        const tpct=parseFloat(o.datos?.tpct||o.tpct||0);
+                        return tcom>0?(
+                          <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
+                            <td style={{padding:"6px 10px",color:"#64748b"}}>{o.fecha}</td>
+                            <td style={{padding:"6px 10px",color:"#374151"}}>{o.hora||o.datos?.hora||""}</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmtN(Math.round(tn))}</td>
+                            <td style={{padding:"6px 10px",color:"#6b7280"}}>{tpct}%</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#38bdf8",fontWeight:700}}>${fmtN(Math.round(tcom))}</td>
+                            <td style={{padding:"6px 10px",color:"#4b5563"}}>{o.datos?.cliente||o.cliente||""}</td>
+                            <td style={{padding:"6px 10px",color:"#374151",fontSize:10}}>{o.datos?.nota||o.nota||""}</td>
+                          </tr>
+                        ):null;
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <div style={{display:"flex",gap:12,marginTop:4}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
-                    <div style={{width:10,height:10,borderRadius:2,background:"#38bdf8"}}/>Ops/Entre CC
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
-                    <div style={{width:10,height:10,borderRadius:2,background:"#e879f9"}}/>Recaudadora
-                  </div>
+              </div>
+            )}
+
+            {/* Listado de recaudadora */}
+            {tc.recaudFiltrada.length>0&&(
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>RECAUDADORA ({tc.recaudFiltrada.length})</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{background:"#080d14"}}>
+                        {["Fecha","Cliente","Recaud.","Enviado","Ganancia","Estado"].map(h=>(
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...tc.recaudFiltrada].reverse().map((t,i)=>(
+                        <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
+                          <td style={{padding:"6px 10px",color:"#64748b"}}>{t.fecha}</td>
+                          <td style={{padding:"6px 10px",color:"#e2e8f0",fontWeight:600}}>{t.cliente_nombre}</td>
+                          <td style={{padding:"6px 10px"}}>
+                            <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:t.recaudadora==="maltu"?"rgba(56,189,248,0.1)":"rgba(244,114,182,0.1)",color:t.recaudadora==="maltu"?"#38bdf8":"#f472b6",fontWeight:700}}>
+                              {t.recaudadora?.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmtN(Math.round(t.monto_enviado))}</td>
+                          <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#4ade80",fontWeight:700}}>${fmtN(Math.round(t.ganancia))}</td>
+                          <td style={{padding:"6px 10px"}}>
+                            <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,
+                              background:t.estado==="pagado"?"rgba(74,222,128,0.1)":t.estado==="acreditado"?"rgba(56,189,248,0.1)":"rgba(245,158,11,0.1)",
+                              color:t.estado==="pagado"?"#4ade80":t.estado==="acreditado"?"#38bdf8":"#f59e0b",fontWeight:600}}>
+                              {t.estado==="pagado"?"💰 Pagado":t.estado==="acreditado"?"✓ Acreditado":"⏳ Pendiente"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
