@@ -1325,12 +1325,13 @@ function PantallaAnalisis() {
   async function cargar(desde, hasta) {
     setCargando(true); setError("");
     try {
-      const [{ data: opsRaw }, { data: cierres }, { data: dias }, { data: movsCC }, { data: diferidosData }] = await Promise.all([
+      const [{ data: opsRaw }, { data: cierres }, { data: dias }, { data: movsCC }, { data: diferidosData }, { data: recaudData }] = await Promise.all([
         SB.from("operaciones").select("*").order("fecha", { ascending: true }).order("hora", { ascending: true }),
         SB.from("cierres").select("*").order("fecha", { ascending: true }),
         SB.from("dias").select("*").order("id", { ascending: true }),
         SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000),
         SB.from("diferidos").select("*"),
+        SB.from("recaudadora_transferencias").select("*").order("fecha",{ascending:true}),
       ]);
       if (!cierres?.length) {
         setError("Necesitás al menos un cierre con cotización blue para calcular el CPP.");
@@ -1342,12 +1343,12 @@ function PantallaAnalisis() {
         hora: o.hora || o.datos?.hora,
         tipo: o.tipo
       })).filter(o => o.fecha);
-      setResultado(correrCPP(ops, cierres, dias || [], movsCC || [], diferidosData || [], desde || filtroDesde, hasta || filtroHasta));
+      setResultado(correrCPP(ops, cierres, dias || [], movsCC || [], diferidosData || [], desde || filtroDesde, hasta || filtroHasta, recaudData || []));
     } catch (e) { setError("Error al cargar: " + e.message); }
     setCargando(false);
   }
 
-  function correrCPP(ops, cierres, dias, movsCC, diferidos, fechaDesde, fechaHasta) {
+  function correrCPP(ops, cierres, dias, movsCC, diferidos, fechaDesde, fechaHasta, recaudTransf=[]) {
     const FECHA_CORTE = fechaDesde || "2026-04-14";
 
     // ── Punto de arranque ──────────────────────────────────────────────────
@@ -1504,6 +1505,47 @@ function PantallaAnalisis() {
       resumenDias: Object.values(estado.USD.resumenDias),
       cotizArranque, stockArranque,
       tenencia,
+      // ── Comisiones por transferencias ────────────────────────────────────
+      transferenciaComisiones: (()=>{
+        const FECHA_CORTE2 = fechaDesde || "2026-04-14";
+        const FECHA_HASTA2 = fechaHasta || "9999-12-31";
+
+        // 1. Ops de transferencia (formulario principal + entre cuentas)
+        const opsTransf = ops.filter(o =>
+          o.tipo === "transferencia" &&
+          o.fecha >= FECHA_CORTE2 && o.fecha <= FECHA_HASTA2
+        );
+        const comOps = opsTransf.reduce((s,o) => s + parse(o.datos?.tcom || o.tcom || 0), 0);
+
+        // 2. Recaudadora
+        const recaudFiltrada = (recaudTransf||[]).filter(t => t.fecha >= FECHA_CORTE2 && t.fecha <= FECHA_HASTA2);
+        const comRecaudPagado = recaudFiltrada.filter(t=>t.estado==="pagado").reduce((s,t)=>s+Number(t.ganancia||0),0);
+        const comRecaudAcred = recaudFiltrada.filter(t=>t.estado==="acreditado").reduce((s,t)=>s+Number(t.ganancia||0),0);
+        const comRecaudPend = recaudFiltrada.filter(t=>t.estado==="pendiente").reduce((s,t)=>s+Number(t.ganancia||0),0);
+
+        // Agrupar por semana para el gráfico
+        const getMesKey2 = f => f.slice(0,7);
+        const getSemKey2 = f => { const d=new Date(f); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1); const l=new Date(d); l.setDate(diff); return l.toISOString().split("T")[0]; };
+        const semanas = {};
+        opsTransf.forEach(o => {
+          const wk = getSemKey2(o.fecha);
+          if(!semanas[wk]) semanas[wk]={key:wk,ops:0,recaud:0};
+          semanas[wk].ops += parse(o.datos?.tcom || o.tcom || 0);
+        });
+        recaudFiltrada.forEach(t => {
+          const wk = getSemKey2(t.fecha);
+          if(!semanas[wk]) semanas[wk]={key:wk,ops:0,recaud:0};
+          semanas[wk].recaud += Number(t.ganancia||0);
+        });
+        const semanasArr = Object.values(semanas).sort((a,b)=>a.key.localeCompare(b.key));
+
+        return {
+          comOps, comRecaudPagado, comRecaudAcred, comRecaudPend,
+          totalEfectivo: comOps + comRecaudPagado,
+          totalTotal: comOps + comRecaudPagado + comRecaudAcred + comRecaudPend,
+          semanasArr, opsTransf, recaudFiltrada
+        };
+      })(),
       blueHistory: cierres.map(ci=>({fecha:ci.fecha,compra:parse(ci.cotiz_blue?.compra),venta:parse(ci.cotiz_blue?.venta)})).filter(b=>b.venta>0),
       // Nueva estructura multi-moneda
       monedas: {
@@ -1828,6 +1870,69 @@ function PantallaAnalisis() {
         </div>
       )}
 
+
+
+      {/* ── SECCIÓN TRANSFERENCIAS ──────────────────────────────────── */}
+      {resultado.transferenciaComisiones&&(()=>{
+        const tc = resultado.transferenciaComisiones;
+        const BAR_H = 80;
+        const maxGan = Math.max(...tc.semanasArr.map(s=>s.ops+s.recaud),1);
+        return (
+          <div style={{marginTop:24}}>
+            <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:16,fontWeight:700}}>💸 COMISIONES POR TRANSFERENCIAS</div>
+
+            {/* KPIs */}
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
+              {[
+                {l:"OPERACIONES + ENTRE CC",v:tc.comOps,c:"#38bdf8",hint:"Comisiones registradas en tabla operaciones"},
+                {l:"RECAUDADORA PAGADO",v:tc.comRecaudPagado,c:"#4ade80",hint:"Ganancia ya cobrada de recaudadora"},
+                {l:"RECAUDADORA ACREDITADO",v:tc.comRecaudAcred,c:"#f59e0b",hint:"Acreditado pero sin pagar al cliente aún"},
+                {l:"RECAUDADORA PENDIENTE",v:tc.comRecaudPend,c:"#f87171",hint:"Aún dentro de las 72hs"},
+                {l:"TOTAL EFECTIVO",v:tc.totalEfectivo,c:"#e879f9",hint:"Operaciones + Recaudadora pagado"},
+                {l:"TOTAL INCLUYENDO PENDIENTES",v:tc.totalTotal,c:"#a78bfa",hint:"Todo incluyendo acreditado y pendiente"},
+              ].map(({l,v,c2,c,hint})=>(
+                <div key={l} title={hint} style={{flex:"1 1 150px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",cursor:"help"}}>
+                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+                  <div style={{fontSize:16,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Gráfico barras por semana */}
+            {tc.semanasArr.length>0&&(
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR SEMANA (ARS)</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:6,height:BAR_H+50,paddingBottom:28}}>
+                  {tc.semanasArr.slice(-12).map((s,i,arr)=>{
+                    const total=s.ops+s.recaud;
+                    const hOps=maxGan>0?s.ops/maxGan*BAR_H:0;
+                    const hRec=maxGan>0?s.recaud/maxGan*BAR_H:0;
+                    const isLast=i===arr.length-1;
+                    return (
+                      <div key={s.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                        <div style={{fontSize:9,color:"#4b5563",fontFamily:"monospace"}}>{total>0?"$"+fmtN(Math.round(total/1000))+"k":""}</div>
+                        <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"stretch"}}>
+                          {hRec>0&&<div style={{height:hRec,background:isLast?"#f472b6":"#e879f9",borderRadius:"4px 4px 0 0",opacity:isLast?1:0.7}}/>}
+                          {hOps>0&&<div style={{height:hOps,background:isLast?"#60a5fa":"#38bdf8",borderRadius:hRec>0?"0":"4px 4px 0 0",opacity:isLast?1:0.7}}/>}
+                        </div>
+                        <div style={{fontSize:8,color:isLast?"#38bdf8":"#374151",fontFamily:"monospace",whiteSpace:"nowrap"}}>{s.key.slice(5)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{display:"flex",gap:12,marginTop:4}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+                    <div style={{width:10,height:10,borderRadius:2,background:"#38bdf8"}}/>Ops/Entre CC
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+                    <div style={{width:10,height:10,borderRadius:2,background:"#e879f9"}}/>Recaudadora
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
     </div>
   );
