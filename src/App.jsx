@@ -2056,7 +2056,6 @@ function PantallaAnalisis() {
                 labelSecundario="Recaudadora"
               />
             </div>
-          </div>
 
             {/* Listado de operaciones de transferencia */}
             {tc.opsTransf.length>0&&(
