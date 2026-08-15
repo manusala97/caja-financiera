@@ -250,7 +250,7 @@ function PantallaPnl({pnlData}) {
                 const n1=row.nivel1||0,interm=row.intermediacion||0,fee=row.fee_total||0,pos=row.posicion||0;
                 const isOpen=pnlDetFecha===row.fecha;
                 return (
-                  <React.Fragment key={row.fecha}>
+                  <Fragment key={row.fecha}>
                     <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{row.fecha}</div>
                     <div style={{padding:"10px",fontSize:12,fontWeight:700,color:n1>=0?"#f472b6":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(n1)}</div>
                     <div style={{padding:"10px",fontSize:12,color:"#38bdf8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(interm)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(interm,n1)}</span></div>
@@ -291,21 +291,21 @@ function PantallaPnl({pnlData}) {
                                 <div key={i} style={{padding:"5px 8px",color:"#374151",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>{h}</div>
                               ))}
                               {detalle.detalle_ops.map((op,i)=>(
-                                <React.Fragment key={i}>
+                                <Fragment key={i}>
                                   <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{op.cruce}</div>
                                   <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{Number(op.monto||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
                                   <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.cotiz_op||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
                                   <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.costo_fifo||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
                                   <div style={{padding:"5px 8px",color:(op.ganancia_usd||0)>=0?"#38bdf8":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace",fontWeight:700}}>{fmtU(op.ganancia_usd)}</div>
                                   <div style={{padding:"5px 8px",color:"#374151",borderBottom:"1px solid #0a0a0a",fontSize:9}}>{op.lote_ref}</div>
-                                </React.Fragment>
+                                </Fragment>
                               ))}
                             </div>
                           </div>
                         )}
                       </div>
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 );
               })}
             </div>
