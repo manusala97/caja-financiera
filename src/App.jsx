@@ -1885,6 +1885,18 @@ function PantallaAnalisis() {
         </span>
       </div>
 
+      {/* ── TABS ── */}
+      <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"1px solid #1f2937"}}>
+        {[{id:"spread",l:"📈 Spread C/V"},{id:"transferencias",l:"💸 Transferencias"}].map(t=>(
+          <button key={t.id} onClick={()=>setTabAnalisis(t.id)}
+            style={{padding:"10px 24px",border:"none",borderBottom:"2px solid "+(tabAnalisis===t.id?"#f59e0b":"transparent"),
+              background:"transparent",color:tabAnalisis===t.id?"#f59e0b":"#4b5563",
+              cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
          {tabAnalisis==="spread"&&resultado&&<PantallaCppDashboard resultado={resultado} fmtN={fmtN} colorGan={colorGan}/>}
 
 
