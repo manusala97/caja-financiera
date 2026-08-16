@@ -1687,6 +1687,41 @@ function PantallaAnalisis() {
           semanasArr, opsTransf, recaudFiltrada
         };
       })(),
+      // ── Comisiones por cheques ────────────────────────────────────────
+      chequeComisiones: (()=>{
+        const FECHA_CORTE3 = fechaDesde || "2026-04-14";
+        const FECHA_HASTA3 = fechaHasta || "9999-12-31";
+
+        const opsDia = ops.filter(o=>o.tipo==="cheque_dia"&&o.fecha>=FECHA_CORTE3&&o.fecha<=FECHA_HASTA3);
+        const opsDif = ops.filter(o=>o.tipo==="cheque_dif"&&o.fecha>=FECHA_CORTE3&&o.fecha<=FECHA_HASTA3);
+
+        // Cheque al día: comisión directa (ccom)
+        const comDia = opsDia.reduce((s,o)=>s+parse(o.datos?.ccom||o.ccom||0),0);
+
+        // Cheque diferido: nominal*(1-tasa) - pagado
+        const comDif = opsDif.reduce((s,o)=>{
+          const dn=parse(o.datos?.dn||o.dn||0);
+          const pago=parse(o.datos?.monto||o.monto||0);
+          const tasa=parse(o.datos?.te||o.datos?.tasaEndoso||o.tasaEndoso||1.9)/100;
+          return s+(dn*(1-tasa)-pago);
+        },0);
+
+        const totalCheques = comDia + comDif;
+
+        // Agrupar por fecha para el gráfico
+        const getSemKey3 = f => { const d=new Date(f); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1); const l=new Date(d); l.setDate(diff); return l.toISOString().split("T")[0]; };
+        const datosGrafico = [
+          ...opsDia.map(o=>({fecha:o.fecha,valor:parse(o.datos?.ccom||o.ccom||0),valor2:0,tipo:"dia"})),
+          ...opsDif.map(o=>{
+            const dn=parse(o.datos?.dn||o.dn||0);
+            const pago=parse(o.datos?.monto||o.monto||0);
+            const tasa=parse(o.datos?.te||o.datos?.tasaEndoso||o.tasaEndoso||1.9)/100;
+            return {fecha:o.fecha,valor:0,valor2:dn*(1-tasa)-pago,tipo:"dif"};
+          })
+        ].filter(d=>d.fecha);
+
+        return { comDia, comDif, totalCheques, datosGrafico, opsDia, opsDif };
+      })(),
       blueHistory: cierres.map(ci=>({fecha:ci.fecha,compra:parse(ci.cotiz_blue?.compra),venta:parse(ci.cotiz_blue?.venta)})).filter(b=>b.venta>0),
       // Nueva estructura multi-moneda
       monedas: {
@@ -1887,7 +1922,7 @@ function PantallaAnalisis() {
 
       {/* ── TABS ── */}
       <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"1px solid #1f2937"}}>
-        {[{id:"spread",l:"📈 Spread C/V"},{id:"transferencias",l:"💸 Transferencias"}].map(t=>(
+        {[{id:"spread",l:"📈 Spread C/V"},{id:"transferencias",l:"💸 Transferencias"},{id:"cheques",l:"📋 Cheques"}].map(t=>(
           <button key={t.id} onClick={()=>setTabAnalisis(t.id)}
             style={{padding:"10px 24px",border:"none",borderBottom:"2px solid "+(tabAnalisis===t.id?"#f59e0b":"transparent"),
               background:"transparent",color:tabAnalisis===t.id?"#f59e0b":"#4b5563",
@@ -2139,6 +2174,114 @@ function PantallaAnalisis() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+
+      {/* ── SECCIÓN CHEQUES ─────────────────────────────────────────── */}
+      {tabAnalisis==="cheques"&&resultado.chequeComisiones&&(()=>{
+        const ch = resultado.chequeComisiones;
+        const parse2 = v => { try{return parseFloat(v||0)||0}catch{return 0} };
+        const fmt2 = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
+        return (
+          <div style={{marginTop:8}}>
+            <div style={{fontSize:10,letterSpacing:3,color:"#c084fc",marginBottom:16,fontWeight:700}}>📋 COMISIONES POR CHEQUES</div>
+
+            {/* KPIs */}
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
+              {[
+                {l:"CHEQUES AL DÍA",v:ch.comDia,c:"#38bdf8",sub:ch.opsDia.length+" operaciones"},
+                {l:"CHEQUES DIFERIDOS",v:ch.comDif,c:"#a78bfa",sub:ch.opsDif.length+" operaciones"},
+                {l:"TOTAL CHEQUES",v:ch.totalCheques,c:"#c084fc",sub:"ganancia total ARS"},
+              ].map(({l,v,c2,c,sub})=>(
+                <div key={l} style={{flex:"1 1 160px",background:"#0f1623",border:`1px solid ${c}33`,borderRadius:10,padding:"14px 16px"}}>
+                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
+                  <div style={{fontSize:10,color:"#374151",marginTop:2}}>{sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Gráfico interactivo */}
+            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS)</div>
+              <GraficoBarras
+                datos={ch.datosGrafico}
+                fmtN={fmtN}
+                colorPrincipal="#38bdf8"
+                colorSecundario="#a78bfa"
+                labelPrincipal="Cheques al día"
+                labelSecundario="Cheques diferidos"
+              />
+            </div>
+
+            {/* Tabla cheques al día */}
+            {ch.opsDia.length>0&&(
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>CHEQUES AL DÍA ({ch.opsDia.length})</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{background:"#080d14"}}>
+                        {["Fecha","Nominal","% Com.","Comisión","Cliente"].map(h=>(
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...ch.opsDia].reverse().map((o,i)=>(
+                        <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
+                          <td style={{padding:"6px 10px",color:"#64748b"}}>{o.fecha}</td>
+                          <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmt2(parse2(o.datos?.cn||o.cn||0))}</td>
+                          <td style={{padding:"6px 10px",color:"#6b7280"}}>{parse2(o.datos?.cpct||o.cpct||0)}%</td>
+                          <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#38bdf8",fontWeight:700}}>${fmt2(parse2(o.datos?.ccom||o.ccom||0))}</td>
+                          <td style={{padding:"6px 10px",color:"#4b5563"}}>{o.datos?.cliente||o.cliente||""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Tabla cheques diferidos */}
+            {ch.opsDif.length>0&&(
+              <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
+                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>CHEQUES DIFERIDOS ({ch.opsDif.length})</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{background:"#080d14"}}>
+                        {["Fecha","Nominal","Tasa","Acredita","Pagado","Ganancia","Cliente"].map(h=>(
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...ch.opsDif].reverse().map((o,i)=>{
+                        const dn=parse2(o.datos?.dn||o.dn||0);
+                        const pago=parse2(o.datos?.monto||o.monto||0);
+                        const tasa=parse2(o.datos?.te||o.datos?.tasaEndoso||o.tasaEndoso||1.9);
+                        const acred=dn*(1-tasa/100);
+                        const gan=acred-pago;
+                        return (
+                          <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
+                            <td style={{padding:"6px 10px",color:"#64748b"}}>{o.fecha}</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmt2(dn)}</td>
+                            <td style={{padding:"6px 10px",color:"#6b7280"}}>{tasa}%</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#94a3b8"}}>${fmt2(Math.round(acred))}</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#94a3b8"}}>${fmt2(pago)}</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:gan>=0?"#4ade80":"#f87171",fontWeight:700}}>${fmt2(Math.round(gan))}</td>
+                            <td style={{padding:"6px 10px",color:"#4b5563"}}>{o.datos?.cliente||o.cliente||""}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
