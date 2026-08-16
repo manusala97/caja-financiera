@@ -592,6 +592,58 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
         );
 }
 
+function ChequesCriterioSelector({ch, fmtN}) {
+  const [criterioCheq, setCriterioCheq] = useState("devengado");
+  const datosActivos = criterioCheq==="devengado" ? ch.datosGrafico : ch.datosPercibido;
+  const comDifActivo = criterioCheq==="devengado" ? ch.comDifDevengado : ch.comDifPercibido;
+  const totalActivo = criterioCheq==="devengado" ? ch.totalDevengado : ch.totalPercibido;
+  const labelFecha = criterioCheq==="devengado" ? "fecha de recepción" : "fecha de acreditación (dfa)";
+  const fmt2 = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
+  return (
+    <>
+      {/* Selector criterio */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {[{v:"devengado",l:"📥 Devengado",hint:"Por fecha en que recibiste el cheque"},{v:"percibido",l:"💰 Percibido",hint:"Por fecha en que acredita el banco"}].map(opt=>(
+          <button key={opt.v} onClick={()=>setCriterioCheq(opt.v)} title={opt.hint}
+            style={{padding:"6px 16px",borderRadius:6,border:"1px solid "+(criterioCheq===opt.v?"#c084fc":"#1f2937"),
+              background:criterioCheq===opt.v?"rgba(192,132,252,0.1)":"transparent",
+              color:criterioCheq===opt.v?"#c084fc":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+            {opt.l}
+          </button>
+        ))}
+        <span style={{fontSize:10,color:"#374151",alignSelf:"center"}}>Agrupado por {labelFecha}</span>
+      </div>
+      {/* KPIs */}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
+        {[
+          {l:"CHEQUES AL DÍA",v:ch.comDia,c:"#38bdf8",sub:ch.opsDia.length+" operaciones"},
+          {l:"CHEQUES DIFERIDOS",v:comDifActivo,c:"#a78bfa",sub:(criterioCheq==="devengado"?ch.opsDif.length:ch.opsDifPercibido.length)+" operaciones"},
+          {l:"TOTAL",v:totalActivo,c:"#c084fc",sub:criterioCheq==="devengado"?"recibido en el período":"cobrado en el período"},
+          {l:"CARTERA PENDIENTE",v:ch.comDifDevengado-ch.comDifPercibido,c:"#f59e0b",sub:"diferidos recibidos aún no acreditados"},
+        ].map(({l,v,c,sub})=>(
+          <div key={l} style={{flex:"1 1 150px",background:"#0f1623",border:`1px solid ${c}33`,borderRadius:10,padding:"14px 16px"}}>
+            <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+            <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
+            <div style={{fontSize:10,color:"#374151",marginTop:2}}>{sub}</div>
+          </div>
+        ))}
+      </div>
+      {/* Gráfico */}
+      <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+        <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS) — {criterioCheq.toUpperCase()}</div>
+        <GraficoBarras
+          datos={datosActivos}
+          fmtN={fmtN}
+          colorPrincipal="#38bdf8"
+          colorSecundario="#a78bfa"
+          labelPrincipal="Cheques al día"
+          labelSecundario="Cheques diferidos"
+        />
+      </div>
+    </>
+  );
+}
+
 function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=null, labelPrincipal="", labelSecundario=""}) {
   const [jerarquia, setJerarquia] = useState("semana");
   const [drillPath, setDrillPath] = useState([]);
@@ -2210,58 +2262,7 @@ function PantallaAnalisis() {
             <div style={{fontSize:10,letterSpacing:3,color:"#c084fc",marginBottom:16,fontWeight:700}}>📋 COMISIONES POR CHEQUES</div>
 
             {/* Toggle devengado/percibido */}
-            {(()=>{
-              const [criterioCheq, setCriterioCheq] = React.useState("devengado");
-              const datosActivos = criterioCheq==="devengado" ? ch.datosGrafico : ch.datosPercibido;
-              const comDifActivo = criterioCheq==="devengado" ? ch.comDifDevengado : ch.comDifPercibido;
-              const totalActivo = criterioCheq==="devengado" ? ch.totalDevengado : ch.totalPercibido;
-              const labelFecha = criterioCheq==="devengado" ? "fecha de recepción" : "fecha de acreditación (dfa)";
-              return (
-                <>
-                  {/* Selector criterio */}
-                  <div style={{display:"flex",gap:8,marginBottom:14}}>
-                    {[{v:"devengado",l:"📥 Devengado",hint:"Por fecha en que recibiste el cheque"},{v:"percibido",l:"💰 Percibido",hint:"Por fecha en que acredita el banco"}].map(opt=>(
-                      <button key={opt.v} onClick={()=>setCriterioCheq(opt.v)} title={opt.hint}
-                        style={{padding:"6px 16px",borderRadius:6,border:"1px solid "+(criterioCheq===opt.v?"#c084fc":"#1f2937"),
-                          background:criterioCheq===opt.v?"rgba(192,132,252,0.1)":"transparent",
-                          color:criterioCheq===opt.v?"#c084fc":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-                        {opt.l}
-                      </button>
-                    ))}
-                    <span style={{fontSize:10,color:"#374151",alignSelf:"center"}}>Agrupado por {labelFecha}</span>
-                  </div>
-
-                  {/* KPIs */}
-                  <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
-                    {[
-                      {l:"CHEQUES AL DÍA",v:ch.comDia,c:"#38bdf8",sub:ch.opsDia.length+" operaciones"},
-                      {l:"CHEQUES DIFERIDOS",v:comDifActivo,c:"#a78bfa",sub:(criterioCheq==="devengado"?ch.opsDif.length:ch.opsDifPercibido.length)+" operaciones"},
-                      {l:"TOTAL",v:totalActivo,c:"#c084fc",sub:criterioCheq==="devengado"?"recibido en el período":"cobrado en el período"},
-                      {l:"CARTERA PENDIENTE",v:ch.comDifDevengado-ch.comDifPercibido,c:"#f59e0b",sub:"diferidos recibidos aún no acreditados"},
-                    ].map(({l,v,c2,c,sub})=>(
-                      <div key={l} style={{flex:"1 1 150px",background:"#0f1623",border:`1px solid ${c}33`,borderRadius:10,padding:"14px 16px"}}>
-                        <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
-                        <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
-                        <div style={{fontSize:10,color:"#374151",marginTop:2}}>{sub}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Gráfico */}
-                  <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS) — {criterioCheq.toUpperCase()}</div>
-                    <GraficoBarras
-                      datos={datosActivos}
-                      fmtN={fmtN}
-                      colorPrincipal="#38bdf8"
-                      colorSecundario="#a78bfa"
-                      labelPrincipal="Cheques al día"
-                      labelSecundario="Cheques diferidos"
-                    />
-                  </div>
-                </>
-              );
-            })()}
+            <ChequesCriterioSelector ch={ch} fmtN={fmtN}/>
 
 
 
@@ -2774,7 +2775,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
@@ -3459,13 +3460,25 @@ function AppInterna({ usuario }) {
       setF("cn",""); setF("cpct","");
     } else if (tipo==="cheque_dif") {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
-      ns.ARS-=calcDif.mFinal;
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
       const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,fecha_venc:form.dfv||"",tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
       if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
-      opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota};
-      setF("dn",""); setF("dfa","");
+      opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota,pagoCheqDif:form.pagoCheqDif,pagoCheqDifCCId:form.pagoCheqDifCCId};
+      if(form.pagoCheqDif==="cc"&&form.pagoCheqDifCCId){
+        // Pago a CC: genera ingreso_transf (le debemos al cliente)
+        const cCCId=Number(form.pagoCheqDifCCId);
+        const notaCC="Cheque diferido — nominal $"+fmt(calcDif.n)+" — pago $"+fmt(calcDif.mFinal)+" — acredita "+form.dfa;
+        const mv={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:calcDif.mFinal,nota:notaCC};
+        await SB.from("movimientos_cc").insert({cliente_id:cCCId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:calcDif.mFinal,nota:notaCC});
+        setClientes(p=>p.map(cl=>cl.id!==cCCId?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+        notify("Cheque diferido registrado ✓ — acreditado en CC del cliente");
+      } else {
+        // Pago de caja física
+        ns.ARS-=calcDif.mFinal;
+        notify("Cheque diferido registrado ✓ — debitado de caja física");
+      }
+      setF("dn",""); setF("dfa",""); setF("pagoCheqDif","caja"); setF("pagoCheqDifCCId",""); setF("pagoCheqDifCCBuscar","");
     } else if (tipo==="transferencia") {
       const tn=parse(form.tn);
       if (!tn) { notify("Ingresa un monto",false); return; }
@@ -4600,6 +4613,50 @@ function AppInterna({ usuario }) {
                       <div key={k}><div style={{color:"#4b5563",marginBottom:2}}>{k}</div><div style={{color:c,fontWeight:700}}>${v}</div></div>
                     ))}
                   </div>}
+                  {/* Cómo pagás al cliente */}
+                  <div style={{marginTop:10}}>
+                    <Lbl>Pago al cliente</Lbl>
+                    <div style={{display:"flex",gap:8,marginBottom:8}}>
+                      {[{v:"caja",l:"💵 Caja física"},{v:"cc",l:"🔄 CC del cliente"}].map(opt=>(
+                        <button key={opt.v} type="button" onClick={()=>setF("pagoCheqDif",opt.v)}
+                          style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+(form.pagoCheqDif===opt.v?"#c084fc":"#1f2937"),
+                            background:form.pagoCheqDif===opt.v?"rgba(192,132,252,0.1)":"transparent",
+                            color:form.pagoCheqDif===opt.v?"#c084fc":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                          {opt.l}
+                        </button>
+                      ))}
+                    </div>
+                    {form.pagoCheqDif==="cc"&&(()=>{
+                      const clCC=clientes.find(x=>x.id===Number(form.pagoCheqDifCCId));
+                      const filtCC=clientes.filter(x=>(x.nombre+" "+(x.apellido||"")).toLowerCase().includes((form.pagoCheqDifCCBuscar||"").toLowerCase())).slice(0,8);
+                      return (
+                        <div style={{position:"relative"}}>
+                          {clCC&&!form.pagoCheqDifCCBuscar?(
+                            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                              <div style={{flex:1,padding:"6px 10px",background:"rgba(192,132,252,0.08)",border:"1px solid #c084fc44",borderRadius:6,fontSize:12,color:"#c084fc",fontWeight:600}}>
+                                {clCC.nombre} {clCC.apellido||""}
+                              </div>
+                              <button type="button" onClick={()=>{setF("pagoCheqDifCCId","");setF("pagoCheqDifCCBuscar","");}}
+                                style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button>
+                            </div>
+                          ):(
+                            <input placeholder="Buscar CC..." value={form.pagoCheqDifCCBuscar||""} onChange={e=>setF("pagoCheqDifCCBuscar",e.target.value)}
+                              style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+                          )}
+                          {form.pagoCheqDifCCBuscar&&filtCC.length>0&&(
+                            <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                              {filtCC.map(cl=>(
+                                <div key={cl.id} onClick={()=>{setF("pagoCheqDifCCId",String(cl.id));setF("pagoCheqDifCCBuscar","");}}
+                                  style={{padding:"8px 12px",cursor:"pointer",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                  {cl.nombre} {cl.apellido||""}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>)}
                 {form.tipo==="transferencia"&&(()=>{
                   const tn=parse(form.tn), pctOr=parse(form.tpctOrigen)||0;
