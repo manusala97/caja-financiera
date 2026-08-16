@@ -1693,34 +1693,50 @@ function PantallaAnalisis() {
         const FECHA_HASTA3 = fechaHasta || "9999-12-31";
 
         const opsDia = ops.filter(o=>o.tipo==="cheque_dia"&&o.fecha>=FECHA_CORTE3&&o.fecha<=FECHA_HASTA3);
-        const opsDif = ops.filter(o=>o.tipo==="cheque_dif"&&o.fecha>=FECHA_CORTE3&&o.fecha<=FECHA_HASTA3);
+        // Devengado: por fecha de recepción del cheque
+        const opsDifDevengado = ops.filter(o=>o.tipo==="cheque_dif"&&o.fecha>=FECHA_CORTE3&&o.fecha<=FECHA_HASTA3);
+        // Percibido: por fecha de acreditación (dfa)
+        const opsDifPercibido = ops.filter(o=>{
+          if(o.tipo!=="cheque_dif") return false;
+          const dfa = o.datos?.dfa||o.dfa||"";
+          return dfa>=FECHA_CORTE3&&dfa<=FECHA_HASTA3;
+        });
 
-        // Cheque al día: comisión directa (ccom)
-        const comDia = opsDia.reduce((s,o)=>s+parse(o.datos?.ccom||o.ccom||0),0);
-
-        // Cheque diferido: nominal*(1-tasa) - pagado
-        const comDif = opsDif.reduce((s,o)=>{
+        const ganDif = o => {
           const dn=parse(o.datos?.dn||o.dn||0);
           const pago=parse(o.datos?.monto||o.monto||0);
           const tasa=parse(o.datos?.te||o.datos?.tasaEndoso||o.tasaEndoso||1.9)/100;
-          return s+(dn*(1-tasa)-pago);
-        },0);
+          return dn*(1-tasa)-pago;
+        };
 
-        const totalCheques = comDia + comDif;
+        // Cheque al día: comisión directa
+        const comDia = opsDia.reduce((s,o)=>s+parse(o.datos?.ccom||o.ccom||0),0);
+        // Diferidos devengado (fecha recepción)
+        const comDifDevengado = opsDifDevengado.reduce((s,o)=>s+ganDif(o),0);
+        // Diferidos percibido (fecha acreditación)
+        const comDifPercibido = opsDifPercibido.reduce((s,o)=>s+ganDif(o),0);
 
-        // Agrupar por fecha para el gráfico
-        const getSemKey3 = f => { const d=new Date(f); const day=d.getDay(); const diff=d.getDate()-day+(day===0?-6:1); const l=new Date(d); l.setDate(diff); return l.toISOString().split("T")[0]; };
+        const totalDevengado = comDia + comDifDevengado;
+        const totalPercibido = comDia + comDifPercibido;
+
+        // Gráfico devengado (por fecha recepción)
         const datosGrafico = [
-          ...opsDia.map(o=>({fecha:o.fecha,valor:parse(o.datos?.ccom||o.ccom||0),valor2:0,tipo:"dia"})),
-          ...opsDif.map(o=>{
-            const dn=parse(o.datos?.dn||o.dn||0);
-            const pago=parse(o.datos?.monto||o.monto||0);
-            const tasa=parse(o.datos?.te||o.datos?.tasaEndoso||o.tasaEndoso||1.9)/100;
-            return {fecha:o.fecha,valor:0,valor2:dn*(1-tasa)-pago,tipo:"dif"};
-          })
+          ...opsDia.map(o=>({fecha:o.fecha,valor:parse(o.datos?.ccom||o.ccom||0),valor2:0})),
+          ...opsDifDevengado.map(o=>({fecha:o.fecha,valor:0,valor2:ganDif(o)}))
         ].filter(d=>d.fecha);
 
-        return { comDia, comDif, totalCheques, datosGrafico, opsDia, opsDif };
+        // Gráfico percibido (por fecha acreditación)
+        const datosPercibido = [
+          ...opsDia.map(o=>({fecha:o.fecha,valor:parse(o.datos?.ccom||o.ccom||0),valor2:0})),
+          ...opsDifPercibido.map(o=>({fecha:o.datos?.dfa||o.dfa||o.fecha,valor:0,valor2:ganDif(o)}))
+        ].filter(d=>d.fecha);
+
+        return {
+          comDia, comDifDevengado, comDifPercibido,
+          totalDevengado, totalPercibido,
+          datosGrafico, datosPercibido,
+          opsDia, opsDif:opsDifDevengado, opsDifPercibido
+        };
       })(),
       blueHistory: cierres.map(ci=>({fecha:ci.fecha,compra:parse(ci.cotiz_blue?.compra),venta:parse(ci.cotiz_blue?.venta)})).filter(b=>b.venta>0),
       // Nueva estructura multi-moneda
@@ -2193,33 +2209,61 @@ function PantallaAnalisis() {
           <div style={{marginTop:8}}>
             <div style={{fontSize:10,letterSpacing:3,color:"#c084fc",marginBottom:16,fontWeight:700}}>📋 COMISIONES POR CHEQUES</div>
 
-            {/* KPIs */}
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
-              {[
-                {l:"CHEQUES AL DÍA",v:ch.comDia,c:"#38bdf8",sub:ch.opsDia.length+" operaciones"},
-                {l:"CHEQUES DIFERIDOS",v:ch.comDif,c:"#a78bfa",sub:ch.opsDif.length+" operaciones"},
-                {l:"TOTAL CHEQUES",v:ch.totalCheques,c:"#c084fc",sub:"ganancia total ARS"},
-              ].map(({l,v,c2,c,sub})=>(
-                <div key={l} style={{flex:"1 1 160px",background:"#0f1623",border:`1px solid ${c}33`,borderRadius:10,padding:"14px 16px"}}>
-                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
-                  <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
-                  <div style={{fontSize:10,color:"#374151",marginTop:2}}>{sub}</div>
-                </div>
-              ))}
-            </div>
+            {/* Toggle devengado/percibido */}
+            {(()=>{
+              const [criterioCheq, setCriterioCheq] = React.useState("devengado");
+              const datosActivos = criterioCheq==="devengado" ? ch.datosGrafico : ch.datosPercibido;
+              const comDifActivo = criterioCheq==="devengado" ? ch.comDifDevengado : ch.comDifPercibido;
+              const totalActivo = criterioCheq==="devengado" ? ch.totalDevengado : ch.totalPercibido;
+              const labelFecha = criterioCheq==="devengado" ? "fecha de recepción" : "fecha de acreditación (dfa)";
+              return (
+                <>
+                  {/* Selector criterio */}
+                  <div style={{display:"flex",gap:8,marginBottom:14}}>
+                    {[{v:"devengado",l:"📥 Devengado",hint:"Por fecha en que recibiste el cheque"},{v:"percibido",l:"💰 Percibido",hint:"Por fecha en que acredita el banco"}].map(opt=>(
+                      <button key={opt.v} onClick={()=>setCriterioCheq(opt.v)} title={opt.hint}
+                        style={{padding:"6px 16px",borderRadius:6,border:"1px solid "+(criterioCheq===opt.v?"#c084fc":"#1f2937"),
+                          background:criterioCheq===opt.v?"rgba(192,132,252,0.1)":"transparent",
+                          color:criterioCheq===opt.v?"#c084fc":"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                        {opt.l}
+                      </button>
+                    ))}
+                    <span style={{fontSize:10,color:"#374151",alignSelf:"center"}}>Agrupado por {labelFecha}</span>
+                  </div>
 
-            {/* Gráfico interactivo */}
-            <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS)</div>
-              <GraficoBarras
-                datos={ch.datosGrafico}
-                fmtN={fmtN}
-                colorPrincipal="#38bdf8"
-                colorSecundario="#a78bfa"
-                labelPrincipal="Cheques al día"
-                labelSecundario="Cheques diferidos"
-              />
-            </div>
+                  {/* KPIs */}
+                  <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
+                    {[
+                      {l:"CHEQUES AL DÍA",v:ch.comDia,c:"#38bdf8",sub:ch.opsDia.length+" operaciones"},
+                      {l:"CHEQUES DIFERIDOS",v:comDifActivo,c:"#a78bfa",sub:(criterioCheq==="devengado"?ch.opsDif.length:ch.opsDifPercibido.length)+" operaciones"},
+                      {l:"TOTAL",v:totalActivo,c:"#c084fc",sub:criterioCheq==="devengado"?"recibido en el período":"cobrado en el período"},
+                      {l:"CARTERA PENDIENTE",v:ch.comDifDevengado-ch.comDifPercibido,c:"#f59e0b",sub:"diferidos recibidos aún no acreditados"},
+                    ].map(({l,v,c2,c,sub})=>(
+                      <div key={l} style={{flex:"1 1 150px",background:"#0f1623",border:`1px solid ${c}33`,borderRadius:10,padding:"14px 16px"}}>
+                        <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+                        <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
+                        <div style={{fontSize:10,color:"#374151",marginTop:2}}>{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Gráfico */}
+                  <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS) — {criterioCheq.toUpperCase()}</div>
+                    <GraficoBarras
+                      datos={datosActivos}
+                      fmtN={fmtN}
+                      colorPrincipal="#38bdf8"
+                      colorSecundario="#a78bfa"
+                      labelPrincipal="Cheques al día"
+                      labelSecundario="Cheques diferidos"
+                    />
+                  </div>
+                </>
+              );
+            })()}
+
+
 
             {/* Tabla cheques al día */}
             {ch.opsDia.length>0&&(
