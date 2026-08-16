@@ -22,7 +22,7 @@ const TIPOS_OP = {
   cheque_dia:         { label:"Cheque al dia",        icon:"C", color:"#fb923c" },
   cheque_dif:         { label:"Cheque diferido",      icon:"D", color:"#c084fc" },
   transferencia:      { label:"Transferencia",        icon:"T", color:"#38bdf8" },
-  ajuste:             { label:"Ajuste",               icon:"A", color:"#6b7280" },
+  ajuste:             { label:"Ajuste",               icon:"A", color:"#9ca3af" },
   cobro_dif:          { label:"Cobro diferido",       icon:"C", color:"#c084fc" },
   cc_ingreso_transf:  { label:"CC Transf recibida",  icon:"+", color:"#34d399" },
   cc_ingreso_dep:     { label:"CC Deposito recibido",icon:"+", color:"#34d399" },
@@ -86,7 +86,7 @@ const S = {
   main:  { maxWidth:1320, margin:"0 auto", padding:"28px 20px 100px" },
   card:  { background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:20 },
   inp:   (x={}) => ({ width:"100%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:"10px 14px", color:"#e2e8f0", fontFamily:"inherit", fontSize:13, outline:"none", boxSizing:"border-box", transition:"border-color .2s, background .2s", ...x }),
-  lbl:   { display:"block", fontSize:10, letterSpacing:1.5, color:"#475569", textTransform:"uppercase", marginBottom:5, fontWeight:600 },
+  lbl:   { display:"block", fontSize:10, letterSpacing:1.5, color:"#64748b", textTransform:"uppercase", marginBottom:5, fontWeight:600 },
   btn:   (on,c="#34d399") => ({ padding:"7px 15px", borderRadius:8, border:"1px solid", borderColor:on?c+"99":"rgba(255,255,255,0.08)", background:on?"rgba("+hexToRgb(c)+",0.12)":"transparent", color:on?c:"#475569", fontFamily:"inherit", fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap", transition:"all .2s" }),
   grid:  (cols,gap=12) => ({ display:"grid", gridTemplateColumns:cols, gap }),
   toast: (ok) => ({ position:"fixed", bottom:24, right:24, zIndex:9999, background:ok?"rgba(5,46,22,0.95)":"rgba(28,5,5,0.95)", border:"1px solid "+(ok?"#34d39966":"#f43f5e66"), color:ok?"#34d399":"#f87171", padding:"12px 20px", borderRadius:12, fontSize:13, fontWeight:600, boxShadow:"0 20px 60px #00000099", backdropFilter:"blur(20px)" }),
@@ -208,9 +208,9 @@ function PantallaPnl({pnlData}) {
 
   const Card2=({label,val,color,sub})=>(
     <div style={{background:"#0f1623",border:`1px solid ${color}22`,borderRadius:12,padding:"14px 16px",flex:"1 1 140px"}}>
-      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>{label}</div>
+      <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:6}}>{label}</div>
       <div style={{fontSize:18,fontWeight:700,color:(val||0)>=0?color:"#f87171",fontFamily:"monospace"}}>{fmtU(val)}</div>
-      {sub&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>{sub}</div>}
+      {sub&&<div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>{sub}</div>}
     </div>
   );
 
@@ -224,7 +224,7 @@ function PantallaPnl({pnlData}) {
     <div style={{padding:"20px 16px",maxWidth:900,margin:"0 auto"}}>
       <div style={{fontSize:10,letterSpacing:3,color:"#f472b6",marginBottom:16}}>ANÁLISIS P&L</div>
 
-      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>ACUMULADO HISTÓRICO</div>
+      <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:8}}>ACUMULADO HISTÓRICO</div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
         <Card2 label="RESULTADO TOTAL" val={totalN1} color="#f472b6" sub={`${pnlData.length} días con cierre`}/>
         <Card2 label="INTERMEDIACIÓN" val={totalInterm} color="#38bdf8" sub={pct(totalInterm,totalN1)+" del total"}/>
@@ -233,29 +233,29 @@ function PantallaPnl({pnlData}) {
       </div>
 
       {pnlData.length===0&&(
-        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:32,textAlign:"center",color:"#4b5563",fontSize:13}}>
+        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:32,textAlign:"center",color:"#94a3b8",fontSize:13}}>
           Aún no hay datos de P&L. Se generan automáticamente al cerrar la caja cada día.
         </div>
       )}
 
       {pnlData.length>0&&(
         <div>
-          <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>DETALLE POR DÍA</div>
+          <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:8}}>DETALLE POR DÍA</div>
           <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden",marginBottom:20}}>
             <div style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 1fr 1fr 60px",gap:0}}>
               {["FECHA","N1 RESULTADO","INTERMEDIACIÓN","FEE INCOME","POSICIÓN",""].map((h,i)=>(
-                <div key={i} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",letterSpacing:1,fontWeight:700,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+                <div key={i} style={{padding:"8px 10px",fontSize:9,color:"#94a3b8",letterSpacing:1,fontWeight:700,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
               ))}
               {pnlData.map(row=>{
                 const n1=row.nivel1||0,interm=row.intermediacion||0,fee=row.fee_total||0,pos=row.posicion||0;
                 const isOpen=pnlDetFecha===row.fecha;
                 return (
                   <Fragment key={row.fecha}>
-                    <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{row.fecha}</div>
+                    <div style={{padding:"10px",fontSize:11,color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{row.fecha}</div>
                     <div style={{padding:"10px",fontSize:12,fontWeight:700,color:n1>=0?"#f472b6":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(n1)}</div>
-                    <div style={{padding:"10px",fontSize:12,color:"#38bdf8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(interm)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(interm,n1)}</span></div>
-                    <div style={{padding:"10px",fontSize:12,color:"#4ade80",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(fee)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(fee,n1)}</span></div>
-                    <div style={{padding:"10px",fontSize:12,color:pos>=0?"#f59e0b":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(pos)}<span style={{fontSize:9,color:"#374151",marginLeft:4}}>{pct(pos,n1)}</span></div>
+                    <div style={{padding:"10px",fontSize:12,color:"#38bdf8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(interm)}<span style={{fontSize:9,color:"#9ca3af",marginLeft:4}}>{pct(interm,n1)}</span></div>
+                    <div style={{padding:"10px",fontSize:12,color:"#4ade80",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(fee)}<span style={{fontSize:9,color:"#9ca3af",marginLeft:4}}>{pct(fee,n1)}</span></div>
+                    <div style={{padding:"10px",fontSize:12,color:pos>=0?"#f59e0b":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>{fmtU(pos)}<span style={{fontSize:9,color:"#9ca3af",marginLeft:4}}>{pct(pos,n1)}</span></div>
                     <div style={{padding:"8px",borderBottom:"1px solid #0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <button onClick={()=>setPnlDetFecha(isOpen?null:row.fecha)}
                         style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:isOpen?"rgba(244,114,182,0.1)":"transparent",border:"1px solid "+(isOpen?"#f472b6":"#374151"),color:isOpen?"#f472b6":"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>
@@ -264,7 +264,7 @@ function PantallaPnl({pnlData}) {
                     </div>
                     {isOpen&&detalle&&(
                       <div style={{gridColumn:"1/-1",background:"#080d14",padding:"14px 16px",borderBottom:"1px solid #1f2937"}}>
-                        <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:10}}>DESGLOSE — {row.fecha}</div>
+                        <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:10}}>DESGLOSE — {row.fecha}</div>
                         <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:12}}>
                           {[
                             {l:"USD/ARS",v:detalle.int_usdars,c:"#38bdf8"},
@@ -278,17 +278,17 @@ function PantallaPnl({pnlData}) {
                             {l:"Canje",v:detalle.fee_canje,c:"#4ade80"},
                           ].filter(x=>(x.v||0)!==0).map(x=>(
                             <div key={x.l} style={{background:"rgba(255,255,255,0.02)",border:"1px solid #1f2937",borderRadius:8,padding:"8px 12px",minWidth:100}}>
-                              <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>{x.l}</div>
+                              <div style={{fontSize:9,color:"#94a3b8",marginBottom:3}}>{x.l}</div>
                               <div style={{fontSize:13,fontWeight:700,color:x.c,fontFamily:"monospace"}}>{fmtU(x.v)}</div>
                             </div>
                           ))}
                         </div>
                         {detalle.detalle_ops&&detalle.detalle_ops.length>0&&(
                           <div>
-                            <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OPERACIONES</div>
+                            <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:6}}>OPERACIONES</div>
                             <div style={{display:"grid",gridTemplateColumns:"90px 80px 100px 100px 110px 1fr",gap:0,fontSize:10}}>
                               {["Cruce","Monto","Cotiz.","Costo FIFO","Ganancia USD","Ref. lote"].map((h,i)=>(
-                                <div key={i} style={{padding:"5px 8px",color:"#374151",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>{h}</div>
+                                <div key={i} style={{padding:"5px 8px",color:"#64748b",fontWeight:700,borderBottom:"1px solid #0a0a0a"}}>{h}</div>
                               ))}
                               {detalle.detalle_ops.map((op,i)=>(
                                 <Fragment key={i}>
@@ -297,7 +297,7 @@ function PantallaPnl({pnlData}) {
                                   <div style={{padding:"5px 8px",color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.cotiz_op||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
                                   <div style={{padding:"5px 8px",color:"#94a3b8",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace"}}>${Number(op.costo_fifo||0).toLocaleString("es-AR",{maximumFractionDigits:2})}</div>
                                   <div style={{padding:"5px 8px",color:(op.ganancia_usd||0)>=0?"#38bdf8":"#f87171",borderBottom:"1px solid #0a0a0a",fontFamily:"monospace",fontWeight:700}}>{fmtU(op.ganancia_usd)}</div>
-                                  <div style={{padding:"5px 8px",color:"#374151",borderBottom:"1px solid #0a0a0a",fontSize:9}}>{op.lote_ref}</div>
+                                  <div style={{padding:"5px 8px",color:"#64748b",borderBottom:"1px solid #0a0a0a",fontSize:9}}>{op.lote_ref}</div>
                                 </Fragment>
                               ))}
                             </div>
@@ -412,29 +412,29 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
             <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8,marginBottom:12}}>
                 <div>
-                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:6}}>OBJETIVO MENSUAL — {mesActual}</div>
+                  <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:6}}>OBJETIVO MENSUAL — {mesActual}</div>
                   <div style={{display:"flex",alignItems:"baseline",gap:8}}>
                     <span style={{fontSize:24,fontWeight:700,color:"#f472b6",fontFamily:"monospace"}}>
                       USD {fmtN(Math.round(ganMesUSD),0)}
                     </span>
-                    <span style={{fontSize:14,color:"#374151"}}>/</span>
-                    <span style={{fontSize:14,color:"#6b7280"}}>USD</span>
+                    <span style={{fontSize:14,color:"#64748b"}}>/</span>
+                    <span style={{fontSize:14,color:"#9ca3af"}}>USD</span>
                     <input type="number" value={objetivoMensual} onChange={e=>setObjetivoMensual(Number(e.target.value))}
                       style={{width:80,background:"transparent",border:"none",borderBottom:"1px solid #374151",color:"#e2e8f0",fontFamily:"monospace",fontSize:16,fontWeight:700,outline:"none",textAlign:"center"}}/>
                   </div>
                 </div>
                 <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PARA LLEGAR</div>
+                  <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>PARA LLEGAR</div>
                   <div style={{fontSize:20,fontWeight:700,color:porDia<100?"#4ade80":"#f59e0b",fontFamily:"monospace"}}>
                     USD {fmtN(Math.round(porDia),0)}<span style={{fontSize:11,fontWeight:400}}>/día</span>
                   </div>
-                  <div style={{fontSize:10,color:"#374151"}}>{diasRestantes} días restantes · faltan USD {fmtN(Math.round(falta),0)}</div>
+                  <div style={{fontSize:10,color:"#9ca3af"}}>{diasRestantes} días restantes · faltan USD {fmtN(Math.round(falta),0)}</div>
                 </div>
               </div>
               <div style={{background:"#080d14",borderRadius:6,height:8,overflow:"hidden"}}>
                 <div style={{height:"100%",width:pctObjetivo+"%",background:"linear-gradient(90deg,#6366f1,#f472b6)",borderRadius:6}}/>
               </div>
-              <div style={{fontSize:10,color:"#374151",marginTop:4}}>{pctObjetivo.toFixed(1)}% completado</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>{pctObjetivo.toFixed(1)}% completado</div>
             </div>
 
             {/* ── Comparativa semanas ── */}
@@ -446,18 +446,18 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
                     <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:d.ganancia>=0?"#4ade80":"#f87171",marginBottom:4}}>
                       ${fmtN(Math.round(d.ganancia))}
                     </div>
-                    <div style={{fontSize:10,color:"#4b5563"}}>{d.ops} ventas · {fmtN(Math.round(d.volumen),0)} USD · desde {d.key}</div>
+                    <div style={{fontSize:10,color:"#94a3b8"}}>{d.ops} ventas · {fmtN(Math.round(d.volumen),0)} USD · desde {d.key}</div>
                   </div>
                 ))}
                 <div style={{flex:"1 1 180px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,padding:"12px 14px"}}>
-                  <div style={{fontSize:9,color:"#6b7280",letterSpacing:2,marginBottom:8,fontWeight:700}}>VARIACIÓN</div>
+                  <div style={{fontSize:9,color:"#9ca3af",letterSpacing:2,marginBottom:8,fontWeight:700}}>VARIACIÓN</div>
                   {(()=>{ const diff=semActual.ganancia-semAnterior.ganancia; const pct=semAnterior.ganancia?(diff/Math.abs(semAnterior.ganancia)*100):0; return (
                     <>
                       <div style={{fontSize:18,fontWeight:700,fontFamily:"monospace",color:diff>=0?"#4ade80":"#f87171",marginBottom:4}}>
                         {diff>=0?"+":""}{fmtN(Math.round(diff))} ARS
                       </div>
                       <div style={{fontSize:13,fontWeight:700,color:pct>=0?"#4ade80":"#f87171"}}>{pct>=0?"+":""}{pct.toFixed(1)}%</div>
-                      <div style={{fontSize:10,color:"#374151",marginTop:4}}>{diff>=0?"↑ Mejor":"↓ Por debajo"} que la semana pasada</div>
+                      <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>{diff>=0?"↑ Mejor":"↓ Por debajo"} que la semana pasada</div>
                     </>
                   );})()}
                 </div>
@@ -489,7 +489,7 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
                           textDecoration:i<breadcrumb.length-1?"underline":"none"}}>
                         {b}
                       </span>
-                      {i<breadcrumb.length-1&&<span style={{color:"#374151"}}> › </span>}
+                      {i<breadcrumb.length-1&&<span style={{color:"#64748b"}}> › </span>}
                     </Fragment>
                   ))}
                 </div>
@@ -497,7 +497,7 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
 
               {/* Slider de rango */}
               <div style={{marginBottom:16,padding:"0 4px"}}>
-                <div style={{fontSize:9,color:"#374151",letterSpacing:1,marginBottom:6}}>RANGO: {fechaSliderMin} — {fechaSliderMax}</div>
+                <div style={{fontSize:9,color:"#9ca3af",letterSpacing:1,marginBottom:6}}>RANGO: {fechaSliderMin} — {fechaSliderMax}</div>
                 <div style={{position:"relative",height:20,display:"flex",alignItems:"center"}}>
                   <div style={{position:"absolute",left:0,right:0,height:3,background:"#1f2937",borderRadius:2}}/>
                   <div style={{position:"absolute",left:sliderMin+"%",right:(100-sliderMax)+"%",height:3,background:"#f472b6",borderRadius:2}}/>
@@ -539,14 +539,14 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
                           <div style={{fontSize:8,color:isLast?"#f472b6":"#374151",fontFamily:"monospace",whiteSpace:"nowrap",textAlign:"center",maxWidth:50,overflow:"hidden",textOverflow:"ellipsis"}}>
                             {s.key.slice(5)}
                           </div>
-                          <div style={{fontSize:8,color:"#374151"}}>{s.ops}v</div>
+                          <div style={{fontSize:8,color:"#64748b"}}>{s.ops}v</div>
                         </div>
                       );
                     })}
                   </div>
-                  {nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
+                  {nivelActual!=="dia"&&<div style={{fontSize:10,color:"#9ca3af",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
                 </div>
-              ):<div style={{textAlign:"center",color:"#374151",padding:32,fontSize:12}}>Sin datos en el rango seleccionado</div>}
+              ):<div style={{textAlign:"center",color:"#64748b",padding:32,fontSize:12}}>Sin datos en el rango seleccionado</div>}
             </div>
 
             {/* ── Evolución Blue ── */}
@@ -563,11 +563,11 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
               return (
                 <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2}}>EVOLUCIÓN DÓLAR BLUE (VENTA)</div>
+                    <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2}}>EVOLUCIÓN DÓLAR BLUE (VENTA)</div>
                     <div style={{display:"flex",gap:16,fontSize:11,fontFamily:"monospace"}}>
-                      <span style={{color:"#374151"}}>Min: <span style={{color:"#f87171"}}>${fmtN(min)}</span></span>
-                      <span style={{color:"#374151"}}>Max: <span style={{color:"#4ade80"}}>${fmtN(max)}</span></span>
-                      <span style={{color:"#374151"}}>Actual: <span style={{color:"#e2e8f0"}}>${fmtN(vals[vals.length-1])}</span></span>
+                      <span style={{color:"#64748b"}}>Min: <span style={{color:"#f87171"}}>${fmtN(min)}</span></span>
+                      <span style={{color:"#64748b"}}>Max: <span style={{color:"#4ade80"}}>${fmtN(max)}</span></span>
+                      <span style={{color:"#64748b"}}>Actual: <span style={{color:"#e2e8f0"}}>${fmtN(vals[vals.length-1])}</span></span>
                     </div>
                   </div>
                   <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,overflow:"visible"}}>
@@ -581,7 +581,7 @@ function PantallaCppDashboard({resultado, fmtN, colorGan}) {
                     <polyline points={pts} fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                     <circle cx={xOf(vals.length-1)} cy={yOf(vals[vals.length-1])} r="3" fill="#4ade80"/>
                   </svg>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#94a3b8",marginTop:4}}>
                     <span>{blueSlice[0]?.fecha}</span>
                     <span>{blueSlice[blueSlice.length-1]?.fecha}</span>
                   </div>
@@ -611,7 +611,7 @@ function ChequesCriterioSelector({ch, fmtN}) {
             {opt.l}
           </button>
         ))}
-        <span style={{fontSize:10,color:"#374151",alignSelf:"center"}}>Agrupado por {labelFecha}</span>
+        <span style={{fontSize:10,color:"#9ca3af",alignSelf:"center"}}>Agrupado por {labelFecha}</span>
       </div>
       {/* KPIs */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
@@ -622,15 +622,15 @@ function ChequesCriterioSelector({ch, fmtN}) {
           {l:"CARTERA PENDIENTE",v:ch.comDifDevengado-ch.comDifPercibido,c:"#f59e0b",sub:"diferidos recibidos aún no acreditados"},
         ].map(({l,v,c,sub})=>(
           <div key={l} style={{flex:"1 1 150px",background:"#0f1623",border:`1px solid ${c}33`,borderRadius:10,padding:"14px 16px"}}>
-            <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+            <div style={{fontSize:9,color:"#94a3b8",letterSpacing:1,marginBottom:4}}>{l}</div>
             <div style={{fontSize:18,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
-            <div style={{fontSize:10,color:"#374151",marginTop:2}}>{sub}</div>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{sub}</div>
           </div>
         ))}
       </div>
       {/* Gráfico */}
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-        <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS) — {criterioCheq.toUpperCase()}</div>
+        <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS) — {criterioCheq.toUpperCase()}</div>
         <GraficoBarras
           datos={datosActivos}
           fmtN={fmtN}
@@ -692,7 +692,7 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
   const BAR_H = 100;
   const breadcrumb = ["Todo", ...drillPath.map(p=>p.key)];
 
-  if(todosLosDias.length === 0) return <div style={{color:"#374151",fontSize:12,padding:20,textAlign:"center"}}>Sin datos en el período</div>;
+  if(todosLosDias.length === 0) return <div style={{color:"#64748b",fontSize:12,padding:20,textAlign:"center"}}>Sin datos en el período</div>;
 
   return (
     <div>
@@ -716,7 +716,7 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
                   textDecoration:i<breadcrumb.length-1?"underline":"none"}}>
                 {b}
               </span>
-              {i<breadcrumb.length-1&&<span style={{color:"#374151"}}> › </span>}
+              {i<breadcrumb.length-1&&<span style={{color:"#64748b"}}> › </span>}
             </Fragment>
           ))}
         </div>
@@ -724,7 +724,7 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
 
       {/* Slider */}
       <div style={{marginBottom:14,padding:"0 4px"}}>
-        <div style={{fontSize:9,color:"#374151",letterSpacing:1,marginBottom:6}}>RANGO: {fechaMin} — {fechaMax}</div>
+        <div style={{fontSize:9,color:"#9ca3af",letterSpacing:1,marginBottom:6}}>RANGO: {fechaMin} — {fechaMax}</div>
         <div style={{position:"relative",height:20,display:"flex",alignItems:"center"}}>
           <div style={{position:"absolute",left:0,right:0,height:3,background:"#1f2937",borderRadius:2}}/>
           <div style={{position:"absolute",left:sliderMin+"%",right:(100-sliderMax)+"%",height:3,background:colorPrincipal,borderRadius:2}}/>
@@ -765,17 +765,17 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
               );
             })}
           </div>
-          {nivelActual!=="dia"&&<div style={{fontSize:10,color:"#374151",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
+          {nivelActual!=="dia"&&<div style={{fontSize:10,color:"#9ca3af",textAlign:"center",marginTop:4}}>Click en una barra para ver el desglose ▼</div>}
         </div>
-      ):<div style={{textAlign:"center",color:"#374151",padding:24,fontSize:12}}>Sin datos en el rango seleccionado</div>}
+      ):<div style={{textAlign:"center",color:"#64748b",padding:24,fontSize:12}}>Sin datos en el rango seleccionado</div>}
 
       {/* Leyenda */}
       {colorSecundario&&(
         <div style={{display:"flex",gap:12,marginTop:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#9ca3af"}}>
             <div style={{width:10,height:10,borderRadius:2,background:colorPrincipal}}/>{labelPrincipal}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#9ca3af"}}>
             <div style={{width:10,height:10,borderRadius:2,background:colorSecundario}}/>{labelSecundario}
           </div>
         </div>
@@ -900,20 +900,20 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
             <div style={{fontSize:10,color:r.color,fontWeight:700,letterSpacing:2,marginBottom:12}}>{r.label.toUpperCase()}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>PENDIENTE DE COBRAR</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>PENDIENTE DE COBRAR</div>
                 <div style={{fontSize:16,fontWeight:700,color:"#f59e0b",fontFamily:"monospace"}}>${fmt(totales[key].pendiente)}</div>
               </div>
               <div>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>ACREDITADO</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>ACREDITADO</div>
                 <div style={{fontSize:16,fontWeight:700,color:"#38bdf8",fontFamily:"monospace"}}>${fmt(totales[key].acreditado)}</div>
               </div>
               <div>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>GANANCIA TOTAL</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>GANANCIA TOTAL</div>
                 <div style={{fontSize:14,fontWeight:700,color:"#4ade80",fontFamily:"monospace"}}>${fmt(totales[key].ganancia)}</div>
               </div>
               <div>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>OPERACIONES</div>
-                <div style={{fontSize:14,fontWeight:700,color:"#6b7280"}}>{totales[key].count}</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>OPERACIONES</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#9ca3af"}}>{totales[key].count}</div>
               </div>
             </div>
           </div>
@@ -991,7 +991,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
                   {l:"Ganancia total",v:cl.ganancia,c:"#f472b6"},
                 ].map(({l,v,c2,c})=>(
                   <div key={l} style={{flex:"1 1 140px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-                    <div style={{fontSize:9,color:"#4b5563",marginBottom:4}}>{l}</div>
+                    <div style={{fontSize:9,color:"#94a3b8",marginBottom:4}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmt(Math.round(v))}</div>
                   </div>
                 ))}
@@ -1000,14 +1000,14 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
               <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden"}}>
                 <div style={{display:"grid",gridTemplateColumns:"90px 80px 110px 110px 80px 80px 110px",gap:0}}>
                   {["Fecha","Recaud.","Enviado","Neto cliente","Vence","Ganancia","Estado"].map(h=>(
-                    <div key={h} style={{padding:"7px 10px",fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+                    <div key={h} style={{padding:"7px 10px",fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
                   ))}
                   {cl.transferencias.map(t=>{
                     const hrs=horasRestantes(t.fecha);
                     const alertColor=hrs<=0?"#f87171":hrs<=24?"#f59e0b":hrs<=48?"#fbbf24":"#374151";
                     return (
                       <Fragment key={t.id}>
-                        <div style={{padding:"8px 10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{t.fecha}</div>
+                        <div style={{padding:"8px 10px",fontSize:11,color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{t.fecha}</div>
                         <div style={{padding:"8px 10px",borderBottom:"1px solid #0a0a0a"}}>
                           <span style={{fontSize:10,fontWeight:700,color:RECAUDADORAS[t.recaudadora]?.color,background:`rgba(${t.recaudadora==="maltu"?"56,189,248":"244,114,182"},0.1)`,padding:"2px 6px",borderRadius:4}}>
                             {t.recaudadora?.toUpperCase()}
@@ -1040,7 +1040,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
                 onMouseLeave={e=>e.currentTarget.style.borderColor="#1f2937"}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                   <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{cl.nombre}</div>
-                  <div style={{fontSize:10,color:"#374151"}}>{cl.transferencias.length} ops</div>
+                  <div style={{fontSize:10,color:"#9ca3af"}}>{cl.transferencias.length} ops</div>
                 </div>
                 {cl.pendiente>0&&(
                   <div style={{marginBottom:6}}>
@@ -1061,13 +1061,13 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
                   </div>
                 )}
                 <div style={{borderTop:"1px solid #1f2937",paddingTop:8,marginTop:4,display:"flex",justifyContent:"space-between"}}>
-                  <span style={{fontSize:10,color:"#374151"}}>Ganancia</span>
+                  <span style={{fontSize:10,color:"#9ca3af"}}>Ganancia</span>
                   <span style={{fontSize:12,fontWeight:700,color:"#f472b6",fontFamily:"monospace"}}>${fmt(Math.round(cl.ganancia))}</span>
                 </div>
               </div>
             ))}
             {clientes_arr.length===0&&(
-              <div style={{color:"#374151",fontSize:13,padding:32}}>Sin transferencias registradas</div>
+              <div style={{color:"#64748b",fontSize:13,padding:32}}>Sin transferencias registradas</div>
             )}
           </div>
         );
@@ -1101,14 +1101,14 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
 
             {/* Cliente */}
             <div style={{position:"relative",gridColumn:"span 2"}}>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>CLIENTE</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>CLIENTE</label>
               {formR.clienteId?(
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   <div style={{flex:1,padding:"7px 10px",background:"rgba(232,121,249,0.08)",border:"1px solid #e879f944",borderRadius:6,fontSize:12,color:"#e879f9",fontWeight:600}}>
                     {clientes.find(x=>x.id===Number(formR.clienteId))?.nombre}
                   </div>
                   <button onClick={()=>{setFormR(f=>({...f,clienteId:""}));setBuscarCl("");}}
-                    style={{padding:"5px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button>
+                    style={{padding:"5px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:11}}>✕</button>
                 </div>
               ):(
                 <div>
@@ -1130,13 +1130,13 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
 
             {/* Recaudadora */}
             <div>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>RECAUDADORA</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>RECAUDADORA</label>
               <div style={{display:"flex",gap:6}}>
                 {Object.entries(RECAUDADORAS).map(([k,r])=>(
                   <button key={k} onClick={()=>setFormR(f=>({...f,recaudadora:k,pctRecaud:r.pctDefault}))}
                     style={{flex:1,padding:"7px",borderRadius:6,border:`1px solid ${formR.recaudadora===k?r.color+"66":"#1f2937"}`,
                       background:formR.recaudadora===k?`rgba(${k==="maltu"?"56,189,248":"244,114,182"},0.1)`:"transparent",
-                      color:formR.recaudadora===k?r.color:"#4b5563",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+                      color:formR.recaudadora===k?r.color:"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
                     {r.label}
                   </button>
                 ))}
@@ -1145,35 +1145,35 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
 
             {/* Monto */}
             <div>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>MONTO ENVIADO $</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>MONTO ENVIADO $</label>
               <input type="number" placeholder="1000000" value={formR.montoEnviado} onChange={e=>setFormR(f=>({...f,montoEnviado:e.target.value}))}
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
             </div>
 
             {/* % Recaudadora */}
             <div>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>% RECAUDADORA</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>% RECAUDADORA</label>
               <input type="number" step="0.1" value={formR.pctRecaud} onChange={e=>setFormR(f=>({...f,pctRecaud:e.target.value}))}
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
             </div>
 
             {/* % Comisión cliente */}
             <div>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>% TU COMISIÓN</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>% TU COMISIÓN</label>
               <input type="number" step="0.1" value={formR.pctComision} onChange={e=>setFormR(f=>({...f,pctComision:e.target.value}))}
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
             </div>
 
             {/* Fecha */}
             <div>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>FECHA</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>FECHA</label>
               <input type="date" value={formR.fecha} onChange={e=>setFormR(f=>({...f,fecha:e.target.value}))}
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
             </div>
 
             {/* Nota */}
             <div style={{gridColumn:"span 2"}}>
-              <label style={{fontSize:10,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:4}}>NOTA</label>
+              <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>NOTA</label>
               <input placeholder="Opcional..." value={formR.nota} onChange={e=>setFormR(f=>({...f,nota:e.target.value}))}
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
             </div>
@@ -1191,7 +1191,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
                 {l:"Tu ganancia",v:parse(formR.montoEnviado)*(parse(formR.pctComision)-parse(formR.pctRecaud))/100,c:"#f59e0b"},
               ].map(({l,v,c})=>(
                 <div key={l} style={{flex:"1 1 130px",background:"rgba(255,255,255,0.02)",borderRadius:8,padding:"8px 10px",border:"1px solid rgba(255,255,255,0.04)"}}>
-                  <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>{l}</div>
+                  <div style={{fontSize:9,color:"#94a3b8",marginBottom:3}}>{l}</div>
                   <div style={{fontSize:14,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmt(Math.round(v))}</div>
                 </div>
               ))}
@@ -1200,7 +1200,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
 
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>{setMostrarForm(false);setBuscarCl("");}}
-              style={{flex:1,padding:"9px",borderRadius:7,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>
+              style={{flex:1,padding:"9px",borderRadius:7,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>
               Cancelar
             </button>
             <button onClick={guardarTransf}
@@ -1215,10 +1215,10 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       {vistaRecaud==="transferencias"&&(<div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"100px 1fr 80px 110px 110px 110px 80px 110px 100px",gap:0}}>
           {["Fecha","Cliente","Recaud.","Enviado","Neto recaud.","Neto cliente","Ganancia","Vence 72hs","Estado"].map(h=>(
-            <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#4b5563",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+            <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#94a3b8",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
           ))}
           {filtradas.length===0&&(
-            <div style={{gridColumn:"1/-1",padding:32,textAlign:"center",color:"#374151",fontSize:13}}>Sin transferencias registradas</div>
+            <div style={{gridColumn:"1/-1",padding:32,textAlign:"center",color:"#64748b",fontSize:13}}>Sin transferencias registradas</div>
           )}
           {filtradas.map(t=>{
             const hrs = horasRestantes(t.fecha);
@@ -1226,10 +1226,10 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
             const venceLabel = hrs<=0?"VENCIDA":hrs<=72?hrs+"hs":"—";
             return (
               <Fragment key={t.id}>
-                <div style={{padding:"10px",fontSize:11,color:"#64748b",borderBottom:"1px solid #0a0a0a"}}>{t.fecha}</div>
+                <div style={{padding:"10px",fontSize:11,color:"#94a3b8",borderBottom:"1px solid #0a0a0a"}}>{t.fecha}</div>
                 <div style={{padding:"10px",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #0a0a0a",fontWeight:600}}>
                   {t.cliente_nombre}
-                  {t.nota&&<div style={{fontSize:10,color:"#374151"}}>{t.nota}</div>}
+                  {t.nota&&<div style={{fontSize:10,color:"#9ca3af"}}>{t.nota}</div>}
                 </div>
                 <div style={{padding:"10px",borderBottom:"1px solid #0a0a0a"}}>
                   <span style={{fontSize:10,fontWeight:700,color:RECAUDADORAS[t.recaudadora]?.color||"#e2e8f0",background:`rgba(${t.recaudadora==="maltu"?"56,189,248":"244,114,182"},0.1)`,padding:"2px 8px",borderRadius:4}}>
@@ -1288,7 +1288,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
   );
 }
 
-const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#6b7280",letterSpacing:1}}>{label}</label>{children}</div>);
+const CotFld=({label,children})=>(<div style={{display:"flex",flexDirection:"column",gap:4}}><label style={{fontSize:10,color:"#9ca3af",letterSpacing:1}}>{label}</label>{children}</div>);
 const CotNum=({value,onChange,placeholder})=>(<input type="text" inputMode="decimal" value={value} onChange={onChange} placeholder={placeholder||"0"} style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}/>);
 
 function PantallaCotizaciones() {
@@ -1373,11 +1373,11 @@ function PantallaCotizaciones() {
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <CotFld label="COMPRA vs USD">
             <CotNum value={cot[kC]} onChange={e=>setCot(p=>({...p,[kC]:e.target.value}))} placeholder={phC}/>
-            {arsC&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>≈ ${arsC}</span>}
+            {arsC&&<span style={{fontSize:10,color:"#94a3b8",marginTop:2}}>≈ ${arsC}</span>}
           </CotFld>
           <CotFld label="VENTA vs USD">
             <CotNum value={cot[kV]} onChange={e=>setCot(p=>({...p,[kV]:e.target.value}))} placeholder={phV}/>
-            {arsV&&<span style={{fontSize:10,color:"#4b5563",marginTop:2}}>≈ ${arsV}</span>}
+            {arsV&&<span style={{fontSize:10,color:"#94a3b8",marginTop:2}}>≈ ${arsV}</span>}
           </CotFld>
         </div>
       </div>
@@ -1400,7 +1400,7 @@ function PantallaCotizaciones() {
 
         {/* USDT — % sobre USD */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>% s/USD</span></div>
+          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#94a3b8",fontSize:9}}>% s/USD</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <CotFld label="COMPRA %">
               <CotNum value={cot.usdtC} onChange={e=>setCot(p=>({...p,usdtC:e.target.value}))} placeholder="+0.25"/>
@@ -1413,7 +1413,7 @@ function PantallaCotizaciones() {
 
         {/* USDT — directo en pesos */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#4b5563",fontSize:9}}>en pesos</span></div>
+          <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDFE1"} USDT <span style={{color:"#94a3b8",fontSize:9}}>en pesos</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <CotFld label="COMPRA $"><CotNum value={cot.usdtArsC} onChange={e=>setCot(p=>({...p,usdtArsC:e.target.value}))} placeholder="1480"/></CotFld>
             <CotFld label="VENTA $"><CotNum value={cot.usdtArsV} onChange={e=>setCot(p=>({...p,usdtArsV:e.target.value}))} placeholder="1495"/></CotFld>
@@ -1449,7 +1449,7 @@ function PantallaCotizaciones() {
 
         {/* Canje */}
         <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px"}}>
-          <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDD04"} CANJE <span style={{color:"#4b5563",fontSize:9}}>%</span></div>
+          <div style={{fontSize:10,color:"#38bdf8",fontWeight:700,marginBottom:8,letterSpacing:1}}>{"\uD83D\uDD04"} CANJE <span style={{color:"#94a3b8",fontSize:9}}>%</span></div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <CotFld label="SUBIDA"><CotNum value={cot.canjeS} onChange={e=>setCot(p=>({...p,canjeS:e.target.value}))} placeholder="-1"/></CotFld>
             <CotFld label="BAJADA"><CotNum value={cot.canjeB} onChange={e=>setCot(p=>({...p,canjeB:e.target.value}))} placeholder="-2"/></CotFld>
@@ -1460,7 +1460,7 @@ function PantallaCotizaciones() {
 
       {/* Comentarios */}
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",marginBottom:16}}>
-        <div style={{fontSize:10,color:"#6b7280",fontWeight:700,marginBottom:10,letterSpacing:1}}>COMENTARIOS</div>
+        <div style={{fontSize:10,color:"#9ca3af",fontWeight:700,marginBottom:10,letterSpacing:1}}>COMENTARIOS</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {[
             ["comentario1","\uD83D\uDCCB Gesti\u00F3n de Cheques al D\u00EDa y Diferidos \u2014 A consultar"],
@@ -1480,7 +1480,7 @@ function PantallaCotizaciones() {
 
       {/* Vista previa */}
       <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
-        <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
+        <div style={{fontSize:10,color:"#9ca3af",letterSpacing:1,marginBottom:8}}>VISTA PREVIA</div>
         <pre style={{fontFamily:"inherit",fontSize:12,color:"#e2e8f0",whiteSpace:"pre-wrap",margin:0,lineHeight:1.8}}>{preview}</pre>
       </div>
 
@@ -1940,7 +1940,7 @@ function PantallaAnalisis() {
     };
   }
 
-  if (cargando) return <div style={{color:"#475569",padding:40,textAlign:"center"}}>Calculando CPP...</div>;
+  if (cargando) return <div style={{color:"#64748b",padding:40,textAlign:"center"}}>Calculando CPP...</div>;
   if (error) return <div style={{color:"#f87171",padding:20}}>{error}</div>;
   if (!resultado) return null;
 
@@ -1970,20 +1970,20 @@ function PantallaAnalisis() {
       <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:20,background:"rgba(245,158,11,0.04)",border:"1px solid rgba(245,158,11,0.15)",borderRadius:10,padding:"12px 16px"}}>
         <span style={{fontSize:10,color:"#f59e0b",letterSpacing:1,fontWeight:700}}>PERÍODO</span>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <label style={{fontSize:10,color:"#4b5563"}}>Desde</label>
+          <label style={{fontSize:10,color:"#94a3b8"}}>Desde</label>
           <input type="date" value={filtroDesde} onChange={e=>setFiltroDesde(e.target.value)}
             style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <label style={{fontSize:10,color:"#4b5563"}}>Hasta</label>
+          <label style={{fontSize:10,color:"#94a3b8"}}>Hasta</label>
           <input type="date" value={filtroHasta} onChange={e=>setFiltroHasta(e.target.value)}
             style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
         </div>
         <button onClick={()=>{setFiltroDesde("2026-04-14");setFiltroHasta(new Date().toISOString().split("T")[0]);}}
-          style={{fontSize:10,padding:"5px 12px",borderRadius:6,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>
+          style={{fontSize:10,padding:"5px 12px",borderRadius:6,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>
           Reset
         </button>
-        <span style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>
+        <span style={{fontSize:10,color:"#9ca3af",marginLeft:"auto"}}>
           {mon.historial.filter(h=>h.fecha>=filtroDesde&&h.fecha<=filtroHasta).length} ops en el período
         </span>
       </div>
@@ -2019,15 +2019,15 @@ function PantallaAnalisis() {
               <div style={{fontSize:10,color:m.color,fontWeight:700,marginBottom:8}}>{m.label}</div>
               <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:"monospace",marginBottom:6}}>
                 {m.unidad==="ARS"?"$":"USD "}{fmtN(Math.round(m.cpp),0)}
-                <span style={{fontSize:10,color:"#4b5563",fontWeight:400,marginLeft:4}}>CPP</span>
+                <span style={{fontSize:10,color:"#94a3b8",fontWeight:400,marginLeft:4}}>CPP</span>
               </div>
               <div style={{fontSize:11,color:colorGan(m.ganReal),marginBottom:2,fontWeight:600}}>
                 {m.unidad==="ARS"?"$":"USD "}{fmtN(Math.round(m.ganReal))} ganado
               </div>
-              <div style={{fontSize:10,color:"#4b5563",marginBottom:2}}>
+              <div style={{fontSize:10,color:"#94a3b8",marginBottom:2}}>
                 {vol>0?(m.ganReal/vol).toFixed(0)+" "+m.unidad+"/op":"—"} margen prom.
               </div>
-              <div style={{fontSize:9,color:"#374151",marginTop:4}}>{m.historial.length} ops · {vol.toFixed(0)} vendido</div>
+              <div style={{fontSize:9,color:"#94a3b8",marginTop:4}}>{m.historial.length} ops · {vol.toFixed(0)} vendido</div>
             </div>
           );
         })}
@@ -2050,7 +2050,7 @@ function PantallaAnalisis() {
             ];
           })().map(({l,v,c,hint})=>(
             <div key={l} style={{padding:"10px 12px",background:"rgba(255,255,255,0.02)",borderRadius:8,border:"1px solid rgba(255,255,255,0.04)"}}>
-              <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+              <div style={{fontSize:9,color:"#94a3b8",letterSpacing:1,marginBottom:4}}>{l}</div>
               <div style={{fontSize:14,fontWeight:700,color:c,fontFamily:"monospace"}}>{v}</div>
             </div>
           ))}
@@ -2059,13 +2059,13 @@ function PantallaAnalisis() {
         {/* Historial de ops */}
         {mon.historial.length>0&&(
           <div>
-            <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:8}}>HISTORIAL DE OPERACIONES</div>
+            <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:8}}>HISTORIAL DE OPERACIONES</div>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead>
                   <tr style={{background:"#080d14"}}>
                     {["Fecha","Hora","Tipo","Monto","Cotiz.","CPP antes","CPP después","G. vs CPP","Stock","Cliente"].map(h=>(
-                      <th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1,whiteSpace:"nowrap"}}>{h}</th>
+                      <th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#94a3b8",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1,whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -2073,19 +2073,19 @@ function PantallaAnalisis() {
                   {[...mon.historial].reverse().map((h,i)=>(
                     <tr key={i} style={{borderBottom:"1px solid #0a0a0a",background:h.tipo==="compra"?"rgba(56,189,248,0.03)":"rgba(74,222,128,0.03)"}}>
                       <td style={{padding:"7px 10px",color:"#64748b"}}>{h.fecha}</td>
-                      <td style={{padding:"7px 10px",color:"#374151",fontSize:10}}>{h.hora}</td>
+                      <td style={{padding:"7px 10px",color:"#64748b",fontSize:10}}>{h.hora}</td>
                       <td style={{padding:"7px 10px"}}>
                         <span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:h.tipo==="compra"?"rgba(56,189,248,0.1)":"rgba(74,222,128,0.1)",color:h.tipo==="compra"?"#38bdf8":"#4ade80",fontWeight:700}}>{h.tipo.toUpperCase()}</span>
                       </td>
                       <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>{fmtN(h.monto,2)}</td>
                       <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>{mon.unidad==="ARS"?"$":""}{fmtN(h.cotizOp,2)}{mon.unidad==="USD"?" USD":""}</td>
-                      <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#6b7280"}}>{mon.unidad==="ARS"?"$":""}{fmtN(h.cppAntes,2)}</td>
+                      <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#9ca3af"}}>{mon.unidad==="ARS"?"$":""}{fmtN(h.cppAntes,2)}</td>
                       <td style={{padding:"7px 10px",fontFamily:"monospace",color:mon.color,fontWeight:700}}>{mon.unidad==="ARS"?"$":""}{fmtN(h.cppDespues,2)}</td>
                       <td style={{padding:"7px 10px",fontFamily:"monospace",color:colorGan(h.gananciaOp),fontWeight:h.gananciaOp!=null?700:400}}>
                         {h.gananciaOp!=null?(mon.unidad==="ARS"?"$":"")+fmtN(Math.round(h.gananciaOp)):"—"}
                       </td>
-                      <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#6b7280"}}>{fmtN(h.stockDespues,2)}</td>
-                      <td style={{padding:"7px 10px",color:"#374151",fontSize:10}}>{h.cliente}</td>
+                      <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#9ca3af"}}>{fmtN(h.stockDespues,2)}</td>
+                      <td style={{padding:"7px 10px",color:"#64748b",fontSize:10}}>{h.cliente}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2098,13 +2098,13 @@ function PantallaAnalisis() {
       {/* Resumen por día */}
       {(mon.resumenDias||[]).length>0&&(
         <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:14,padding:"18px 20px"}}>
-          <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>RESUMEN POR DÍA — {monedaSel}</div>
+          <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>RESUMEN POR DÍA — {monedaSel}</div>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
               <thead>
                 <tr style={{background:"#080d14"}}>
                   {["Fecha","Compras","Ventas","G. realizada","G. vs mercado","CPP cierre","Stock cierre"].map(h=>(
-                    <th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1,whiteSpace:"nowrap"}}>{h}</th>
+                    <th key={h} style={{padding:"7px 10px",textAlign:"left",color:"#94a3b8",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1,whiteSpace:"nowrap"}}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2117,7 +2117,7 @@ function PantallaAnalisis() {
                     <td style={{padding:"7px 10px",fontFamily:"monospace",color:colorGan(d.ganancia)}}>{d.ganancia?(mon.unidad==="ARS"?"$":"")+fmtN(Math.round(d.ganancia)):"—"}</td>
                     <td style={{padding:"7px 10px",fontFamily:"monospace",color:colorGan(d.ganVsMercado)}}>{d.ganVsMercado?(mon.unidad==="ARS"?"$":"")+fmtN(Math.round(d.ganVsMercado)):"—"}</td>
                     <td style={{padding:"7px 10px",fontFamily:"monospace",color:mon.color,fontWeight:700}}>{mon.unidad==="ARS"?"$":""}{fmtN(d.cppFinal,2)}</td>
-                    <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#6b7280"}}>{fmtN(d.stockFinal,2)}</td>
+                    <td style={{padding:"7px 10px",fontFamily:"monospace",color:"#9ca3af"}}>{fmtN(d.stockFinal,2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2150,7 +2150,7 @@ function PantallaAnalisis() {
                 {l:"TOTAL INCLUYENDO PENDIENTES",v:tc.totalTotal,c:"#a78bfa",hint:"Todo incluyendo acreditado y pendiente"},
               ].map(({l,v,c2,c,hint})=>(
                 <div key={l} title={hint} style={{flex:"1 1 150px",background:"#0f1623",border:"1px solid #1f2937",borderRadius:10,padding:"12px 14px",cursor:"help"}}>
-                  <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,marginBottom:4}}>{l}</div>
+                  <div style={{fontSize:9,color:"#94a3b8",letterSpacing:1,marginBottom:4}}>{l}</div>
                   <div style={{fontSize:16,fontWeight:700,color:c,fontFamily:"monospace"}}>${fmtN(Math.round(v))}</div>
                 </div>
               ))}
@@ -2158,7 +2158,7 @@ function PantallaAnalisis() {
 
             {/* Gráfico interactivo transferencias */}
             <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-              <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS)</div>
+              <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>COMISIONES POR PERÍODO (ARS)</div>
               <GraficoBarras
                 datos={[
                   ...tc.opsTransf.map(o=>({fecha:o.fecha,valor:parseFloat(o.datos?.tcom||o.tcom||0),valor2:0})),
@@ -2175,13 +2175,13 @@ function PantallaAnalisis() {
             {/* Listado de operaciones de transferencia */}
             {tc.opsTransf.length>0&&(
               <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>OPERACIONES CON COMISIÓN ({tc.opsTransf.length})</div>
+                <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>OPERACIONES CON COMISIÓN ({tc.opsTransf.length})</div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                     <thead>
                       <tr style={{background:"#080d14"}}>
                         {["Fecha","Hora","Monto","% Com.","Comisión","Cliente","Nota"].map(h=>(
-                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#94a3b8",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2193,12 +2193,12 @@ function PantallaAnalisis() {
                         return tcom>0?(
                           <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
                             <td style={{padding:"6px 10px",color:"#64748b"}}>{o.fecha}</td>
-                            <td style={{padding:"6px 10px",color:"#374151"}}>{o.hora||o.datos?.hora||""}</td>
+                            <td style={{padding:"6px 10px",color:"#64748b"}}>{o.hora||o.datos?.hora||""}</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmtN(Math.round(tn))}</td>
-                            <td style={{padding:"6px 10px",color:"#6b7280"}}>{tpct}%</td>
+                            <td style={{padding:"6px 10px",color:"#9ca3af"}}>{tpct}%</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#38bdf8",fontWeight:700}}>${fmtN(Math.round(tcom))}</td>
-                            <td style={{padding:"6px 10px",color:"#4b5563"}}>{o.datos?.cliente||o.cliente||""}</td>
-                            <td style={{padding:"6px 10px",color:"#374151",fontSize:10}}>{o.datos?.nota||o.nota||""}</td>
+                            <td style={{padding:"6px 10px",color:"#94a3b8"}}>{o.datos?.cliente||o.cliente||""}</td>
+                            <td style={{padding:"6px 10px",color:"#64748b",fontSize:10}}>{o.datos?.nota||o.nota||""}</td>
                           </tr>
                         ):null;
                       })}
@@ -2211,13 +2211,13 @@ function PantallaAnalisis() {
             {/* Listado de recaudadora */}
             {tc.recaudFiltrada.length>0&&(
               <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
-                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>RECAUDADORA ({tc.recaudFiltrada.length})</div>
+                <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>RECAUDADORA ({tc.recaudFiltrada.length})</div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                     <thead>
                       <tr style={{background:"#080d14"}}>
                         {["Fecha","Cliente","Recaud.","Enviado","Ganancia","Estado"].map(h=>(
-                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#94a3b8",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2269,13 +2269,13 @@ function PantallaAnalisis() {
             {/* Tabla cheques al día */}
             {ch.opsDia.length>0&&(
               <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
-                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>CHEQUES AL DÍA ({ch.opsDia.length})</div>
+                <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>CHEQUES AL DÍA ({ch.opsDia.length})</div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                     <thead>
                       <tr style={{background:"#080d14"}}>
                         {["Fecha","Nominal","% Com.","Comisión","Cliente"].map(h=>(
-                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#94a3b8",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2284,9 +2284,9 @@ function PantallaAnalisis() {
                         <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
                           <td style={{padding:"6px 10px",color:"#64748b"}}>{o.fecha}</td>
                           <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmt2(parse2(o.datos?.cn||o.cn||0))}</td>
-                          <td style={{padding:"6px 10px",color:"#6b7280"}}>{parse2(o.datos?.cpct||o.cpct||0)}%</td>
+                          <td style={{padding:"6px 10px",color:"#9ca3af"}}>{parse2(o.datos?.cpct||o.cpct||0)}%</td>
                           <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#38bdf8",fontWeight:700}}>${fmt2(parse2(o.datos?.ccom||o.ccom||0))}</td>
-                          <td style={{padding:"6px 10px",color:"#4b5563"}}>{o.datos?.cliente||o.cliente||""}</td>
+                          <td style={{padding:"6px 10px",color:"#94a3b8"}}>{o.datos?.cliente||o.cliente||""}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2298,13 +2298,13 @@ function PantallaAnalisis() {
             {/* Tabla cheques diferidos */}
             {ch.opsDif.length>0&&(
               <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:14,padding:"18px 20px"}}>
-                <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:12}}>CHEQUES DIFERIDOS ({ch.opsDif.length})</div>
+                <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:12}}>CHEQUES DIFERIDOS ({ch.opsDif.length})</div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                     <thead>
                       <tr style={{background:"#080d14"}}>
                         {["Fecha","Nominal","Tasa","Acredita","Pagado","Ganancia","Cliente"].map(h=>(
-                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#4b5563",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
+                          <th key={h} style={{padding:"6px 10px",textAlign:"left",color:"#94a3b8",fontWeight:600,borderBottom:"1px solid #1f2937",fontSize:9,letterSpacing:1}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2319,11 +2319,11 @@ function PantallaAnalisis() {
                           <tr key={i} style={{borderBottom:"1px solid #0a0a0a"}}>
                             <td style={{padding:"6px 10px",color:"#64748b"}}>{o.fecha}</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmt2(dn)}</td>
-                            <td style={{padding:"6px 10px",color:"#6b7280"}}>{tasa}%</td>
+                            <td style={{padding:"6px 10px",color:"#9ca3af"}}>{tasa}%</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#94a3b8"}}>${fmt2(Math.round(acred))}</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#94a3b8"}}>${fmt2(pago)}</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:gan>=0?"#4ade80":"#f87171",fontWeight:700}}>${fmt2(Math.round(gan))}</td>
-                            <td style={{padding:"6px 10px",color:"#4b5563"}}>{o.datos?.cliente||o.cliente||""}</td>
+                            <td style={{padding:"6px 10px",color:"#94a3b8"}}>{o.datos?.cliente||o.cliente||""}</td>
                           </tr>
                         );
                       })}
@@ -2343,7 +2343,7 @@ function PantallaAnalisis() {
 // FIN PANTALLA ANÁLISIS CPP
 // ─────────────────────────────────────────────
 function LineChart({ data, color="#4ade80", height=100 }) {
-  if (!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center",color:"#374151",fontSize:11}}>Sin datos suficientes</div>;
+  if (!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748b",fontSize:11}}>Sin datos suficientes</div>;
   const w=500,h=height,pad=12;
   const vals=data.map(d=>d.y);
   const minV=Math.min(...vals),maxV=Math.max(...vals);
@@ -2466,11 +2466,11 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
               <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h habiles</span></Lbl>
               <Inp type="date" value={f.dfa} onChange={e=>sf("dfa",e.target.value)}/>
             </div>
-            <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
+            <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#9ca3af"}}>{calcDif?.dias||0}d</span></div>
           </div>
           {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #c084fc33",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",8),fontSize:11}}>
             {[["Post-gest.",fmt(calcDif.postG),"#9ca3af"],["Tasa",calcDif.tasaD.toFixed(2)+"%","#9ca3af"],["Pagas",fmt(calcDif.mFinal),"#f87171"],["Ganancia",fmt(calcDif.ganancia),"#4ade80"]].map(([k,v,c])=>(
-              <div key={k}><div style={{color:"#4b5563",marginBottom:2}}>{k}</div><div style={{color:c,fontWeight:700}}>${v}</div></div>
+              <div key={k}><div style={{color:"#94a3b8",marginBottom:2}}>{k}</div><div style={{color:c,fontWeight:700}}>${v}</div></div>
             ))}
           </div>}
         </div>
@@ -2498,14 +2498,14 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
                 <input value={f.ccOrigenBuscar||""} onChange={e=>sf("ccOrigenBuscar",e.target.value)}
                   placeholder={clOrigen&&!f.ccOrigenBuscar?"Cambiar...":"Buscar origen..."}
                   style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                {f.ccOrigenId&&<button onClick={()=>sf("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                {f.ccOrigenId&&<button onClick={()=>sf("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
               </div>
               {f.ccOrigenBuscar&&<DropdownCC buscar={f.ccOrigenBuscar} filtrados={filtOrigen} onSelect={cl=>{sf("ccOrigenId",String(cl.id));sf("ccOrigenBuscar","");}} onCrear={nombre=>setNuevoClienteCC({visible:true,nombre,socio:"Manuel Sala",onCreado:cl=>{sf("ccOrigenId",String(cl.id));}})}/>}
             </div>
             {tn>0&&<div style={{background:"#0a1220",border:"1px solid #3b82f633",borderRadius:6,padding:"8px 10px",fontSize:11,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-              <span style={{color:"#6b7280"}}>Total enviado: <strong style={{color:"#e2e8f0"}}>{fmt(tn)}</strong></span>
-              <span style={{color:"#6b7280"}}>Com. origen ({pctOr}%): <strong style={{color:"#f59e0b"}}>-{fmt(comOr)}</strong></span>
-              <span style={{color:"#6b7280"}}>Neto a distribuir: <strong style={{color:"#4ade80"}}>{fmt(netoOr)}</strong></span>
+              <span style={{color:"#9ca3af"}}>Total enviado: <strong style={{color:"#e2e8f0"}}>{fmt(tn)}</strong></span>
+              <span style={{color:"#9ca3af"}}>Com. origen ({pctOr}%): <strong style={{color:"#f59e0b"}}>-{fmt(comOr)}</strong></span>
+              <span style={{color:"#9ca3af"}}>Neto a distribuir: <strong style={{color:"#4ade80"}}>{fmt(netoOr)}</strong></span>
             </div>}
             <div style={{borderTop:"1px solid #1f2937",paddingTop:10}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -2520,7 +2520,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
                 return (
                   <div key={dest.id} style={{background:"#0a0f0a",border:"1px solid #1f2937",borderRadius:7,padding:10,marginBottom:8,display:"flex",flexDirection:"column",gap:6}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:10,color:"#6b7280",fontWeight:600}}>Destino {idx+1}</span>
+                      <span style={{fontSize:10,color:"#9ca3af",fontWeight:600}}>Destino {idx+1}</span>
                       {tDestinos.length>1&&<button onClick={()=>setTDestinos(p=>p.filter(d=>d.id!==dest.id))} style={{padding:"2px 7px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#f87171",cursor:"pointer",fontSize:9}}>✕</button>}
                     </div>
                     <div style={{position:"relative"}}>
@@ -2529,7 +2529,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
                         <input value={dest.buscar||""} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,buscar:e.target.value}:d))}
                           placeholder={clDest&&!dest.buscar?"Cambiar cliente...":"Buscar cliente destino..."}
                           style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                        {dest.clienteId&&<button onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:"",buscar:""}:d))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                        {dest.clienteId&&<button onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:"",buscar:""}:d))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                       </div>
                       {dest.buscar&&<DropdownCC buscar={dest.buscar} filtrados={filtDest} onSelect={cl=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:String(cl.id),buscar:""}:d))} onCrear={nombre=>setNuevoClienteCC({visible:true,nombre,socio:"Manuel Sala",onCreado:cl=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:String(cl.id),buscar:""}:d))})}/>}
                     </div>
@@ -2538,7 +2538,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
                       <div><Lbl>% Comisión</Lbl><Inp type="number" placeholder="0" value={dest.pct} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,pct:e.target.value}:d))}/></div>
                       <div><Lbl>Nota</Lbl><Inp placeholder="opcional" value={dest.nota} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,nota:e.target.value}:d))}/></div>
                     </div>
-                    {mDest>0&&<div style={{fontSize:10,color:"#6b7280",display:"flex",gap:12}}>
+                    {mDest>0&&<div style={{fontSize:10,color:"#9ca3af",display:"flex",gap:12}}>
                       <span>Recibe: <strong style={{color:"#e2e8f0"}}>{fmt(mDest)}</strong></span>
                       {pDest>0&&<span>Com ({pDest}%): <strong style={{color:"#f59e0b"}}>+{fmt(comDest)}</strong></span>}
                       <span>DEBE en CC: <strong style={{color:"#4ade80"}}>{fmt(mDest+comDest)}</strong></span>
@@ -2548,8 +2548,8 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
               })}
             </div>
             {tn>0&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",flexDirection:"column",gap:4}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
               <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
                 <span style={{color:Math.abs(diferencia)<0.01?"#6b7280":"#f87171",fontWeight:600}}>Diferencia:</span>
                 <strong style={{color:Math.abs(diferencia)<0.01?"#4ade80":"#f87171"}}>{Math.abs(diferencia)<0.01?"✓ Cuadra":fmt(diferencia)}</strong>
@@ -2568,7 +2568,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
       </div>
       <div style={{display:"flex",gap:8,marginTop:12}}>
         <button onClick={()=>{const d=construir();if(d)onGuardar(d);}} style={{flex:1,padding:11,borderRadius:7,background:"#0a0a0a",border:"1px solid "+color,color,fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>GUARDAR</button>
-        {onCancelar&&<button onClick={onCancelar} style={{padding:"11px 16px",borderRadius:7,background:"transparent",border:"1px solid #1f2937",color:"#4b5563",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>}
+        {onCancelar&&<button onClick={onCancelar} style={{padding:"11px 16px",borderRadius:7,background:"transparent",border:"1px solid #1f2937",color:"#94a3b8",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>}
       </div>
     </div>
   );
@@ -2618,9 +2618,9 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
     <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{width:"100%",maxWidth:500,background:"#0d0d0d",border:"1px solid #94a3b833",borderRadius:12,padding:20}}>
         <div style={{fontSize:11,letterSpacing:3,color:"#94a3b8",marginBottom:4}}>CIERRE DE CAJA</div>
-        <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>{fechaLarga}</div>
+        <div style={{fontSize:12,color:"#94a3b8",marginBottom:20}}>{fechaLarga}</div>
         <div style={{marginBottom:18}}>
-          <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:8}}>SALDOS FINALES</div>
+          <div style={{fontSize:9,letterSpacing:2,color:"#94a3b8",marginBottom:8}}>SALDOS FINALES</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {MONEDAS.map(m=>{ const v=saldos[m.id]||0; if(!v) return null;
               return <div key={m.id} style={{background:"#111",border:"1px solid "+m.color+"33",borderRadius:6,padding:"5px 10px"}}>
@@ -2630,7 +2630,7 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
           </div>
         </div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:8}}>COTIZACIONES DE CIERRE</div>
+          <div style={{fontSize:9,letterSpacing:2,color:"#94a3b8",marginBottom:8}}>COTIZACIONES DE CIERRE</div>
           <div style={S.grid("1fr 1fr",8)}>
             {monCotiz.map(m=>(
               <div key={m.id}>
@@ -2644,7 +2644,7 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
               </div>
             ))}
           </div>
-          <div style={{marginTop:8,fontSize:10,color:"#374151"}}>* ARS: pesos por USD (ej: 1400) | EUR/GBP/BRL: valor en USD (ej: EUR=1.2, BRL=0.19)</div>
+          <div style={{marginTop:8,fontSize:10,color:"#9ca3af"}}>* ARS: pesos por USD (ej: 1400) | EUR/GBP/BRL: valor en USD (ej: EUR=1.2, BRL=0.19)</div>
           <div style={{marginTop:10,display:"flex",gap:8}}>
             <div style={{flex:1}}>
               <Lbl><span style={{color:"#f59e0b"}}>Cotizacion Compra</span></Lbl>
@@ -2666,15 +2666,15 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
             <div style={{background:"#0a0a1a",border:"1px solid #6366f133",borderRadius:8,padding:12,marginBottom:8,textAlign:"center"}}>
               <div style={{fontSize:9,letterSpacing:3,color:"#818cf8",marginBottom:4}}>PATRIMONIO TOTAL EN USD</div>
               <div style={{fontSize:28,fontWeight:700,color:"#818cf8"}}>{fmtUSD(totalUSD)}</div>
-              <div style={{fontSize:10,color:"#4b5563",marginTop:4}}>caja + cuentas corrientes + cheques</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>caja + cuentas corrientes + cheques</div>
             </div>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1,background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:8,padding:10,textAlign:"center"}}>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CAJA FISICA</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginBottom:3}}>CAJA FISICA</div>
                 <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioTotal.cajaUSD)}</div>
               </div>
               <div style={{flex:1,background:"#0a0a1a",border:"1px solid #c084fc33",borderRadius:8,padding:10,textAlign:"center"}}>
-                <div style={{fontSize:9,color:"#4b5563",marginBottom:3}}>CCs + CHEQUES</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginBottom:3}}>CCs + CHEQUES</div>
                 <div style={{fontSize:16,fontWeight:700,color:"#c084fc"}}>{fmtUSD(totalUSD-patrimonioTotal.cajaUSD)}</div>
               </div>
             </div>
@@ -2685,7 +2685,7 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
             style={{flex:1,padding:12,borderRadius:7,background:parse(cotiz.ARS)?"#052e16":"#0a0a0a",border:"1px solid "+(parse(cotiz.ARS)?"#4ade80":"#1f2937"),color:parse(cotiz.ARS)?"#4ade80":"#374151",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:parse(cotiz.ARS)?"pointer":"not-allowed"}}>
             CERRAR CAJA
           </button>
-          <button onClick={onCancelar} style={{padding:"12px 16px",borderRadius:7,background:"transparent",border:"1px solid #1f2937",color:"#4b5563",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+          <button onClick={onCancelar} style={{padding:"12px 16px",borderRadius:7,background:"transparent",border:"1px solid #1f2937",color:"#94a3b8",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>
         </div>
       </div>
     </div>
@@ -2713,17 +2713,17 @@ function LoginScreen({ onLogin }) {
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{width:56,height:56,borderRadius:16,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#fff",margin:"0 auto 16px",fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 8px 32px rgba(99,102,241,0.4)"}}>S</div>
           <div style={{fontSize:20,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>STS FINANCIERA</div>
-          <div style={{fontSize:12,color:"#475569",marginTop:4}}>Ingresa tus credenciales para continuar</div>
+          <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>Ingresa tus credenciales para continuar</div>
         </div>
         <form onSubmit={handleLogin} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,padding:28}}>
           <div style={{marginBottom:16}}>
-            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Email</label>
+            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#64748b",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Email</label>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
               placeholder="tu@email.com" autoComplete="email"
               style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           </div>
           <div style={{marginBottom:20}}>
-            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#475569",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contrasena</label>
+            <label style={{display:"block",fontSize:10,letterSpacing:1.5,color:"#64748b",textTransform:"uppercase",marginBottom:6,fontWeight:600}}>Contrasena</label>
             <input type="password" value={pass} onChange={e=>setPass(e.target.value)}
               placeholder="••••••••" autoComplete="current-password"
               style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",color:"#e2e8f0",fontFamily:"inherit",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
@@ -3728,7 +3728,7 @@ function AppInterna({ usuario }) {
   }
 
   function renderOpRow(op, conAcc=false, esHoy=false) {
-    const t=TIPOS_OP[op.tipo]||{label:op.tipo,icon:".",color:"#6b7280"};
+    const t=TIPOS_OP[op.tipo]||{label:op.tipo,icon:".",color:"#9ca3af"};
     const m=MONEDAS.find(x=>x.id===op.moneda);
     return (
       <div key={op.id} className="op-row" style={{borderBottom:"1px solid rgba(255,255,255,0.04)",padding:"8px 10px 8px 14px",display:"flex",gap:8,alignItems:"flex-start",borderLeft:"2px solid "+t.color+"55",marginBottom:2,borderRadius:"0 8px 8px 0"}}>
@@ -3742,7 +3742,7 @@ function AppInterna({ usuario }) {
               )}
             </div>
             <div style={{display:"flex",gap:5,alignItems:"center"}}>
-              <span style={{fontSize:10,color:"#4b5563"}}>{op.hora}</span>
+              <span style={{fontSize:10,color:"#94a3b8"}}>{op.hora}</span>
               {(conAcc||esHoy)&&<>
                 <button onClick={()=>esHoy?setEditandoOp(op):setHistEditando(op)} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",cursor:"pointer",fontFamily:"inherit"}}>editar</button>
                 <button onClick={()=>esHoy?eliminarOpHoy(op):eliminarOpHistorial(op.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"#1c0a0a",border:"1px solid #f43f5e",color:"#f43f5e",cursor:"pointer",fontFamily:"inherit"}}>borrar</button>
@@ -3756,14 +3756,14 @@ function AppInterna({ usuario }) {
             {(op.tipo==="compra"||op.tipo==="venta")&&fmt(op.monto)+" "+op.moneda+" -- "+fmt(op.monto2)+" "+op.moneda2}
             {!["cheque_dia","cheque_dif","transferencia","compra","venta"].includes(op.tipo)&&(m?.simbolo||"")+fmt(op.monto)+" "+(op.moneda||"")}
           </div>
-          {(op.cliente||op.nota)&&<div style={{fontSize:11,color:"#4b5563",marginTop:1}}>{op.cliente?"👤 "+op.cliente:""}{op.cliente&&op.nota?" - ":""}{op.nota||""}</div>}
+          {(op.cliente||op.nota)&&<div style={{fontSize:11,color:"#94a3b8",marginTop:1}}>{op.cliente?"👤 "+op.cliente:""}{op.cliente&&op.nota?" - ":""}{op.nota||""}</div>}
           {op.pendientes&&op.pendientes.length>0&&(
             <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
               {op.pendientes.map((p,pi)=>(
                 <div key={pi} style={{display:"flex",alignItems:"center",gap:6,background:p.resuelto?"rgba(74,222,128,0.05)":"rgba(251,146,60,0.07)",border:"1px solid "+(p.resuelto?"#4ade8033":"#fb923c44"),borderRadius:6,padding:"4px 10px"}}>
                   <span style={{fontSize:10,color:p.resuelto?"#4ade80":"#fb923c",fontWeight:700}}>{p.resuelto?"✓":"⏳"}</span>
                   <span style={{fontSize:11,color:p.resuelto?"#4ade80":"#fb923c",fontWeight:600}}>${fmt(p.monto)} ARS {p.resuelto?"(resuelto)":"pendiente"}</span>
-                  {p.nota&&<span style={{fontSize:10,color:"#6b7280"}}>— {p.nota}</span>}
+                  {p.nota&&<span style={{fontSize:10,color:"#9ca3af"}}>— {p.nota}</span>}
                   {!p.resuelto&&(conAcc||esHoy)&&(
                     <button onClick={()=>{setResolviendo({opId:op.id,pi,monto:p.monto,nota:p.nota||"",op});setResolverLineas([{id:Date.now(),tipo:"efectivo",monto:"",buscar:""}]);setBuscarResolverDrop({});}}
                       style={{marginLeft:"auto",fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(251,146,60,0.15)",border:"1px solid #fb923c66",color:"#fb923c",cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
@@ -3823,7 +3823,7 @@ function AppInterna({ usuario }) {
           </div>
         ))}
         {filtrados.length===0&&(
-          <div style={{padding:"6px 10px",fontSize:10,color:"#4b5563",borderBottom:"1px solid #1a1a1a"}}>
+          <div style={{padding:"6px 10px",fontSize:10,color:"#94a3b8",borderBottom:"1px solid #1a1a1a"}}>
             Sin resultados para "{buscar}"
           </div>
         )}
@@ -3886,7 +3886,7 @@ function AppInterna({ usuario }) {
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
         <div style={{fontSize:10,letterSpacing:4,color:"#4ade80",marginBottom:12}}>CAJA FINANCIERA</div>
-        <div style={{color:"#374151"}}>Cargando...</div>
+        <div style={{color:"#64748b"}}>Cargando...</div>
       </div>
     </div>
   );
@@ -3899,14 +3899,14 @@ function AppInterna({ usuario }) {
           <div style={{background:"#0f172a",border:"1px solid #1f2937",borderRadius:12,padding:24,width:300,display:"flex",flexDirection:"column",gap:14}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>Nuevo cliente</div>
             <div>
-              <div style={{fontSize:10,color:"#4b5563",marginBottom:4}}>NOMBRE</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>NOMBRE</div>
               <input autoFocus value={nuevoClienteCC.nombre} onChange={e=>setNuevoClienteCC(p=>({...p,nombre:e.target.value}))}
                 onKeyDown={e=>e.key==="Enter"&&crearClienteRapido(nuevoClienteCC.nombre,nuevoClienteCC.socio,nuevoClienteCC.onCreado)}
                 placeholder="Nombre del cliente"
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none",boxSizing:"border-box"}}/>
             </div>
             <div>
-              <div style={{fontSize:10,color:"#4b5563",marginBottom:4}}>SOCIO</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>SOCIO</div>
               <select value={nuevoClienteCC.socio} onChange={e=>setNuevoClienteCC(p=>({...p,socio:e.target.value}))}
                 style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}>
                 {["Manuel Sala","Gonzalo Spadafora","Matias Speranza","STS"].map(s=><option key={s} value={s}>{s}</option>)}
@@ -3914,7 +3914,7 @@ function AppInterna({ usuario }) {
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>setNuevoClienteCC(p=>({...p,visible:false}))}
-                style={{flex:1,padding:"8px",borderRadius:6,background:"transparent",border:"1px solid #374151",color:"#6b7280",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>Cancelar</button>
+                style={{flex:1,padding:"8px",borderRadius:6,background:"transparent",border:"1px solid #374151",color:"#9ca3af",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>Cancelar</button>
               <button onClick={()=>crearClienteRapido(nuevoClienteCC.nombre,nuevoClienteCC.socio,nuevoClienteCC.onCreado)}
                 style={{flex:1,padding:"8px",borderRadius:6,background:"#052e16",border:"1px solid #4ade80",color:"#4ade80",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>Crear</button>
             </div>
@@ -3929,7 +3929,7 @@ function AppInterna({ usuario }) {
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
             <div style={{background:"#0f1623",border:"1px solid #fb923c44",borderRadius:16,padding:24,width:440,maxWidth:"95vw",maxHeight:"90vh",overflowY:"auto"}}>
               <div style={{fontSize:14,fontWeight:700,color:"#fb923c",marginBottom:2}}>Completar pendiente</div>
-              <div style={{fontSize:12,color:"#6b7280",marginBottom:16}}>
+              <div style={{fontSize:12,color:"#9ca3af",marginBottom:16}}>
                 Total a resolver: <strong style={{color:"#fb923c"}}>${fmt(resolviendo.monto)} {resolviendo.op.moneda2||"ARS"}</strong>
                 {resolviendo.nota&&<span> — {resolviendo.nota}</span>}
               </div>
@@ -3966,7 +3966,7 @@ function AppInterna({ usuario }) {
                                 {cl.nombre} {cl.apellido}
                               </div>
                             ))}
-                            {filtradosR.length===0&&busqR.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados</div>}
+                            {filtradosR.length===0&&busqR.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#94a3b8"}}>Sin resultados</div>}
                           </div>
                         )}
                       </div>
@@ -4017,7 +4017,7 @@ function AppInterna({ usuario }) {
           <div style={{width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#34d399)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",letterSpacing:-1,fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 4px 12px rgba(99,102,241,0.4)"}}>S</div>
           <div className="hide-mobile">
             <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",letterSpacing:.3,fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>STS</div>
-            <div style={{fontSize:9,color:"#475569",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
+            <div style={{fontSize:9,color:"#9ca3af",letterSpacing:2,marginTop:1}}>FINANCIERA</div>
           </div>
         </div>
         <div style={{marginLeft:"auto",paddingRight:8,display:"flex",gap:6,alignItems:"center"}} className="hide-mobile">
@@ -4032,7 +4032,7 @@ function AppInterna({ usuario }) {
           }} style={{padding:"4px 8px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:refreshing?"#4ade80":"#374151",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>
             {refreshing?"↻ ...":"↻ Actualizar"}
           </button>
-          <button onClick={async()=>{ await SB.auth.signOut(); }} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+          <button onClick={async()=>{ await SB.auth.signOut(); }} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"#64748b",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
             {usuario?.email?.split("@")[0]} - salir
           </button>
         </div>
@@ -4084,7 +4084,7 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{marginBottom:24}}>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:2,fontFamily:"'JetBrains Mono',monospace"}}>Buenos días —</div>
+                <div style={{fontSize:11,color:"#9ca3af",marginBottom:2,fontFamily:"'JetBrains Mono',monospace"}}>Buenos días —</div>
                 <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",letterSpacing:-.3}}>{fechaLarga}</div>
               </div>
               {cajaCerrada&&<div style={{background:"#1c0505",border:"1px solid #f43f5e33",borderRadius:10,padding:"10px 16px",marginBottom:16,fontSize:12,color:"#f87171",display:"flex",alignItems:"center",gap:8}}>
@@ -4098,31 +4098,31 @@ function AppInterna({ usuario }) {
                   <div key={m.id} className="saldo-card" style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba("+m.color+"ff,0.15)",borderRadius:14,padding:"16px 18px"}} onClick={()=>setPant("ops")}>
                     <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
                     <div style={{fontSize:18,fontWeight:700,color:v<0?"#f87171":"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{m.simbolo}{fmt(v)}</div>
-                    <div style={{fontSize:10,color:"#475569",marginTop:4}}>saldo actual</div>
+                    <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>saldo actual</div>
                   </div>
                 );})}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12,marginBottom:24}}>
                 <div style={{background:"#0f1420",border:"1px solid #3b82f633",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("ops")}>
-                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>OPERACIONES HOY</div>
+                  <div style={{fontSize:10,color:"#9ca3af",marginBottom:8,fontWeight:600,letterSpacing:1}}>OPERACIONES HOY</div>
                   <div style={{fontSize:28,fontWeight:700,color:"#3b82f6",fontFamily:"'JetBrains Mono',monospace"}}>{opsHoy.length}</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>registradas hoy</div>
+                  <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>registradas hoy</div>
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #c084fc33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("cartera")}>
-                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>CHEQUES A COBRAR</div>
+                  <div style={{fontSize:10,color:"#9ca3af",marginBottom:8,fontWeight:600,letterSpacing:1}}>CHEQUES A COBRAR</div>
                   <div style={{fontSize:28,fontWeight:700,color:"#c084fc",fontFamily:"'JetBrains Mono',monospace"}}>{difPend.length}</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>${fmt(totalCheques)} ARS total</div>
+                  <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>${fmt(totalCheques)} ARS total</div>
                   {(vencHoy>0||vencProx>0)&&<div style={{marginTop:8,fontSize:11,color:"#f59e0b",fontWeight:600}}>⚠ {vencHoy>0?vencHoy+" vencido/s":""}  {vencProx>0?vencProx+" por vencer":""}</div>}
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #34d39933",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("posicion")}>
-                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>POSICION CC</div>
+                  <div style={{fontSize:10,color:"#9ca3af",marginBottom:8,fontWeight:600,letterSpacing:1}}>POSICION CC</div>
                   <div style={{fontSize:28,fontWeight:700,color:tots.ARS>-1?"#34d399":"#f87171",fontFamily:"'JetBrains Mono',monospace"}}>{tots.ARS>-1?"+":""}{fmt(tots.ARS)}</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>ARS neto en CCs</div>
+                  <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>ARS neto en CCs</div>
                 </div>
                 <div style={{background:"#0f1420",border:"1px solid #f59e0b33",borderRadius:12,padding:16,cursor:"pointer"}} onClick={()=>setPant("clientes")}>
-                  <div style={{fontSize:10,color:"#64748b",marginBottom:8,fontWeight:600,letterSpacing:1}}>CLIENTES</div>
+                  <div style={{fontSize:10,color:"#9ca3af",marginBottom:8,fontWeight:600,letterSpacing:1}}>CLIENTES</div>
                   <div style={{fontSize:28,fontWeight:700,color:"#f59e0b",fontFamily:"'JetBrains Mono',monospace"}}>{clientes.length}</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:4}}>cuentas corrientes</div>
+                  <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>cuentas corrientes</div>
                 </div>
               </div>
               {difPend.length>0&&(
@@ -4133,11 +4133,11 @@ function AppInterna({ usuario }) {
                     const venc=dr===0,urg=dr<=3&&!venc;
                     return <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #1e2535",alignItems:"center"}}>
                       <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-                        <span style={{fontSize:12,fontWeight:700,color:"#475569",fontFamily:"'JetBrains Mono',monospace",minWidth:90}}>{d.fechaAcr}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:"#64748b",fontFamily:"'JetBrains Mono',monospace",minWidth:90}}>{d.fechaAcr}</span>
                         {venc&&<span style={{fontSize:10,fontWeight:700,color:"#f43f5e",background:"#f43f5e15",padding:"2px 7px",borderRadius:4}}>VENCIDO</span>}
                         {urg&&<span style={{fontSize:10,fontWeight:700,color:"#f59e0b",background:"#f59e0b15",padding:"2px 7px",borderRadius:4}}>en {dr}d</span>}
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#334155",background:"#1e2535",padding:"2px 7px",borderRadius:4}}>{dr}d</span>}
-                        {d.cliente&&<span style={{fontSize:11,color:"#64748b"}}>👤 {d.cliente}</span>}
+                        {d.cliente&&<span style={{fontSize:11,color:"#94a3b8"}}>👤 {d.cliente}</span>}
                       </div>
                       <span style={{fontSize:13,fontWeight:700,color:venc?"#f43f5e":urg?"#f59e0b":"#c084fc",fontFamily:"'JetBrains Mono',monospace"}}>${fmt(d.nominal)}</span>
                     </div>;
@@ -4149,7 +4149,7 @@ function AppInterna({ usuario }) {
                 </Card>
               )}
               <Card sx={{border:"1px solid #1e2535"}}>
-                <div style={{fontSize:10,color:"#64748b",fontWeight:700,letterSpacing:1,marginBottom:12}}>ÚLTIMAS OPERACIONES</div>
+                <div style={{fontSize:10,color:"#9ca3af",fontWeight:700,letterSpacing:1,marginBottom:12}}>ÚLTIMAS OPERACIONES</div>
                 {opsHoy.length===0&&<div style={{color:"#334155",fontSize:12}}>Sin operaciones hoy</div>}
                 {[...opsHoy].reverse().slice(0,5).map(op=>{
                   const t=TIPOS_OP[op.tipo]||{label:op.tipo,color:"#64748b"};
@@ -4157,7 +4157,7 @@ function AppInterna({ usuario }) {
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <div style={{width:6,height:6,borderRadius:"50%",background:t.color,flexShrink:0}}/>
                       <span style={{fontSize:12,color:t.color,fontWeight:600}}>{t.label}</span>
-                      {op.cliente&&<span style={{fontSize:11,color:"#475569"}}>{op.cliente}</span>}
+                      {op.cliente&&<span style={{fontSize:11,color:"#94a3b8"}}>{op.cliente}</span>}
                     </div>
                     <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{op.moneda} {fmt(op.monto)}</span>
                   </div>;
@@ -4170,7 +4170,7 @@ function AppInterna({ usuario }) {
         {pant==="ape"&&(
           <div>
             <div style={{fontSize:9,letterSpacing:4,color:"#6366f1",marginBottom:6,fontWeight:600}}>APERTURA DE CAJA</div>
-            <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>{fechaLarga}</div>
+            <div style={{fontSize:12,color:"#94a3b8",marginBottom:20}}>{fechaLarga}</div>
             <Card sx={{maxWidth:460}}>
               {MONEDAS.map(m=>(
                 <div key={m.id} style={{marginBottom:11}}>
@@ -4190,7 +4190,7 @@ function AppInterna({ usuario }) {
           <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
             <div>
               {cajaCerrada&&<div style={{background:"#1c0a0a",border:"1px solid #f43f5e44",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#f87171"}}>CAJA CERRADA - solo lectura</div>}
-              <div style={{fontSize:10,letterSpacing:3,color:"#4b5563",marginBottom:10}}>SALDOS</div>
+              <div style={{fontSize:10,letterSpacing:3,color:"#94a3b8",marginBottom:10}}>SALDOS</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:18}}>
                 {MONEDAS.map(m=>{ const v=saldos[m.id]||0,ed=editSaldo===m.id&&!cajaCerrada;
                   return (
@@ -4210,7 +4210,7 @@ function AppInterna({ usuario }) {
                 })}
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <div style={{fontSize:10,letterSpacing:3,color:"#4b5563"}}>MOVIMIENTOS HOY ({opsHoy.length})</div>
+                <div style={{fontSize:10,letterSpacing:3,color:"#94a3b8"}}>MOVIMIENTOS HOY ({opsHoy.length})</div>
                 <div style={{display:"flex",gap:4}}>
                   {[["todas","Todas"],["ops","Operaciones"],["ajustes","Ajustes"]].map(([v,lbl])=>(
                     <button key={v} onClick={()=>setFiltroOps(v)} style={{padding:"3px 8px",borderRadius:5,background:filtroOps===v?"rgba(255,255,255,0.08)":"transparent",border:"1px solid "+(filtroOps===v?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.05)"),color:filtroOps===v?"#e2e8f0":"#475569",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
@@ -4220,7 +4220,7 @@ function AppInterna({ usuario }) {
                 </div>
               </div>
               <div style={{maxHeight:420,overflowY:"auto"}}>
-                {opsHoy.length===0&&<div style={{color:"#374151"}}>Sin operaciones</div>}
+                {opsHoy.length===0&&<div style={{color:"#64748b"}}>Sin operaciones</div>}
                 {[...opsHoy].reverse()
                   .filter(op=>filtroOps==="todas"?true:filtroOps==="ajustes"?op.tipo==="ajuste":op.tipo!=="ajuste")
                   .map(op=>renderOpRow(op,false,!cajaCerrada))}
@@ -4247,7 +4247,7 @@ function AppInterna({ usuario }) {
                     </div>
                     {/* Toggle impacto en caja de moneda base */}
                     <div style={{marginTop:10,marginBottom:4}}>
-                      <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:6}}>
+                      <div style={{fontSize:9,letterSpacing:2,color:"#94a3b8",marginBottom:6}}>
                         {form.tipo==="compra"?form.moneda+" ENTRAN A CAJA":form.moneda+" SALEN DE CAJA"}
                       </div>
                       <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -4276,7 +4276,7 @@ function AppInterna({ usuario }) {
                                   placeholder={clSel?"Cambiar...":form.tipo==="compra"?"¿Quien nos debe los "+form.moneda+"?":"¿A quien le debemos los "+form.moneda+"?"}
                                   style={{flex:1,background:"#0a0a0a",border:"1px solid #6366f133",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
                                 {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
-                                  style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                  style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                               </div>
                               <div style={{fontSize:9,color:"#6366f1",marginTop:3}}>
                                 {form.tipo==="compra"
@@ -4338,7 +4338,7 @@ function AppInterna({ usuario }) {
                                             <span style={{fontSize:10,color:d.tipo==="efectivo"?"#4ade80":d.tipo==="op_simultanea"?"#f59e0b":"#a5b4fc",fontWeight:600}}>
                                               {d.tipo==="efectivo"?"💵 Efectivo":d.tipo==="op_simultanea"?"⇄ Op. simultánea":d.tipo==="pendiente"?"⏳ Pendiente":clSel?clSel.nombre+" "+clSel.apellido:"?"}
                                             </span>
-                                            <span style={{fontSize:9,color:"#475569"}}>▾</span>
+                                            <span style={{fontSize:9,color:"#9ca3af"}}>▾</span>
                                           </div>
                                         )}
                                         <input
@@ -4348,7 +4348,7 @@ function AppInterna({ usuario }) {
                                           placeholder={busq?" ":"Cambiar..."}
                                           style={{flex:1,minWidth:0,background:"transparent",border:"none",borderBottom:busq?"1px solid #6366f1":"none",padding:"4px 0",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none",display:busq?"block":"none"}}/>
                                         {busq&&<button onClick={()=>setBuscarDesglose(b=>({...b,[d.id]:""}))}
-                                          style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10,flexShrink:0}}>✕</button>}
+                                          style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:10,flexShrink:0}}>✕</button>}
                                       </div>
                                       {mostrarDrop&&(
                                         <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:160,overflowY:"auto",marginTop:2}}>
@@ -4370,7 +4370,7 @@ function AppInterna({ usuario }) {
                                               {cl.nombre} {cl.apellido}
                                             </div>
                                           ))}
-                                          {filtrados.length===0&&busq.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#475569"}}>Sin resultados para "{busq.trim()}"</div>}
+                                          {filtrados.length===0&&busq.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#94a3b8"}}>Sin resultados para "{busq.trim()}"</div>}
                                           {busq.trim()&&(
                                             <div onClick={()=>setNuevoClienteCC({visible:true,nombre:busq.trim(),socio:"Manuel Sala",onCreado:cl=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}})}
                                               style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",fontWeight:700,display:"flex",alignItems:"center",gap:4,background:"rgba(74,222,128,0.05)"}}>
@@ -4517,7 +4517,7 @@ function AppInterna({ usuario }) {
                             </div>
                           ))}
                           <button onClick={()=>setDesglose(p=>[...p,{id:Date.now(),tipo:"efectivo",monto:"",impactaCaja:true}])}
-                            style={{marginTop:4,padding:"5px 12px",borderRadius:5,background:"transparent",border:"1px dashed #374151",color:"#6b7280",fontFamily:"inherit",fontSize:11,cursor:"pointer",width:"100%"}}>
+                            style={{marginTop:4,padding:"5px 12px",borderRadius:5,background:"transparent",border:"1px dashed #374151",color:"#9ca3af",fontFamily:"inherit",fontSize:11,cursor:"pointer",width:"100%"}}>
                             + Agregar linea
                           </button>
                           {/* USD pendiente de entrega */}
@@ -4551,7 +4551,7 @@ function AppInterna({ usuario }) {
                                             placeholder={clSel&&!usdPendiente.buscar?"Cambiar...":"Buscar cliente..."}
                                             style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
                                           {usdPendiente.clienteId&&<button onClick={()=>setUsdPendiente(u=>({...u,clienteId:"",buscar:""}))}
-                                            style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                            style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                                         </div>
                                         {usdPendiente.buscar&&filtrados.length>0&&(
                                           <div style={{position:"absolute",left:8,right:8,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
@@ -4606,11 +4606,11 @@ function AppInterna({ usuario }) {
                       <Lbl>F. acreditacion <span style={{fontSize:9,color:"#6366f1"}}>+2h habiles</span></Lbl>
                       <Inp type="date" value={form.dfa} onChange={e=>setF("dfa",e.target.value)}/>
                     </div>
-                    <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#6b7280"}}>{calcDif?.dias||0}d</span></div>
+                    <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#9ca3af"}}>{calcDif?.dias||0}d</span></div>
                   </div>
                   {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",6),fontSize:11}}>
                     {[["Post-gest.",fmt(calcDif.postG),"#9ca3af"],["Tasa",calcDif.tasaD.toFixed(2)+"%","#9ca3af"],["Pagas",fmt(calcDif.mFinal),"#f87171"],["Ganancia",fmt(calcDif.ganancia),"#4ade80"]].map(([k,v,c])=>(
-                      <div key={k}><div style={{color:"#4b5563",marginBottom:2}}>{k}</div><div style={{color:c,fontWeight:700}}>${v}</div></div>
+                      <div key={k}><div style={{color:"#94a3b8",marginBottom:2}}>{k}</div><div style={{color:c,fontWeight:700}}>${v}</div></div>
                     ))}
                   </div>}
                   {/* Cómo pagás al cliente */}
@@ -4637,7 +4637,7 @@ function AppInterna({ usuario }) {
                                 {clCC.nombre} {clCC.apellido||""}
                               </div>
                               <button type="button" onClick={()=>{setF("pagoCheqDifCCId","");setF("pagoCheqDifCCBuscar","");}}
-                                style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button>
+                                style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:11}}>✕</button>
                             </div>
                           ):(
                             <input placeholder="Buscar CC..." value={form.pagoCheqDifCCBuscar||""} onChange={e=>setF("pagoCheqDifCCBuscar",e.target.value)}
@@ -4681,14 +4681,14 @@ function AppInterna({ usuario }) {
                           <input value={form.ccOrigenBuscar||""} onChange={e=>setF("ccOrigenBuscar",e.target.value)}
                             placeholder={clOrigen&&!form.ccOrigenBuscar?"Cambiar...":"Buscar origen..."}
                             style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                          {form.ccOrigenId&&<button onClick={()=>setF("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                          {form.ccOrigenId&&<button onClick={()=>setF("ccOrigenId","")} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                         </div>
                         {form.ccOrigenBuscar&&<DropdownCC buscar={form.ccOrigenBuscar} filtrados={filtOrigen} onSelect={cl=>{setF("ccOrigenId",String(cl.id));setF("ccOrigenBuscar","");}} onCrear={nombre=>setNuevoClienteCC({visible:true,nombre,socio:"Manuel Sala",onCreado:cl=>{setF("ccOrigenId",String(cl.id));}})}/>}
                       </div>
                       {tn>0&&<div style={{background:"#0a1220",border:"1px solid #3b82f633",borderRadius:6,padding:"8px 10px",fontSize:11,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-                        <span style={{color:"#6b7280"}}>Total enviado: <strong style={{color:"#e2e8f0"}}>{fmt(tn)}</strong></span>
-                        <span style={{color:"#6b7280"}}>Com. origen ({pctOr}%): <strong style={{color:"#f59e0b"}}>-{fmt(comOr)}</strong></span>
-                        <span style={{color:"#6b7280"}}>Neto a distribuir: <strong style={{color:"#4ade80"}}>{fmt(netoOr)}</strong></span>
+                        <span style={{color:"#9ca3af"}}>Total enviado: <strong style={{color:"#e2e8f0"}}>{fmt(tn)}</strong></span>
+                        <span style={{color:"#9ca3af"}}>Com. origen ({pctOr}%): <strong style={{color:"#f59e0b"}}>-{fmt(comOr)}</strong></span>
+                        <span style={{color:"#9ca3af"}}>Neto a distribuir: <strong style={{color:"#4ade80"}}>{fmt(netoOr)}</strong></span>
                       </div>}
                       <div style={{borderTop:"1px solid #1f2937",paddingTop:10}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -4703,7 +4703,7 @@ function AppInterna({ usuario }) {
                           return (
                             <div key={dest.id} style={{background:"#0a0f0a",border:"1px solid #1f2937",borderRadius:7,padding:10,marginBottom:8,display:"flex",flexDirection:"column",gap:6}}>
                               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                                <span style={{fontSize:10,color:"#6b7280",fontWeight:600}}>Destino {idx+1}</span>
+                                <span style={{fontSize:10,color:"#9ca3af",fontWeight:600}}>Destino {idx+1}</span>
                                 {tDestinos.length>1&&<button onClick={()=>setTDestinos(p=>p.filter(d=>d.id!==dest.id))} style={{padding:"2px 7px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#f87171",cursor:"pointer",fontSize:9}}>✕</button>}
                               </div>
                               <div style={{position:"relative"}}>
@@ -4712,7 +4712,7 @@ function AppInterna({ usuario }) {
                                   <input value={dest.buscar||""} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,buscar:e.target.value}:d))}
                                     placeholder={clDest&&!dest.buscar?"Cambiar cliente...":"Buscar cliente destino..."}
                                     style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                                  {dest.clienteId&&<button onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:"",buscar:""}:d))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                  {dest.clienteId&&<button onClick={()=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:"",buscar:""}:d))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                                 </div>
                                 {dest.buscar&&<DropdownCC buscar={dest.buscar} filtrados={filtDest} onSelect={cl=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:String(cl.id),buscar:""}:d))} onCrear={nombre=>setNuevoClienteCC({visible:true,nombre,socio:"Manuel Sala",onCreado:cl=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,clienteId:String(cl.id),buscar:""}:d))})}/>}
                               </div>
@@ -4721,7 +4721,7 @@ function AppInterna({ usuario }) {
                                 <div><Lbl>% Comisión</Lbl><Inp type="number" placeholder="0" value={dest.pct} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,pct:e.target.value}:d))}/></div>
                                 <div><Lbl>Nota</Lbl><Inp placeholder="opcional" value={dest.nota} onChange={e=>setTDestinos(p=>p.map(d=>d.id===dest.id?{...d,nota:e.target.value}:d))}/></div>
                               </div>
-                              {mDest>0&&<div style={{fontSize:10,color:"#6b7280",display:"flex",gap:12}}>
+                              {mDest>0&&<div style={{fontSize:10,color:"#9ca3af",display:"flex",gap:12}}>
                                 <span>Recibe: <strong style={{color:"#e2e8f0"}}>{fmt(mDest)}</strong></span>
                                 {pDest>0&&<span>Com ({pDest}%): <strong style={{color:"#f59e0b"}}>+{fmt(comDest)}</strong></span>}
                                 <span>DEBE en CC: <strong style={{color:"#4ade80"}}>{fmt(mDest+comDest)}</strong></span>
@@ -4731,8 +4731,8 @@ function AppInterna({ usuario }) {
                         })}
                       </div>
                       {tn>0&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",flexDirection:"column",gap:4}}>
-                        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
-                        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
+                        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
+                        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
                         <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
                           <span style={{color:Math.abs(diferencia)<0.01?"#6b7280":"#f87171",fontWeight:600}}>Diferencia:</span>
                           <strong style={{color:Math.abs(diferencia)<0.01?"#4ade80":"#f87171"}}>{Math.abs(diferencia)<0.01?"✓ Cuadra":fmt(diferencia)}</strong>
@@ -4756,7 +4756,7 @@ function AppInterna({ usuario }) {
                         style={{padding:"4px 10px",borderRadius:5,background:refForm.activo?"rgba(251,146,60,0.15)":"transparent",border:"1px solid "+(refForm.activo?"#fb923c":"#374151"),color:refForm.activo?"#fb923c":"#6b7280",fontFamily:"inherit",fontSize:10,cursor:"pointer",fontWeight:600}}>
                         {refForm.activo?"⬡ Con referidor":"○ Sin referidor"}
                       </button>
-                      {refForm.activo&&<span style={{fontSize:10,color:"#6b7280"}}>Comisión → CC referidor en ARS automático</span>}
+                      {refForm.activo&&<span style={{fontSize:10,color:"#9ca3af"}}>Comisión → CC referidor en ARS automático</span>}
                     </div>
                     {refForm.activo&&(()=>{
                       const clRef=clientes.find(x=>x.id===Number(refForm.clienteId));
@@ -4772,7 +4772,7 @@ function AppInterna({ usuario }) {
                               <input value={refForm.buscar||""} onChange={e=>setRefForm(p=>({...p,buscar:e.target.value}))}
                                 placeholder={clRef&&!refForm.buscar?"Cambiar...":"Buscar referidor..."}
                                 style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                              {refForm.clienteId&&<button onClick={()=>setRefForm(p=>({...p,clienteId:"",buscar:""}))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                              {refForm.clienteId&&<button onClick={()=>setRefForm(p=>({...p,clienteId:"",buscar:""}))} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                             </div>
                             {refForm.buscar&&filtRef.length>0&&(
                               <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
@@ -4795,8 +4795,8 @@ function AppInterna({ usuario }) {
                           </div>
                           {comARS>0&&(
                             <div style={{gridColumn:"1/-1",background:"rgba(251,146,60,0.08)",border:"1px solid rgba(251,146,60,0.2)",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
-                              <span style={{color:"#6b7280"}}>Comisión: <strong style={{color:"#fb923c"}}>${fmt(Math.round(comARS))} ARS</strong></span>
-                              <span style={{color:"#4b5563",fontSize:10}}>{fmt(cantUSD)} USD × (${fmt(cotizRef)}-${fmt(cotizTuya)}) — op a ${fmt(cotizTuya)}</span>
+                              <span style={{color:"#9ca3af"}}>Comisión: <strong style={{color:"#fb923c"}}>${fmt(Math.round(comARS))} ARS</strong></span>
+                              <span style={{color:"#94a3b8",fontSize:10}}>{fmt(cantUSD)} USD × (${fmt(cotizRef)}-${fmt(cotizTuya)}) — op a ${fmt(cotizTuya)}</span>
                               <span style={{color:"#fb923c",fontSize:10,fontWeight:600}}>→ CC {clRef?clRef.nombre:"referidor"}</span>
                             </div>
                           )}
@@ -4885,7 +4885,7 @@ function AppInterna({ usuario }) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
                 <div>
                   <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:2}}>LIBRO DE CAJA — {fechaLarga}</div>
-                  <div style={{fontSize:11,color:"#4b5563"}}>{opsHoy.length} operaciones · extracto con saldo corriente</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>{opsHoy.length} operaciones · extracto con saldo corriente</div>
                 </div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {MONEDAS.map(m=>{
@@ -4903,7 +4903,7 @@ function AppInterna({ usuario }) {
                 <Card key={mon.id} sx={{marginBottom:14,border:"1px solid "+mon.color+"22"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                     <span style={{fontSize:12,fontWeight:700,color:mon.color}}>{mon.id} — {mon.label}</span>
-                    <span style={{fontSize:11,color:"#6b7280"}}>{mon.simbolo}{fmt(ini)} → <strong style={{color:"#fff"}}>{mon.simbolo}{fmt(fin)}</strong>
+                    <span style={{fontSize:11,color:"#9ca3af"}}>{mon.simbolo}{fmt(ini)} → <strong style={{color:"#fff"}}>{mon.simbolo}{fmt(fin)}</strong>
                       <span style={{marginLeft:8,color:fin-ini>0?"#4ade80":fin-ini<0?"#f87171":"#475569",fontWeight:700}}>{fin-ini>0?"+":""}{mon.simbolo}{fmt(fin-ini)}</span>
                     </span>
                   </div>
@@ -4912,14 +4912,14 @@ function AppInterna({ usuario }) {
                       <thead>
                         <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
                           {["Hora","Concepto","Detalle","Entrada","Salida","Saldo"].map(h=>(
-                            <th key={h} style={{textAlign:["Hora","Concepto","Detalle"].includes(h)?"left":"right",padding:"6px 8px",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                            <th key={h} style={{textAlign:["Hora","Concepto","Detalle"].includes(h)?"left":"right",padding:"6px 8px",color:"#94a3b8",fontSize:9,fontWeight:600}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {filas.map((f,i)=>(
                           <tr key={f.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:f.origen==="ini"?"rgba(255,255,255,0.02)":f.esCC?"rgba(99,102,241,0.03)":f.origen==="cc"?"rgba(99,102,241,0.04)":"transparent"}}>
-                            <td style={{padding:"7px 8px",color:"#475569",whiteSpace:"nowrap",fontSize:10}}>{f.hora}</td>
+                            <td style={{padding:"7px 8px",color:"#64748b",whiteSpace:"nowrap",fontSize:10}}>{f.hora}</td>
                             <td style={{padding:"7px 8px",color:f.esCC?"#a5b4fc":"#e2e8f0",fontWeight:f.origen==="ini"?600:400}}>
                               {f.origen==="cc"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc",marginRight:6}}>CC</span>}
                               {f.esCC&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.12)",color:"#a5b4fc",marginRight:6}}>⇄ CC</span>}
@@ -4935,7 +4935,7 @@ function AppInterna({ usuario }) {
                       </tbody>
                       <tfoot>
                         <tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
-                          <td colSpan={3} style={{padding:"8px",fontSize:10,color:"#6b7280",fontWeight:600}}>SALDO FINAL</td>
+                          <td colSpan={3} style={{padding:"8px",fontSize:10,color:"#9ca3af",fontWeight:600}}>SALDO FINAL</td>
                           <td style={{padding:"8px",textAlign:"right",color:"#4ade80",fontWeight:700}}>{mon.simbolo}{fmt(filas.filter(f=>f.entrada&&f.monto>0).reduce((s,f)=>s+f.monto,0))}</td>
                           <td style={{padding:"8px",textAlign:"right",color:"#f87171",fontWeight:700}}>{mon.simbolo}{fmt(filas.filter(f=>!f.entrada&&f.monto>0).reduce((s,f)=>s+f.monto,0))}</td>
                           <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:fin>0?"#4ade80":fin<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{mon.simbolo}{fmt(fin)}</td>
@@ -4948,7 +4948,7 @@ function AppInterna({ usuario }) {
               {Object.keys(extractoPorMoneda).length===0&&(
                 <Card sx={{textAlign:"center",padding:40}}>
                   <div style={{fontSize:24,marginBottom:8}}>📒</div>
-                  <div style={{color:"#374151"}}>Sin movimientos hoy</div>
+                  <div style={{color:"#64748b"}}>Sin movimientos hoy</div>
                 </Card>
               )}
             </div>
@@ -4965,7 +4965,7 @@ function AppInterna({ usuario }) {
             {mostrarFormDif&&(
               <Card sx={{marginBottom:16,border:"1px solid #c084fc44"}}>
                 <div style={{fontSize:10,letterSpacing:3,color:"#c084fc",marginBottom:12}}>REGISTRAR CHEQUE A COBRAR</div>
-                <div style={{fontSize:11,color:"#4b5563",marginBottom:12}}>Solo para cheques ya entregados — no impacta saldo de caja, solo queda como activo a cobrar.</div>
+                <div style={{fontSize:11,color:"#94a3b8",marginBottom:12}}>Solo para cheques ya entregados — no impacta saldo de caja, solo queda como activo a cobrar.</div>
                 <div style={S.grid("1fr 1fr",10)}>
                   <div><Lbl>Cliente / Empresa</Lbl><Inp placeholder="Nombre..." value={formDifManual.cliente} onChange={e=>setFormDifManual(f=>({...f,cliente:e.target.value}))}/></div>
                   <div><Lbl>Nominal a cobrar $</Lbl><Inp type="number" placeholder="0" value={formDifManual.nominal} onChange={e=>setFormDifManual(f=>({...f,nominal:e.target.value}))}/></div>
@@ -4987,7 +4987,7 @@ function AppInterna({ usuario }) {
                 </button>
               </Card>
             )}
-            {diferidos.filter(d=>!d.cobrado).length===0&&<div style={{color:"#374151",fontSize:12}}>Sin diferidos pendientes</div>}
+            {diferidos.filter(d=>!d.cobrado).length===0&&<div style={{color:"#64748b",fontSize:12}}>Sin diferidos pendientes</div>}
             {[...diferidos.filter(d=>!d.cobrado)].sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).map(d=>{
               const dr=diasEntre(hoy,d.fechaAcr),venc=dr===0,urg=dr<=3&&!venc;
               return (
@@ -4998,18 +4998,18 @@ function AppInterna({ usuario }) {
                         {d.manual&&<span style={{fontSize:9,color:"#c084fc",background:"#c084fc11",padding:"1px 6px",borderRadius:4,border:"1px solid #c084fc33"}}>MANUAL</span>}
                         {venc&&<span style={{fontSize:10,color:"#f43f5e",fontWeight:700}}>VENCIDO</span>}
                         {urg&&<span style={{fontSize:10,color:"#f59e0b",fontWeight:700}}>VENCE EN {dr}d</span>}
-                        {!venc&&!urg&&<span style={{fontSize:10,color:"#6b7280"}}>Acredita {d.fechaAcr} - {dr}d</span>}
+                        {!venc&&!urg&&<span style={{fontSize:10,color:"#9ca3af"}}>Acredita {d.fechaAcr} - {dr}d</span>}
                         {d.cliente&&<span style={{fontSize:10,color:"#9ca3af"}}>👤 {d.cliente}</span>}
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
                         {/* Fila nominal */}
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <span style={{fontSize:10,color:"#6b7280"}}>Nominal</span>
+                          <span style={{fontSize:10,color:"#9ca3af"}}>Nominal</span>
                           <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>${fmt(d.nominal)}</span>
                         </div>
                         {/* Fila pagaste al cliente */}
                         {!d.manual&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <span style={{fontSize:10,color:"#6b7280"}}>Pagaste al cliente</span>
+                          <span style={{fontSize:10,color:"#9ca3af"}}>Pagaste al cliente</span>
                           <span style={{fontSize:12,fontWeight:600,color:"#f87171"}}>-${fmt(d.mFinal||d.nominal)}</span>
                         </div>}
                         {/* Fila empresa te paga - solo si tiene tasa endoso */}
@@ -5018,7 +5018,7 @@ function AppInterna({ usuario }) {
                           const gananciaNeta=empresaPaga-(d.mFinal||d.nominal);
                           return (<>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                              <span style={{fontSize:10,color:"#6b7280"}}>Empresa te paga ({d.tasaEndoso}%)</span>
+                              <span style={{fontSize:10,color:"#9ca3af"}}>Empresa te paga ({d.tasaEndoso}%)</span>
                               <span style={{fontSize:12,fontWeight:600,color:"#c084fc"}}>${fmt(empresaPaga)}</span>
                             </div>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px solid #1f2937",paddingTop:4}}>
@@ -5042,11 +5042,11 @@ function AppInterna({ usuario }) {
                         return (
                           <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
                             {d.fechaVenc&&<div style={{padding:"3px 8px",borderRadius:5,background:drVenc===0?"rgba(244,63,94,0.15)":drVenc<=2?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drVenc===0?"#f43f5e44":drVenc<=2?"#f59e0b44":"#1f2937")}}>
-                              <span style={{fontSize:9,color:"#6b7280"}}>📋 Depositar: </span>
+                              <span style={{fontSize:9,color:"#9ca3af"}}>📋 Depositar: </span>
                               <span style={{fontSize:10,fontWeight:600,color:drVenc===0?"#f43f5e":drVenc<=2?"#f59e0b":"#9ca3af"}}>{d.fechaVenc}{drVenc!==null&&<span> ({drVenc===0?"HOY":drVenc+"d"})</span>}</span>
                             </div>}
                             {d.fechaAcr&&<div style={{padding:"3px 8px",borderRadius:5,background:drAcr===0?"rgba(99,102,241,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(drAcr===0?"#6366f144":"#1f2937")}}>
-                              <span style={{fontSize:9,color:"#6b7280"}}>💰 Acreditacion: </span>
+                              <span style={{fontSize:9,color:"#9ca3af"}}>💰 Acreditacion: </span>
                               <span style={{fontSize:10,fontWeight:600,color:drAcr===0?"#a5b4fc":"#9ca3af"}}>{d.fechaAcr}{drAcr!==null&&<span> ({drAcr===0?"HOY":drAcr+"d"})</span>}</span>
                             </div>}
                           </div>
@@ -5054,7 +5054,7 @@ function AppInterna({ usuario }) {
                       })()}
                       <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap",alignItems:"center"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4}}>
-                          <span style={{fontSize:9,color:"#4b5563"}}>COBRO:</span>
+                          <span style={{fontSize:9,color:"#94a3b8"}}>COBRO:</span>
                           <input type="date" value={d.fechaCobro||""} onChange={async e=>{
                             const val=e.target.value;
                             await SB.from("diferidos").update({fecha_cobro:val}).eq("id",d.id);
@@ -5062,13 +5062,13 @@ function AppInterna({ usuario }) {
                           }} style={{background:"transparent",border:"1px solid #1f2937",borderRadius:4,padding:"2px 6px",color:"#9ca3af",fontFamily:"inherit",fontSize:10,cursor:"pointer"}}/>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:4}}>
-                          <span style={{fontSize:9,color:"#4b5563"}}>TASA ENDOSO:</span>
+                          <span style={{fontSize:9,color:"#94a3b8"}}>TASA ENDOSO:</span>
                           <input type="number" placeholder="0" value={d.tasaEndoso||""} onChange={async e=>{
                             const val=e.target.value;
                             await SB.from("diferidos").update({tasa_endoso:val}).eq("id",d.id);
                             setDiferidos(p=>p.map(x=>x.id!==d.id?x:{...x,tasaEndoso:val}));
                           }} style={{background:"transparent",border:"1px solid #1f2937",borderRadius:4,padding:"2px 6px",color:"#9ca3af",fontFamily:"inherit",fontSize:10,width:50}}/>
-                          <span style={{fontSize:9,color:"#4b5563"}}>%</span>
+                          <span style={{fontSize:9,color:"#94a3b8"}}>%</span>
                           {d.tasaEndoso&&parse(d.tasaEndoso)>0&&(()=>{
                             const neto=(d.mFinal||d.nominal)*(1-parse(d.tasaEndoso)/100);
                             return <span style={{fontSize:10,color:"#4ade80",fontWeight:700,marginLeft:6}}>→ ${fmt(neto)} neto</span>;
@@ -5110,7 +5110,7 @@ function AppInterna({ usuario }) {
                                   <input value={cobrandoDifCC.buscar||""} onChange={e=>setCobrandoDifCC(p=>({...p,buscar:e.target.value}))}
                                     placeholder={clSel&&!cobrandoDifCC.buscar?"Cambiar...":"Buscar cliente..."}
                                     style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 7px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                                  {cobrandoDifCC.clienteId&&<button onClick={()=>setCobrandoDifCC(p=>({...p,clienteId:"",buscar:""}))} style={{padding:"2px 5px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                  {cobrandoDifCC.clienteId&&<button onClick={()=>setCobrandoDifCC(p=>({...p,clienteId:"",buscar:""}))} style={{padding:"2px 5px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                                 </div>
                                 {cobrandoDifCC.buscar&&<DropdownCC buscar={cobrandoDifCC.buscar} filtrados={filtCC} onSelect={cl=>setCobrandoDifCC(p=>({...p,clienteId:String(cl.id),buscar:""}))} onCrear={nombre=>setNuevoClienteCC({visible:true,nombre,socio:"Manuel Sala",onCreado:cl=>setCobrandoDifCC(p=>({...p,clienteId:String(cl.id),buscar:""}))})}/>}
                               </div>
@@ -5170,7 +5170,7 @@ function AppInterna({ usuario }) {
                     setClientes(p=>p.map(x=>x.id!==editandoCliente?x:{...x,...editClienteV}));
                     setEditandoCliente(null); notify("Cliente actualizado");
                   }} style={{padding:"7px 16px",borderRadius:6,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>Guardar</button>
-                  <button onClick={()=>setEditandoCliente(null)} style={{padding:"7px 14px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#4b5563",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                  <button onClick={()=>setEditandoCliente(null)} style={{padding:"7px 14px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#94a3b8",fontFamily:"inherit",fontSize:12,cursor:"pointer"}}>Cancelar</button>
                 </div>
               </Card>
             )}
@@ -5190,14 +5190,14 @@ function AppInterna({ usuario }) {
                           style={{width:22,height:22,borderRadius:4,background:c.oculto?"rgba(248,113,113,0.1)":"transparent",border:"1px solid "+(c.oculto?"#f87171":"#374151"),color:c.oculto?"#f87171":"#4b5563",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
                           {c.oculto?"👁":"○"}
                         </button>
-                        <button onClick={e=>{e.stopPropagation();eliminarCliente(c.id);}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
+                        <button onClick={e=>{e.stopPropagation();eliminarCliente(c.id);}} style={{width:22,height:22,borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#94a3b8",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>x</button>
                       </div>
                     </div>
                     <div style={{cursor:"pointer"}} onClick={()=>{setClienteActivo(c.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:"",impactaCaja:true});}}>
                       <div style={{fontWeight:700,marginBottom:5}}>{c.nombre} {c.apellido}</div>
                       {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
                         return <div key={m.id} style={{fontSize:11,color:v>0?"#4ade80":"#f87171",marginBottom:2}}>{v>0?"Me debe":"Le debo"} {m.simbolo}{fmt(Math.abs(v))} {m.id}</div>;})}
-                      {MONEDAS.every(m=>!sal[m.id])&&<div style={{fontSize:11,color:"#374151"}}>Sin movimientos</div>}
+                      {MONEDAS.every(m=>!sal[m.id])&&<div style={{fontSize:11,color:"#94a3b8"}}>Sin movimientos</div>}
                     </div>
                   </Card>
                 );
@@ -5217,7 +5217,7 @@ function AppInterna({ usuario }) {
               <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:18}}>
                 {MONEDAS.map(m=>{ const v=sal[m.id]; if(!v) return null;
                   return <div key={m.id} style={{background:"#111",border:"1px solid "+(v>0?"#f4433633":"#22c55e33"),borderRadius:6,padding:"7px 11px"}}>
-                    <div style={{fontSize:9,color:"#6b7280",marginBottom:2}}>{m.id}</div>
+                    <div style={{fontSize:9,color:"#9ca3af",marginBottom:2}}>{m.id}</div>
                     <div style={{fontWeight:700,color:v>0?"#4ade80":"#f87171"}}>{v>0?"Me debe":"Le debo"} {m.simbolo}{fmt(Math.abs(v))}</div>
                   </div>;})}
               </div>
@@ -5275,7 +5275,7 @@ function AppInterna({ usuario }) {
                           {MONEDAS.filter(m=>saldoCC(c)[m.id]!==0).map(m=>{
                             const sal=saldoCC(c)[m.id];
                             return <div key={m.id} style={{padding:"3px 8px",borderRadius:4,background:"rgba(255,255,255,0.03)",border:"1px solid #1f2937",fontSize:10}}>
-                              <span style={{color:"#6b7280"}}>{m.id}: </span>
+                              <span style={{color:"#9ca3af"}}>{m.id}: </span>
                               <span style={{color:sal>0?"#4ade80":"#f87171",fontWeight:600}}>{sal>0?"nos debe ":"le debemos "}{m.simbolo}{fmt(Math.abs(sal))}</span>
                             </div>;
                           })}
@@ -5297,7 +5297,7 @@ function AppInterna({ usuario }) {
                         {montoOrigen>0&&convertirCC.cotiz&&(
                           <div style={{marginTop:8,padding:"8px 10px",borderRadius:6,background:"rgba(45,212,191,0.08)",border:"1px solid #2dd4bf33",fontSize:11}}>
                             <div style={{color:"#2dd4bf",fontWeight:600,marginBottom:4}}>{textoPreview}</div>
-                            <div style={{color:"#6b7280",fontSize:10}}>
+                            <div style={{color:"#9ca3af",fontSize:10}}>
                               Cancela: {fmt(montoOrigen)} {monO} → Crea: {fmt(montoDestino)} {monD}
                             </div>
                           </div>
@@ -5377,11 +5377,11 @@ function AppInterna({ usuario }) {
                       </div>
                       <div style={{...S.grid("1fr 1fr",8),marginTop:8}}>
                         <div>
-                          <Lbl>% Com. origen <span style={{color:"#4b5563",fontSize:9}}>(opcional)</span></Lbl>
+                          <Lbl>% Com. origen <span style={{color:"#94a3b8",fontSize:9}}>(opcional)</span></Lbl>
                           <Inp type="number" placeholder="0" value={transCC.pctOrigen} onChange={e=>setTransCC(t=>({...t,pctOrigen:e.target.value}))}/>
                         </div>
                         <div>
-                          <Lbl>% Com. destino <span style={{color:"#4b5563",fontSize:9}}>(opcional)</span></Lbl>
+                          <Lbl>% Com. destino <span style={{color:"#94a3b8",fontSize:9}}>(opcional)</span></Lbl>
                           <Inp type="number" placeholder="0" value={transCC.pctDestino} onChange={e=>setTransCC(t=>({...t,pctDestino:e.target.value}))}/>
                         </div>
                       </div>
@@ -5392,14 +5392,14 @@ function AppInterna({ usuario }) {
                         return (
                           <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
                             {transCC.pctOrigen&&<div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(74,222,128,0.06)",border:"1px solid #4ade8022",fontSize:10}}>
-                              <span style={{color:"#4b5563"}}>Origen recibe: </span>
+                              <span style={{color:"#94a3b8"}}>Origen recibe: </span>
                               <span style={{color:"#4ade80",fontWeight:700}}>{MONEDAS.find(m=>m.id===transCC.moneda)?.simbolo}{fmt(m-comO)}</span>
-                              <span style={{color:"#374151"}}> (com. ${fmt(comO)})</span>
+                              <span style={{color:"#64748b"}}> (com. ${fmt(comO)})</span>
                             </div>}
                             {transCC.pctDestino&&<div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(248,113,113,0.06)",border:"1px solid #f8717122",fontSize:10}}>
-                              <span style={{color:"#4b5563"}}>Destino debe: </span>
+                              <span style={{color:"#94a3b8"}}>Destino debe: </span>
                               <span style={{color:"#f87171",fontWeight:700}}>{MONEDAS.find(m=>m.id===transCC.moneda)?.simbolo}{fmt(m+comD)}</span>
-                              <span style={{color:"#374151"}}> (com. ${fmt(comD)})</span>
+                              <span style={{color:"#64748b"}}> (com. ${fmt(comD)})</span>
                             </div>}
                           </div>
                         );
@@ -5413,11 +5413,11 @@ function AppInterna({ usuario }) {
                         return (
                           <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
                             <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(255,255,255,0.03)",fontSize:10}}>
-                              <span style={{color:"#6b7280"}}>{c.nombre}: </span>
+                              <span style={{color:"#9ca3af"}}>{c.nombre}: </span>
                               <span style={{color:salOrigen>0?"#4ade80":"#f87171",fontWeight:600}}>{mon?.simbolo}{fmt(salOrigen)}</span>
                             </div>
                             <div style={{flex:1,padding:"4px 8px",borderRadius:5,background:"rgba(255,255,255,0.03)",fontSize:10}}>
-                              <span style={{color:"#6b7280"}}>{clDest?.nombre}: </span>
+                              <span style={{color:"#9ca3af"}}>{clDest?.nombre}: </span>
                               <span style={{color:salDestino>0?"#4ade80":"#f87171",fontWeight:600}}>{mon?.simbolo}{fmt(salDestino)}</span>
                             </div>
                           </div>
@@ -5494,7 +5494,7 @@ function AppInterna({ usuario }) {
                 </Card>
                 <Card sx={{maxHeight:600,overflowY:"auto"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                    <div style={{fontSize:10,letterSpacing:3,color:"#6b7280"}}>HISTORIAL ({c.movimientos.length})</div>
+                    <div style={{fontSize:10,letterSpacing:3,color:"#9ca3af"}}>HISTORIAL ({c.movimientos.length})</div>
                     <button onClick={()=>setExportCC(e=>({...e,mostrando:!e.mostrando}))} style={{padding:"4px 10px",borderRadius:6,background:"rgba(99,102,241,0.1)",border:"1px solid rgba(99,102,241,0.3)",color:"#a5b4fc",fontFamily:"inherit",fontSize:10,fontWeight:600,cursor:"pointer"}}>
                       ⬇ Exportar PDF
                     </button>
@@ -5600,7 +5600,7 @@ function AppInterna({ usuario }) {
                           setClientes(p=>p.map(x=>x.id!==clienteActivo?x:{...x,movimientos:x.movimientos.map(m=>m.id!==editandoMov?m:{...m,tipo:editMovV.tipo,moneda:editMovV.moneda,monto,nota:editMovV.nota})}));
                           setEditandoMov(null); notify("Movimiento editado");
                         }} style={{flex:1,padding:"7px",borderRadius:6,background:"#0a1a2e",border:"1px solid #38bdf8",color:"#38bdf8",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>Guardar</button>
-                        <button onClick={()=>setEditandoMov(null)} style={{padding:"7px 12px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#4b5563",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>Cancelar</button>
+                        <button onClick={()=>setEditandoMov(null)} style={{padding:"7px 12px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#94a3b8",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>Cancelar</button>
                       </div>
                     </div>
                   )}
@@ -5653,21 +5653,21 @@ function AppInterna({ usuario }) {
                         </div>
                         {/* Filtros fecha */}
                         <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
-                          <span style={{fontSize:10,color:"#4b5563"}}>Filtrar:</span>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>Filtrar:</span>
                           <input type="date" value={ccFiltro.desde} onChange={e=>setCcFiltro(p=>({...p,desde:e.target.value}))}
                             style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
-                          <span style={{fontSize:10,color:"#4b5563"}}>→</span>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>→</span>
                           <input type="date" value={ccFiltro.hasta} onChange={e=>setCcFiltro(p=>({...p,hasta:e.target.value}))}
                             style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
                           {(ccFiltro.desde||ccFiltro.hasta)&&<button onClick={()=>setCcFiltro({desde:"",hasta:""})}
-                            style={{padding:"3px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",fontFamily:"inherit",fontSize:9,cursor:"pointer"}}>✕ Limpiar</button>}
+                            style={{padding:"3px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#9ca3af",fontFamily:"inherit",fontSize:9,cursor:"pointer"}}>✕ Limpiar</button>}
                           <span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:saldoFinal>0?"#4ade80":saldoFinal<0?"#f87171":"#6b7280"}}>
                             {saldoFinal>0?"Me debe":"Le debo"} {mon?.simbolo}{fmt(Math.abs(saldoFinal))}
                           </span>
                         </div>
                         {/* Saldo anterior si hay filtro */}
                         {filtDesde&&<div style={{padding:"6px 10px",marginBottom:8,borderRadius:5,background:"rgba(255,255,255,0.03)",border:"1px solid #1f2937",fontSize:11,display:"flex",justifyContent:"space-between"}}>
-                          <span style={{color:"#4b5563"}}>Saldo anterior al {filtDesde}:</span>
+                          <span style={{color:"#94a3b8"}}>Saldo anterior al {filtDesde}:</span>
                           <strong style={{color:saldoAnterior>0?"#4ade80":saldoAnterior<0?"#f87171":"#6b7280"}}>{saldoAnterior>0?"+":""}{mon?.simbolo}{fmt(saldoAnterior)}</strong>
                         </div>}
                         {/* Tabla movimientos */}
@@ -5675,12 +5675,12 @@ function AppInterna({ usuario }) {
                           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                             <thead>
                               <tr style={{borderBottom:"1px solid #1f2937"}}>
-                                <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#4b5563",fontWeight:600}}>FECHA</th>
-                                <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#4b5563",fontWeight:600}}>CONCEPTO</th>
+                                <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#94a3b8",fontWeight:600}}>FECHA</th>
+                                <th style={{textAlign:"left",padding:"5px 8px",fontSize:9,color:"#94a3b8",fontWeight:600}}>CONCEPTO</th>
                                 <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#4ade80",fontWeight:600}}>DEBE</th>
                                 <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#f87171",fontWeight:600}}>HABER</th>
-                                <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#6b7280",fontWeight:600}}>SALDO</th>
-                                <th style={{padding:"5px 4px",fontSize:9,color:"#4b5563",fontWeight:600}}></th>
+                                <th style={{textAlign:"right",padding:"5px 8px",fontSize:9,color:"#9ca3af",fontWeight:600}}>SALDO</th>
+                                <th style={{padding:"5px 4px",fontSize:9,color:"#94a3b8",fontWeight:600}}></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -5690,7 +5690,7 @@ function AppInterna({ usuario }) {
                                 const haber=ing?mv.monto:null;
                                 return (
                                   <tr key={mv.id} style={{borderBottom:"1px solid #0f0f0f",background:"rgba(255,255,255,0.01)"}}>
-                                    <td style={{padding:"6px 8px",color:"#475569",whiteSpace:"nowrap"}}>{mv.fecha||""}</td>
+                                    <td style={{padding:"6px 8px",color:"#64748b",whiteSpace:"nowrap"}}>{mv.fecha||""}</td>
                                     <td style={{padding:"6px 8px",color:"#94a3b8"}}>
                                       {labelCC[mv.tipo]||mv.tipo}
                                       {mv.nota&&<span style={{color:"#334155",marginLeft:4}}>· {mv.nota}</span>}
@@ -5735,7 +5735,7 @@ function AppInterna({ usuario }) {
                                   </tr>
                                 );
                               })}
-                              {movsConSaldo.length===0&&<tr><td colSpan={6} style={{padding:"20px",textAlign:"center",color:"#374151",fontSize:11}}>Sin movimientos en este período</td></tr>}
+                              {movsConSaldo.length===0&&<tr><td colSpan={6} style={{padding:"20px",textAlign:"center",color:"#64748b",fontSize:11}}>Sin movimientos en este período</td></tr>}
                             </tbody>
                           </table>
                         </div>
@@ -5962,12 +5962,12 @@ function AppInterna({ usuario }) {
                     <input placeholder="+ Mes" value={nuevoMes} onChange={e=>setNuevoMes(e.target.value)}
                       onKeyDown={e=>{if(e.key==="Enter"&&nuevoMes.trim()){const nf={...fact,meses:{...fact.meses,[nuevoMes.trim()]:"0"}};setFact(nf);guardarDia(null,nf,null);setNuevoMes("");}}}
                       style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:4,padding:"3px 6px",color:"#9ca3af",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
-                    <button onClick={()=>{if(!nuevoMes.trim())return;const nf={...fact,meses:{...fact.meses,[nuevoMes.trim()]:"0"}};setFact(nf);guardarDia(null,nf,null);setNuevoMes("");}} style={{padding:"3px 7px",borderRadius:4,background:"#0a0a0a",border:"1px solid #1f2937",color:"#6b7280",cursor:"pointer",fontFamily:"inherit"}}>+</button>
+                    <button onClick={()=>{if(!nuevoMes.trim())return;const nf={...fact,meses:{...fact.meses,[nuevoMes.trim()]:"0"}};setFact(nf);guardarDia(null,nf,null);setNuevoMes("");}} style={{padding:"3px 7px",borderRadius:4,background:"#0a0a0a",border:"1px solid #1f2937",color:"#9ca3af",cursor:"pointer",fontFamily:"inherit"}}>+</button>
                   </div>
                   <div style={{borderTop:"1px solid #1f2937",marginTop:7,paddingTop:7}}>
                     {[["Ganancia acum.",fmt(ganAcum),ganAcum>-1?"#4ade80":"#f87171"],["Objetivo",obj?fmt(obj):"clic","#9ca3af","__obj__"],["Resta",fmt(obj-ganAcum),obj-ganAcum<=0?"#4ade80":"#f87171"]].map(([k,v,c,ek])=>(
                       <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"2px 0"}}>
-                        <span style={{fontSize:11,color:"#6b7280"}}>{k}</span>
+                        <span style={{fontSize:11,color:"#9ca3af"}}>{k}</span>
                         {editFact==="__obj__"&&ek?(<input autoFocus type="number" value={editFactV} onChange={e=>setEditFactV(e.target.value)}
                           onKeyDown={e=>{if(e.key==="Enter"){const nf={...fact,objetivo:editFactV};setFact(nf);guardarDia(null,nf,null);setEditFact(null);}if(e.key==="Escape")setEditFact(null);}}
                           onBlur={()=>{const nf={...fact,objetivo:editFactV};setFact(nf);guardarDia(null,nf,null);setEditFact(null);}}
@@ -5981,7 +5981,7 @@ function AppInterna({ usuario }) {
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
                   <thead><tr>
-                    <th style={{textAlign:"left",padding:"7px 10px",borderBottom:"2px solid #1f2937",color:"#4b5563",fontSize:10}}>CLIENTE</th>
+                    <th style={{textAlign:"left",padding:"7px 10px",borderBottom:"2px solid #1f2937",color:"#94a3b8",fontSize:10}}>CLIENTE</th>
                     {MONEDAS.map(m=><th key={m.id} style={{textAlign:"right",padding:"7px 10px",borderBottom:"2px solid #1f2937",color:m.color,fontSize:10}}>{m.id}</th>)}
                   </tr></thead>
                   <tbody>
@@ -6052,7 +6052,7 @@ function AppInterna({ usuario }) {
                           </td>)}
                         </tr>
                         <tr style={{borderTop:"1px solid #1f2937",background:"#0a0a0a"}}>
-                          <td style={{padding:"9px 10px",fontSize:9,color:"#6b7280"}}>TOTAL CC</td>
+                          <td style={{padding:"9px 10px",fontSize:9,color:"#9ca3af"}}>TOTAL CC</td>
                           {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
                             <span style={{fontSize:13,fontWeight:700,color:totsCC[m.id]>0?"#4ade80":totsCC[m.id]<0?"#f87171":"#374151"}}>{totsCC[m.id]!==0?fmt(totsCC[m.id]):"—"}</span>
                           </td>)}
@@ -6065,7 +6065,7 @@ function AppInterna({ usuario }) {
                             {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
                               {m.id==="ARS"
                                 ? <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmt(totalDif)}</span>
-                                : <span style={{color:"#374151"}}>—</span>}
+                                : <span style={{color:"#64748b"}}>—</span>}
                             </td>)}
                           </tr>
                         )}
@@ -6082,12 +6082,12 @@ function AppInterna({ usuario }) {
                             <tr style={{background:"#0a1a0f",borderTop:"1px solid #2dd4bf22"}}>
                               <td style={{padding:"9px 10px",fontSize:9,color:"#2dd4bf",cursor:"pointer"}} onClick={()=>setPant("inversiones")}>
                                 <div>INVERSIONES ({invsAct.length}) ↗</div>
-                                <div style={{fontSize:8,color:"#4b5563",marginTop:2}}>Capital: {fmtUSD(capInv)}</div>
+                                <div style={{fontSize:8,color:"#94a3b8",marginTop:2}}>Capital: {fmtUSD(capInv)}</div>
                               </td>
                               {MONEDAS.map(m=><td key={m.id} style={{textAlign:"right",padding:"9px 10px"}}>
                                 {m.id==="USD"
                                   ?<span style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{fmt(totalInv)}</span>
-                                  :<span style={{color:"#374151"}}>—</span>}
+                                  :<span style={{color:"#64748b"}}>—</span>}
                               </td>)}
                             </tr>
                           );
@@ -6136,7 +6136,7 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#fb923c",marginBottom:4}}>HISTORIAL</div>
-              <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Analiza, editá o agregá operaciones de cualquier periodo</div>
+              <div style={{fontSize:12,color:"#9ca3af",marginBottom:18}}>Analiza, editá o agregá operaciones de cualquier periodo</div>
 
               {/* Filtros */}
               <Card sx={{marginBottom:16,border:"1px solid #fb923c22"}}>
@@ -6162,7 +6162,7 @@ function AppInterna({ usuario }) {
                     setHistDesde(ahora.getFullYear()+"-"+String(ahora.getMonth()+1).padStart(2,"0")+"-01"); setHistHasta(hoy);
                   }} style={{...S.btn(false,"#fb923c"),fontSize:10}}>Este mes</button>
                   <button onClick={()=>{setHistDesde("");setHistHasta("");setHistFiltroTipo("todos");setHistFiltroCliente("");}} style={{...S.btn(false,"#64748b"),fontSize:10}}>Limpiar</button>
-                  <span style={{fontSize:11,color:"#64748b",marginLeft:4}}>{opsFiltradas.length} operaciones</span>
+                  <span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>{opsFiltradas.length} operaciones</span>
                   <div style={{marginLeft:"auto",display:"flex",gap:6}}>
                     <button onClick={()=>setHistModoVista("ops")} style={{...S.btn(histModoVista==="ops","#fb923c"),fontSize:10}}>Detalle</button>
                     <button onClick={()=>setHistModoVista("resumen")} style={{...S.btn(histModoVista==="resumen","#38bdf8"),fontSize:10}}>Resumen</button>
@@ -6219,7 +6219,7 @@ function AppInterna({ usuario }) {
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                         <div style={{fontSize:11,fontWeight:700,color:"#fb923c"}}>{fmtFecha(fecha)}</div>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                          <span style={{fontSize:10,color:"#475569"}}>{fops.length} ops</span>
+                          <span style={{fontSize:10,color:"#9ca3af"}}>{fops.length} ops</span>
                           {cierres.find(c=>c.fecha===fecha)&&<span style={{fontSize:9,color:"#4ade80",background:"#4ade8015",padding:"1px 6px",borderRadius:4}}>CERRADO</span>}
                         </div>
                       </div>
@@ -6253,11 +6253,11 @@ function AppInterna({ usuario }) {
                           <div style={{display:"flex",gap:8,alignItems:"center"}}>
                             <div style={{width:8,height:8,borderRadius:"50%",background:t.color}}/>
                             <span style={{fontWeight:700,color:t.color}}>{t.label}</span>
-                            <span style={{fontSize:11,color:"#475569"}}>{tOps.length} ops</span>
+                            <span style={{fontSize:11,color:"#94a3b8"}}>{tOps.length} ops</span>
                           </div>
                           <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{fmt(totalARS)}</span>
                         </div>
-                        <div style={{fontSize:11,color:"#475569"}}>
+                        <div style={{fontSize:11,color:"#94a3b8"}}>
                           {tOps.slice(0,3).map(op=>(
                             <div key={op.id} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderTop:"1px solid #1e2535"}}>
                               <span>{op.fecha} {op.cliente&&"— "+op.cliente}</span>
@@ -6303,9 +6303,9 @@ function AppInterna({ usuario }) {
           return (
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#4ade80",marginBottom:4}}>EVOLUCION DE LA CAJA</div>
-            <div style={{fontSize:12,color:"#4b5563",marginBottom:20}}>Patrimonio total valuado en USD al cierre de cada dia</div>
+            <div style={{fontSize:12,color:"#94a3b8",marginBottom:20}}>Patrimonio total valuado en USD al cierre de cada dia</div>
             {cierres.length===0?(
-              <div style={{background:"#0d0d0d",border:"1px dashed #1f2937",borderRadius:10,padding:32,textAlign:"center",color:"#374151"}}>
+              <div style={{background:"#0d0d0d",border:"1px dashed #1f2937",borderRadius:10,padding:32,textAlign:"center",color:"#64748b"}}>
                 <div style={{fontSize:24,marginBottom:8}}>📊</div>
                 <div>Todavia no hay cierres registrados</div>
                 <div style={{fontSize:11,marginTop:4}}>Cierra el primer dia desde la pantalla Cierre</div>
@@ -6324,32 +6324,32 @@ function AppInterna({ usuario }) {
                 const fondoDisp=Math.max(0,totalFR-totalRet);
                 return totalFR>0?(
                   <Card sx={{flex:"1 1 160px",border:"1px solid #6366f133",textAlign:"center"}}>
-                    <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>FONDO DE RESERVA</div>
+                    <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>FONDO DE RESERVA</div>
                     <div style={{fontSize:18,fontWeight:700,color:"#a5b4fc"}}>{fmtUSD(fondoDisp)}</div>
-                    <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>disponible de {fmtUSD(totalFR)} acumulado</div>
+                    <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>disponible de {fmtUSD(totalFR)} acumulado</div>
                     {totalRet>0&&<div style={{fontSize:10,color:"#f87171",marginTop:2}}>-{fmtUSD(totalRet)} retirado</div>}
                   </Card>
                 ):null;
               })()}
               {ultimoCierre&&<Card sx={{flex:"1 1 160px",border:"1px solid #4ade8033",textAlign:"center"}}>
-                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
+                      <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>PATRIMONIO HOY</div>
                       <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{fmtUSD(patrimonioActual)}</div>
-                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
+                      <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{fmtFecha(ultimoCierre.fecha)}</div>
                     </Card>}
                     <Card sx={{flex:"1 1 160px",border:"1px solid #a78bfa33",textAlign:"center"}}>
-                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>INVERSION SOCIOS</div>
+                      <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>INVERSION SOCIOS</div>
                       <div style={{fontSize:22,fontWeight:700,color:"#a78bfa"}}>{fmtUSD(inversionBase)}</div>
-                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>base actual</div>
+                      <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>base actual</div>
                     </Card>
                     <Card sx={{flex:"1 1 160px",border:"1px solid "+(gPos?"#4ade8033":"#f4433633"),textAlign:"center"}}>
-                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
+                      <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>GANANCIA VS BASE</div>
                       <div style={{fontSize:22,fontWeight:700,color:gPos?"#4ade80":"#f87171"}}>{gPos?"+":""}{fmtUSD(gananciaVsBase)}</div>
                       <div style={{fontSize:10,color:gPos?"#4ade80":"#f87171",marginTop:2}}>{pctVsBase>-1?"+":""}{pctVsBase.toFixed(1)}%</div>
                     </Card>
                     {varUSD!==null&&<Card sx={{flex:"1 1 160px",border:"1px solid "+(vPos?"#4ade8033":"#f4433633"),textAlign:"center"}}>
-                      <div style={{fontSize:9,color:"#4b5563",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
+                      <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>VS DIA ANTERIOR</div>
                       <div style={{fontSize:22,fontWeight:700,color:vPos?"#4ade80":"#f87171"}}>{vPos?"+":""}{fmtUSD(varUSD)}</div>
-                      <div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{vPos?"Subio":"Bajo"}</div>
+                      <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{vPos?"Subio":"Bajo"}</div>
                     </Card>}
                   </div>
                   );
@@ -6357,10 +6357,10 @@ function AppInterna({ usuario }) {
 
                 {/* Grafico */}
                 {grafData.length>1&&<Card sx={{marginBottom:18,border:"1px solid #4ade8022"}}>
-                  <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:10}}>GRAFICO USD</div>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#94a3b8",marginBottom:10}}>GRAFICO USD</div>
                   <LineChart data={grafData} color="#4ade80" height={120}/>
                   {/* Linea de inversion base */}
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#374151",marginTop:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#94a3b8",marginTop:4}}>
                     <span>{fmtFecha(grafData[0].x)}</span>
                     <span style={{color:"#a78bfa"}}>— Base: {fmtUSD(inversionBase)}</span>
                     <span>{fmtFecha(grafData[grafData.length-1].x)}</span>
@@ -6373,9 +6373,9 @@ function AppInterna({ usuario }) {
                   <div style={{overflowX:"auto"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
                       <thead><tr>
-                        <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>MES</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>APERTURA</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>CIERRE</th>
+                        <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#94a3b8",fontSize:9}}>MES</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#94a3b8",fontSize:9}}>APERTURA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#94a3b8",fontSize:9}}>CIERRE</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>GANANCIA</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#f59e0b",fontSize:9}}>SUELDO</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#c084fc",fontSize:9}}>RESERVA</th>
@@ -6398,7 +6398,7 @@ function AppInterna({ usuario }) {
                                 {nombreMes}
                                 {liq&&<span style={{marginLeft:6,fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc"}}>liquidado</span>}
                               </td>
-                              <td style={{textAlign:"right",padding:"8px 8px",color:"#6b7280",fontSize:11}}>{fmtUSD(apertura)}</td>
+                              <td style={{textAlign:"right",padding:"8px 8px",color:"#9ca3af",fontSize:11}}>{fmtUSD(apertura)}</td>
                               <td style={{textAlign:"right",padding:"8px 8px",color:"#e2e8f0",fontWeight:600}}>{fmtUSD(cierre)}</td>
                               <td style={{textAlign:"right",padding:"8px 8px",fontWeight:700,color:ganancia>-1?"#4ade80":"#f87171"}}>{ganancia>-1?"+":""}{fmtUSD(ganancia)}</td>
                               <td style={{textAlign:"right",padding:"8px 8px",color:sueldo>0?"#f59e0b":"#374151",fontSize:11}}>{sueldo>0?"-"+fmtUSD(sueldo):"—"}</td>
@@ -6414,13 +6414,13 @@ function AppInterna({ usuario }) {
 
                 {/* Historial detallado */}
                 <Card>
-                  <div style={{fontSize:9,letterSpacing:2,color:"#4b5563",marginBottom:12}}>HISTORIAL DE CIERRES</div>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#94a3b8",marginBottom:12}}>HISTORIAL DE CIERRES</div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"inherit"}}>
                       <thead><tr>
-                        <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>FECHA</th>
+                        <th style={{textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#94a3b8",fontSize:9}}>FECHA</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4ade80",fontSize:9}}>TOTAL USD</th>
-                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#4b5563",fontSize:9}}>VAR DIA</th>
+                        <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#94a3b8",fontSize:9}}>VAR DIA</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#f59e0b",fontSize:9}}>TOMA GANANCIA</th>
                         <th style={{textAlign:"right",padding:"6px 8px",borderBottom:"1px solid #1f2937",color:"#38bdf8",fontSize:9}}>FACTURACION NETA</th>
                       </tr></thead>
@@ -6478,7 +6478,7 @@ function AppInterna({ usuario }) {
                   {MONEDAS.map(m=>{ const vFis=saldos[m.id]||0,vTot=patrimonioSaldos[m.id]; if(!vFis&&!vTot) return null;
                     return <div key={m.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba("+hexToRgb(m.color)+",0.2)",borderRadius:10,padding:"10px 14px",minWidth:110}}>
                       <div style={{fontSize:9,color:m.color,letterSpacing:2,marginBottom:6,fontWeight:700}}>{m.id}</div>
-                      <div style={{fontSize:11,color:"#4b5563",marginBottom:2}}>Fisica: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
+                      <div style={{fontSize:11,color:"#94a3b8",marginBottom:2}}>Fisica: <span style={{color:"#e2e8f0",fontWeight:600}}>{m.simbolo}{fmt(vFis)}</span></div>
                       <div style={{fontSize:12,fontWeight:700,color:"#818cf8"}}>Total: {m.simbolo}{fmt(vTot)}</div>
                     </div>;
                   })}
@@ -6487,8 +6487,8 @@ function AppInterna({ usuario }) {
             })()}
             <div style={S.grid("1fr 1fr",14)}>
               <Card>
-                <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>SALDOS</div>
-                <div style={{...S.grid("1fr 1fr 1fr 1fr",7),fontSize:9,color:"#4b5563",marginBottom:6}}>
+                <div style={{fontSize:10,letterSpacing:3,color:"#9ca3af",marginBottom:12}}>SALDOS</div>
+                <div style={{...S.grid("1fr 1fr 1fr 1fr",7),fontSize:9,color:"#94a3b8",marginBottom:6}}>
                   {["MON.","INICIAL","FINAL","DIF."].map(h=><span key={h}>{h}</span>)}
                 </div>
                 {MONEDAS.map(m=>{ const ini=parse(cajaIni[m.id]),fin=saldos[m.id]||0,dif=fin-ini;
@@ -6501,12 +6501,12 @@ function AppInterna({ usuario }) {
                 })}
               </Card>
               <Card>
-                <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>OPERACIONES HOY ({opsHoy.length})</div>
+                <div style={{fontSize:10,letterSpacing:3,color:"#9ca3af",marginBottom:12}}>OPERACIONES HOY ({opsHoy.length})</div>
                 {Object.entries(TIPOS_OP).map(([id,t])=>{ const n=opsHoy.filter(o=>o.tipo===id).length; if(!n) return null;
                   return <div key={id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1a1a1a"}}>
-                    <span style={{fontSize:12,color:t.color}}>{t.label}</span><span style={{fontSize:12,color:"#6b7280"}}>{n}x</span>
+                    <span style={{fontSize:12,color:t.color}}>{t.label}</span><span style={{fontSize:12,color:"#9ca3af"}}>{n}x</span>
                   </div>;})}
-                {opsHoy.length===0&&<div style={{color:"#374151",fontSize:12}}>Sin operaciones</div>}
+                {opsHoy.length===0&&<div style={{color:"#64748b",fontSize:12}}>Sin operaciones</div>}
               </Card>
             </div>
             <div style={{marginTop:20}}>
@@ -6520,8 +6520,8 @@ function AppInterna({ usuario }) {
                     <span style={{fontSize:24}}>🔒</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:12,color:"#4ade80",fontWeight:700}}>Caja cerrada correctamente</div>
-                      {ultimoCierre?.total_usd&&<div style={{fontSize:11,color:"#4b5563",marginTop:2}}>Total en USD: <strong style={{color:"#4ade80"}}>{fmtUSD(ultimoCierre.total_usd)}</strong></div>}
-                      {ultimoCierre?.cotizaciones&&<div style={{fontSize:10,color:"#374151",marginTop:3}}>
+                      {ultimoCierre?.total_usd&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Total en USD: <strong style={{color:"#4ade80"}}>{fmtUSD(ultimoCierre.total_usd)}</strong></div>}
+                      {ultimoCierre?.cotizaciones&&<div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>
                         {Object.entries(ultimoCierre.cotizaciones).filter(([,v])=>parse(v)).map(([k,v])=>k+": $"+fmt(v)).join(" | ")}
                       </div>}
                     </div>
@@ -6557,7 +6557,7 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:4}}>RESUMEN POR SOCIO</div>
-              <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Posicion de cada socio con sus clientes</div>
+              <div style={{fontSize:12,color:"#94a3b8",marginBottom:18}}>Posicion de cada socio con sus clientes</div>
               {SOCIOS_FIJOS.map(socio=>{
                 const r=resumen[socio]; const col=COLORES_SOCIO[socio]||"#6b7280";
                 const clientesConSaldo=r.clientes.filter(c=>MONEDAS.some(m=>c.sal[m.id]!==0));
@@ -6566,7 +6566,7 @@ function AppInterna({ usuario }) {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8}}>
                       <div>
                         <div style={{fontSize:13,fontWeight:700,color:col}}>{socio}</div>
-                        <div style={{fontSize:11,color:"#4b5563",marginTop:2}}>{clientesConSaldo.length} clientes con saldo</div>
+                        <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{clientesConSaldo.length} clientes con saldo</div>
                       </div>
                       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                         {MONEDAS.map(m=>{ const v=r.totalPorMoneda[m.id]; if(!v) return null;
@@ -6576,7 +6576,7 @@ function AppInterna({ usuario }) {
                           </div>;})}
                       </div>
                     </div>
-                    {clientesConSaldo.length===0&&<div style={{fontSize:12,color:"#374151"}}>Sin clientes con saldo</div>}
+                    {clientesConSaldo.length===0&&<div style={{fontSize:12,color:"#64748b"}}>Sin clientes con saldo</div>}
                     {clientesConSaldo.map(cl=>(
                       <div key={cl.id} style={{borderTop:"1px solid #1a1a1a",paddingTop:8,marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                         <div style={{fontWeight:600,fontSize:12,cursor:"pointer",color:"#e5e7eb"}} onClick={()=>{setPant("clientes");setClienteActivo(cl.id);setFormCC({tipo:"ingreso_transf",moneda:"ARS",monto:"",nota:""});}}>{cl.nombre} {cl.apellido}</div>
@@ -6596,7 +6596,7 @@ function AppInterna({ usuario }) {
         {pant==="gastos"&&(
           <div>
             <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:4}}>GASTOS</div>
-            <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Registra tus gastos fijos y variables</div>
+            <div style={{fontSize:12,color:"#94a3b8",marginBottom:18}}>Registra tus gastos fijos y variables</div>
             <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
               <Card sx={{border:"1px solid #f43f5e33"}}>
                 <div style={{fontSize:10,letterSpacing:3,color:"#f43f5e",marginBottom:12}}>NUEVO GASTO</div>
@@ -6613,7 +6613,7 @@ function AppInterna({ usuario }) {
                 <div style={{marginTop:8}}><Lbl>Nota</Lbl><Inp placeholder="Descripcion..." value={formGasto.nota} onChange={e=>setFormGasto(f=>({...f,nota:e.target.value}))}/></div>
                 {/* Origen del pago */}
                 <div style={{marginTop:10,marginBottom:10}}>
-                  <div style={{fontSize:9,letterSpacing:2,color:"#6b7280",marginBottom:6}}>SALE DE</div>
+                  <div style={{fontSize:9,letterSpacing:2,color:"#9ca3af",marginBottom:6}}>SALE DE</div>
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>setFormGasto(f=>({...f,usaCC:false}))}
                       style={{...S.btn(!formGasto.usaCC,"#f43f5e"),flex:1}}>💵 Caja fisica</button>
@@ -6694,8 +6694,8 @@ function AppInterna({ usuario }) {
                 </button>
               </Card>
               <Card sx={{maxHeight:500,overflowY:"auto"}}>
-                <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>HISTORIAL ({gastos.length})</div>
-                {gastos.length===0&&<div style={{color:"#374151",fontSize:12}}>Sin gastos registrados</div>}
+                <div style={{fontSize:10,letterSpacing:3,color:"#9ca3af",marginBottom:12}}>HISTORIAL ({gastos.length})</div>
+                {gastos.length===0&&<div style={{color:"#64748b",fontSize:12}}>Sin gastos registrados</div>}
                 {gastos.map(g=>{
                   const mon=MONEDAS.find(m=>m.id===g.moneda);
                   const esFondo=g.categoria==="Fondo de Reserva";
@@ -6707,10 +6707,10 @@ function AppInterna({ usuario }) {
                           {esFondo&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:"rgba(99,102,241,0.15)",color:"#6366f1"}}>no impacta caja</span>}
                         </div>
                         <div style={{fontSize:13,fontWeight:700,color:"#fff",marginTop:1}}>{mon?.simbolo}{fmt(g.monto)} {g.moneda}</div>
-                        {g.nota&&<div style={{fontSize:11,color:"#4b5563",marginTop:1}}>{g.nota}</div>}
+                        {g.nota&&<div style={{fontSize:11,color:"#94a3b8",marginTop:1}}>{g.nota}</div>}
                       </div>
                       <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:10,color:"#4b5563"}}>{fmtFecha(g.fecha)}</div>
+                        <div style={{fontSize:10,color:"#94a3b8"}}>{fmtFecha(g.fecha)}</div>
                         <button onClick={async()=>{
                           if(!window.confirm("Eliminar este gasto?")) return;
                           await SB.from("gastos").delete().eq("id",g.id);
@@ -6731,7 +6731,7 @@ function AppInterna({ usuario }) {
               });
               return (
                 <Card sx={{marginTop:16}}>
-                  <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:12}}>RESUMEN POR CATEGORIA</div>
+                  <div style={{fontSize:10,letterSpacing:3,color:"#9ca3af",marginBottom:12}}>RESUMEN POR CATEGORIA</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                     {Object.entries(porCat).map(([cat,mons])=>(
                       <div key={cat} style={{background:"#0d0d0d",border:"1px solid #1f2937",borderRadius:8,padding:"10px 14px",minWidth:140}}>
@@ -6767,8 +6767,8 @@ function AppInterna({ usuario }) {
               {referidores.length===0&&(
                 <Card sx={{textAlign:"center",padding:40}}>
                   <div style={{fontSize:24,marginBottom:8}}>⬡</div>
-                  <div style={{color:"#374151",marginBottom:6}}>Sin comisiones registradas todavía</div>
-                  <div style={{color:"#4b5563",fontSize:11}}>Al registrar una operación con referidor, la comisión aparece acá automáticamente</div>
+                  <div style={{color:"#9ca3af",marginBottom:6}}>Sin comisiones registradas todavía</div>
+                  <div style={{color:"#94a3b8",fontSize:11}}>Al registrar una operación con referidor, la comisión aparece acá automáticamente</div>
                 </Card>
               )}
               {referidores.map(ref=>(
@@ -6776,18 +6776,18 @@ function AppInterna({ usuario }) {
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:"#fb923c"}}>{ref.nombre}</div>
-                      <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>{ref.ops.length} operaciones</div>
+                      <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>{ref.ops.length} operaciones</div>
                     </div>
                     <div style={{textAlign:"right"}}>
                       <div style={{fontSize:16,fontWeight:700,color:"#4ade80"}}>${fmt(Math.round(ref.totalARS))} ARS</div>
-                      <div style={{fontSize:10,color:"#6b7280"}}>acumulado</div>
+                      <div style={{fontSize:10,color:"#9ca3af"}}>acumulado</div>
                     </div>
                   </div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                       <thead><tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
                         {["Fecha","Hora","Detalle","Comisión ARS"].map(h=>(
-                          <th key={h} style={{padding:"5px 8px",textAlign:h==="Comisión ARS"?"right":"left",color:"#4b5563",fontSize:9,fontWeight:600}}>{h}</th>
+                          <th key={h} style={{padding:"5px 8px",textAlign:h==="Comisión ARS"?"right":"left",color:"#94a3b8",fontSize:9,fontWeight:600}}>{h}</th>
                         ))}
                       </tr></thead>
                       <tbody>
@@ -6801,7 +6801,7 @@ function AppInterna({ usuario }) {
                         ))}
                       </tbody>
                       <tfoot><tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
-                        <td colSpan={3} style={{padding:"7px 8px",fontSize:10,color:"#6b7280",fontWeight:600}}>TOTAL ACUMULADO</td>
+                        <td colSpan={3} style={{padding:"7px 8px",fontSize:10,color:"#9ca3af",fontWeight:600}}>TOTAL ACUMULADO</td>
                         <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:"#4ade80"}}>${fmt(Math.round(ref.totalARS))} ARS</td>
                       </tr></tfoot>
                     </table>
@@ -6824,7 +6824,7 @@ function AppInterna({ usuario }) {
               {referidores.length>0&&(
                 <Card sx={{background:"rgba(251,146,60,0.04)",border:"1px solid rgba(251,146,60,0.15)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:11,color:"#6b7280",fontWeight:600}}>TOTAL A PAGAR A REFERIDORES</span>
+                    <span style={{fontSize:11,color:"#9ca3af",fontWeight:600}}>TOTAL A PAGAR A REFERIDORES</span>
                     <span style={{fontSize:16,fontWeight:700,color:"#fb923c"}}>${fmt(Math.round(referidores.reduce((s,r)=>s+r.totalARS,0)))} ARS</span>
                   </div>
                 </Card>
@@ -6910,7 +6910,7 @@ function AppInterna({ usuario }) {
           return (
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#2dd4bf",marginBottom:4}}>INVERSIONES</div>
-              <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Seguimiento de inversiones con tasa en USD</div>
+              <div style={{fontSize:12,color:"#94a3b8",marginBottom:18}}>Seguimiento de inversiones con tasa en USD</div>
 
               {/* Formulario nueva inversión */}
               <Card sx={{marginBottom:16,border:"1px solid #2dd4bf33"}}>
@@ -6956,9 +6956,9 @@ function AppInterna({ usuario }) {
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
                         {[[30,int30],[90,int90],[365,int365]].map(([d,i])=>(
                           <div key={d} style={{textAlign:"center",background:"rgba(45,212,191,0.06)",borderRadius:6,padding:"6px"}}>
-                            <div style={{fontSize:9,color:"#6b7280"}}>{d} días</div>
+                            <div style={{fontSize:9,color:"#9ca3af"}}>{d} días</div>
                             <div style={{fontWeight:700,color:"#2dd4bf"}}>+USD {i.toFixed(2)}</div>
-                            <div style={{fontSize:9,color:"#4b5563"}}>Total {(m+i).toFixed(2)}</div>
+                            <div style={{fontSize:9,color:"#94a3b8"}}>Total {(m+i).toFixed(2)}</div>
                           </div>
                         ))}
                       </div>
@@ -6992,7 +6992,7 @@ function AppInterna({ usuario }) {
               {invsActivas.length===0&&(
                 <Card sx={{textAlign:"center",padding:40}}>
                   <div style={{fontSize:24,marginBottom:8}}>💎</div>
-                  <div style={{color:"#374151"}}>Sin inversiones activas</div>
+                  <div style={{color:"#64748b"}}>Sin inversiones activas</div>
                 </Card>
               )}
 
@@ -7009,8 +7009,8 @@ function AppInterna({ usuario }) {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,flexWrap:"wrap",gap:8}}>
                       <div>
                         <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{nombre}</div>
-                        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Inicio: {inv.fecha_inicio} · Tasa: {inv.tasa}% anual · Bloqueo: {inv.bloqueo_dias} días</div>
-                        {inv.nota&&<div style={{fontSize:10,color:"#4b5563",marginTop:2}}>{inv.nota}</div>}
+                        <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>Inicio: {inv.fecha_inicio} · Tasa: {inv.tasa}% anual · Bloqueo: {inv.bloqueo_dias} días</div>
+                        {inv.nota&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{inv.nota}</div>}
                       </div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:18,fontWeight:900,color:"#2dd4bf"}}>USD {total.toFixed(2)}</div>
@@ -7026,7 +7026,7 @@ function AppInterna({ usuario }) {
                     <div style={{background:"rgba(255,255,255,0.05)",borderRadius:10,height:6,marginBottom:10}}>
                       <div style={{background:bloqueado?"#f59e0b":"#2dd4bf",borderRadius:10,height:6,width:pctCompletado+"%",transition:"width 0.3s"}}/>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#6b7280",marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#9ca3af",marginBottom:12}}>
                       <span>{dias} días transcurridos</span>
                       <span>{pctCompletado.toFixed(1)}% del año</span>
                     </div>
@@ -7034,7 +7034,7 @@ function AppInterna({ usuario }) {
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:12}}>
                       {[[`Capital`,`USD ${fmt(inv.monto)}`,"#e2e8f0"],[`Intereses`,`+USD ${interes.toFixed(4)}`,"#4ade80"],[`Rentabilidad`,`${((interes/inv.monto)*100).toFixed(3)}%`,"#2dd4bf"]].map(([l,v,c])=>(
                         <div key={l} style={{background:"rgba(255,255,255,0.02)",borderRadius:6,padding:"8px",textAlign:"center"}}>
-                          <div style={{fontSize:9,color:"#6b7280",marginBottom:2}}>{l}</div>
+                          <div style={{fontSize:9,color:"#9ca3af",marginBottom:2}}>{l}</div>
                           <div style={{fontSize:11,fontWeight:700,color:c}}>{v}</div>
                         </div>
                       ))}
@@ -7108,7 +7108,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
                       {[["Inversiones activas",invsActivas.length+" clientes","#e2e8f0"],["Capital total","USD "+fmt(Math.round(totalCapital)),"#e2e8f0"],["Intereses acumulados","+USD "+totalIntereses.toFixed(2),"#4ade80"]].map(([l,v,c])=>(
                         <div key={l} style={{textAlign:"center"}}>
-                          <div style={{fontSize:9,color:"#6b7280",marginBottom:4}}>{l}</div>
+                          <div style={{fontSize:9,color:"#9ca3af",marginBottom:4}}>{l}</div>
                           <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
                         </div>
                       ))}
@@ -7145,7 +7145,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
           return (
             <div>
               <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:4}}>SOCIOS</div>
-              <div style={{fontSize:12,color:"#4b5563",marginBottom:18}}>Inversion y distribucion de capital</div>
+              <div style={{fontSize:12,color:"#94a3b8",marginBottom:18}}>Inversion y distribucion de capital</div>
               <div className="grid-mobile-1" style={S.grid("1fr 1fr",18)}>
                 <Card sx={{border:"1px solid #a78bfa33"}}>
                   <div style={{fontSize:10,letterSpacing:3,color:"#a78bfa",marginBottom:12}}>AGREGAR SOCIO</div>
@@ -7261,14 +7261,14 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #0f0f0f",fontSize:11}}>
                             <div>
                               <span style={{color:"#34d399",fontWeight:700}}>{a.socio_nombre}</span>
-                              <span style={{color:"#4b5563",marginLeft:8}}>{a.fecha}</span>
-                              {a.nota&&<span style={{color:"#374151",marginLeft:6}}>· {a.nota}</span>}
+                              <span style={{color:"#94a3b8",marginLeft:8}}>{a.fecha}</span>
+                              {a.nota&&<span style={{color:"#64748b",marginLeft:6}}>· {a.nota}</span>}
                             </div>
                             <span style={{color:"#34d399",fontWeight:700,fontFamily:"'JetBrains Mono',monospace"}}>+{fmtUSD(a.monto)}</span>
                           </div>
                         ))}
                         <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",marginTop:4,borderTop:"1px solid #1f2937"}}>
-                          <span style={{fontSize:11,color:"#6b7280"}}>Total aportado</span>
+                          <span style={{fontSize:11,color:"#9ca3af"}}>Total aportado</span>
                           <span style={{fontSize:12,fontWeight:700,color:"#34d399"}}>{fmtUSD(aportes.reduce((s,a)=>s+Number(a.monto),0))}</span>
                         </div>
                       </div>
@@ -7295,12 +7295,12 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           await SB.from("socios").delete().eq("id",s.id);
                           setSocios(p=>p.filter(x=>x.id!==s.id));
                           notify("Eliminado");
-                        }} style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#4b5563",cursor:"pointer",fontFamily:"inherit"}}>x</button>
+                        }} style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>x</button>
                       </div>
                     ))}
                     {socios.length>0&&(
                       <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0",marginTop:4}}>
-                        <span style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>TOTAL</span>
+                        <span style={{fontSize:12,fontWeight:700,color:"#9ca3af"}}>TOTAL</span>
                         <span style={{fontSize:14,fontWeight:700,color:"#a78bfa"}}>${fmt(total)}</span>
                       </div>
                     )}
@@ -7308,10 +7308,10 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                 </Card>
                 <Card sx={{border:"1px solid #a78bfa33",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
                   {socios.length===0?(
-                    <div style={{color:"#374151",fontSize:12,textAlign:"center"}}>Agrega socios para ver el grafico</div>
+                    <div style={{color:"#64748b",fontSize:12,textAlign:"center"}}>Agrega socios para ver el grafico</div>
                   ):(
                     <div style={{textAlign:"center"}}>
-                      <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",marginBottom:16}}>DISTRIBUCION DE CAPITAL</div>
+                      <div style={{fontSize:10,letterSpacing:3,color:"#9ca3af",marginBottom:16}}>DISTRIBUCION DE CAPITAL</div>
                       <PieChart data={socios.map((s,i)=>({label:s.nombre,v:parse(s.monto),color:COLORES[i%COLORES.length]}))}/>
                       <div style={{display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center",marginTop:16}}>
                         {socios.map((s,i)=>(
@@ -7322,7 +7322,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           </div>
                         ))}
                       </div>
-                      <div style={{marginTop:16,fontSize:11,color:"#4b5563"}}>Total invertido: <strong style={{color:"#a78bfa"}}>${fmt(total)} USD</strong></div>
+                      <div style={{marginTop:16,fontSize:11,color:"#94a3b8"}}>Total invertido: <strong style={{color:"#a78bfa"}}>${fmt(total)} USD</strong></div>
                     </div>
                   )}
                 </Card>
@@ -7365,14 +7365,14 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           </div>}
                         </div>
                         <div style={{marginBottom:14}}>
-                          <Lbl>Fecha de impacto <span style={{color:"#4b5563",fontSize:9}}>(por defecto hoy)</span></Lbl>
+                          <Lbl>Fecha de impacto <span style={{color:"#94a3b8",fontSize:9}}>(por defecto hoy)</span></Lbl>
                           <Inp type="date" value={liquidacion.fechaImpacto} onChange={e=>setLiquidacion(l=>({...l,fechaImpacto:e.target.value}))}/>
                         </div>
                         {/* Resumen patrimonial */}
                         <div style={{marginBottom:16}}>
                           <div style={{fontSize:10,letterSpacing:2,color:"#6366f1",marginBottom:8}}>RESUMEN PATRIMONIAL</div>
                           <div style={{marginBottom:10}}>
-                            <Lbl>Monto de cierre USD <span style={{color:"#4b5563",fontSize:9}}>(por defecto ultimo cierre)</span></Lbl>
+                            <Lbl>Monto de cierre USD <span style={{color:"#94a3b8",fontSize:9}}>(por defecto ultimo cierre)</span></Lbl>
                             <Inp type="number" placeholder={fmtUSD(ultimoCierre.total_usd)+" (ultimo cierre)"} value={liquidacion.patrimonioManual}
                               onChange={e=>setLiquidacion(l=>({...l,patrimonioManual:e.target.value}))}/>
                           </div>
@@ -7386,15 +7386,15 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                                 <div style={{fontSize:9,letterSpacing:2,color:"#6366f1",marginBottom:8,fontWeight:700}}>FONDO DE RESERVA</div>
                                 <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}}>
                                   <div>
-                                    <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>Acumulado</div>
+                                    <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>Acumulado</div>
                                     <div style={{fontSize:13,fontWeight:700,color:"#a5b4fc"}}>{fmtUSD(totalIngresado)}</div>
                                   </div>
                                   <div>
-                                    <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>Retirado</div>
+                                    <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>Retirado</div>
                                     <div style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{fmtUSD(totalRetirado)}</div>
                                   </div>
                                   <div>
-                                    <div style={{fontSize:9,color:"#4b5563",marginBottom:2}}>Disponible</div>
+                                    <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>Disponible</div>
                                     <div style={{fontSize:13,fontWeight:700,color:fondoDisponible>0?"#4ade80":"#f87171"}}>{fmtUSD(fondoDisponible)}</div>
                                   </div>
                                 </div>
@@ -7413,7 +7413,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             ["Ganancia bruta",fmtUSD(gananciaBruta),gananciaBruta>-1?"#4ade80":"#f87171"],
                           ].map(([k,v,col])=>(
                             <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f0f0f"}}>
-                              <span style={{fontSize:12,color:"#6b7280"}}>{k}</span>
+                              <span style={{fontSize:12,color:"#9ca3af"}}>{k}</span>
                               <span style={{fontSize:12,fontWeight:700,color:col}}>{v}</span>
                             </div>
                           ))}
@@ -7444,13 +7444,13 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                                   {emp.tieneVariable&&(
                                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                                       <Inp type="number" placeholder="5" value={emp.pctVariable} onChange={e=>updEmp({pctVariable:e.target.value})} sx={{width:60}}/>
-                                      <span style={{fontSize:10,color:"#6b7280"}}>% → {fmtUSD(emp.variable)}</span>
+                                      <span style={{fontSize:10,color:"#9ca3af"}}>% → {fmtUSD(emp.variable)}</span>
                                     </div>
                                   )}
-                                  {emp.fijo>0&&<span style={{fontSize:10,color:"#4b5563",marginLeft:"auto"}}>Fijo: {fmtUSD(emp.fijo)}{emp.tieneVariable?` + Var: ${fmtUSD(emp.variable)}`:""}</span>}
+                                  {emp.fijo>0&&<span style={{fontSize:10,color:"#94a3b8",marginLeft:"auto"}}>Fijo: {fmtUSD(emp.fijo)}{emp.tieneVariable?` + Var: ${fmtUSD(emp.variable)}`:""}</span>}
                                 </div>
                                 <div style={{position:"relative"}}>
-                                  <Lbl>CC <span style={{color:"#4b5563",fontSize:9}}>(acredita sueldo)</span></Lbl>
+                                  <Lbl>CC <span style={{color:"#94a3b8",fontSize:9}}>(acredita sueldo)</span></Lbl>
                                   <div style={{display:"flex",gap:4}}>
                                     {clEmp&&!emp.ccBuscar&&(
                                       <div style={{flex:1,padding:"5px 8px",borderRadius:6,background:"rgba(245,158,11,0.08)",border:"1px solid #f59e0b44",fontSize:11,color:"#f59e0b",fontWeight:600}}>
@@ -7461,7 +7461,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                                       placeholder={clEmp&&!emp.ccBuscar?"Cambiar...":"Buscar CC..."}
                                       style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
                                     {emp.ccId&&<button onClick={()=>updEmp({ccId:"",ccBuscar:""})}
-                                      style={{padding:"3px 7px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>}
+                                      style={{padding:"3px 7px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:10}}>✕</button>}
                                   </div>
                                   {emp.ccBuscar&&filtradosEmp.length>0&&(
                                     <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
@@ -7482,7 +7482,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             + Agregar empleado
                           </button>
                           <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid #1f2937",marginTop:8}}>
-                            <span style={{fontSize:11,color:"#6b7280"}}>Total empleados</span>
+                            <span style={{fontSize:11,color:"#9ca3af"}}>Total empleados</span>
                             <span style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>{fmtUSD(totalEmpleado)}</span>
                           </div>
                         </div>
@@ -7492,7 +7492,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           <div style={S.grid("1fr 1fr",8)}>
                             <div><Lbl>% sobre ganancia</Lbl><Inp type="number" placeholder="10" value={liquidacion.pctReserva} onChange={e=>setLiquidacion(l=>({...l,pctReserva:e.target.value}))}/></div>
                             <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",paddingBottom:6}}>
-                              <span style={{fontSize:10,color:"#6b7280"}}>Reserva</span>
+                              <span style={{fontSize:10,color:"#9ca3af"}}>Reserva</span>
                               <span style={{fontSize:13,fontWeight:700,color:"#c084fc"}}>{fmtUSD(reserva)}</span>
                             </div>
                           </div>
@@ -7501,7 +7501,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                         <div style={{marginBottom:16}}>
                           <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",marginBottom:8}}>DISTRIBUCION SOCIOS</div>
                           <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #1f2937",marginBottom:8}}>
-                            <span style={{fontSize:12,color:"#6b7280"}}>Ganancia neta a distribuir</span>
+                            <span style={{fontSize:12,color:"#9ca3af"}}>Ganancia neta a distribuir</span>
                             <span style={{fontSize:13,fontWeight:700,color:gananciaNeta>-1?"#4ade80":"#f87171"}}>{fmtUSD(gananciaNeta)}</span>
                           </div>
                           {socios.map((s,i)=>{
@@ -7517,7 +7517,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                                   <div style={{display:"flex",alignItems:"center",gap:6}}>
                                     <div style={{width:8,height:8,borderRadius:"50%",background:COLORES[i%COLORES.length]}}/>
                                     <span style={{fontSize:12,color:"#9ca3af"}}>{s.nombre}</span>
-                                    <span style={{fontSize:10,color:"#4b5563"}}>({(pct*100).toFixed(1)}%)</span>
+                                    <span style={{fontSize:10,color:"#94a3b8"}}>({(pct*100).toFixed(1)}%)</span>
                                   </div>
                                   <span style={{fontSize:12,fontWeight:700,color:COLORES[i%COLORES.length]}}>{fmtUSD(parte)}</span>
                                 </div>
@@ -7532,7 +7532,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                                       placeholder={clSel&&!busq?"Cambiar CC...":"Buscar CC del socio..."}
                                       style={{flex:1,background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:5,padding:"4px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:10,outline:"none"}}/>
                                     {ccId&&<button onClick={()=>setLiquidacion(l=>({...l,sociosCCMap:{...l.sociosCCMap,[s.id]:""},sociosBuscar:{...l.sociosBuscar,[s.id]:""}}))}
-                                      style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:9}}>✕</button>}
+                                      style={{padding:"2px 6px",borderRadius:4,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:9}}>✕</button>}
                                   </div>
                                   {busq&&filtrados.length>0&&(
                                     <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
@@ -7643,7 +7643,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                     {/* Historial de liquidaciones */}
                     {liquidaciones.length>0&&(
                       <Card sx={{marginTop:14,border:"1px solid rgba(255,255,255,0.06)"}}>
-                        <div style={{fontSize:10,letterSpacing:2,color:"#6b7280",marginBottom:12}}>HISTORIAL DE LIQUIDACIONES</div>
+                        <div style={{fontSize:10,letterSpacing:2,color:"#9ca3af",marginBottom:12}}>HISTORIAL DE LIQUIDACIONES</div>
                         {liquidaciones.map(liq=>(
                           <div key={liq.id} style={{borderBottom:"1px solid #1a1a1a",padding:"10px 0"}}>
                             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -7657,7 +7657,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                             </div>
                               <span style={{fontSize:12,fontWeight:700,color:liq.ganancia_neta>-1?"#4ade80":"#f87171"}}>Neto: {fmtUSD(liq.ganancia_neta)}</span>
                             </div>
-                            <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#6b7280"}}>
+                            <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,color:"#9ca3af"}}>
                               <span>Patrimonio: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.patrimonio_final)}</strong></span>
                               <span>Ganancia bruta: <strong style={{color:"#9ca3af"}}>{fmtUSD(liq.ganancia_bruta)}</strong></span>
                               <span>Empleado: <strong style={{color:"#f59e0b"}}>{fmtUSD(liq.sueldo_empleado)}</strong></span>
