@@ -3590,14 +3590,26 @@ function AppInterna({ usuario }) {
         });
       });
     }
-    // Para transferencias: buscar todos los movimientos CC del mismo dia+hora
+    // Para transferencias legacy: buscar por destinos guardados en datos
     if(op.tipo==="transferencia"&&movsVinculados.length===0){
-      const {data:movsTransf}=await SB.from("movimientos_cc").select("id,cliente_id,monto,moneda,tipo,nota").eq("fecha",op.fecha).eq("hora",op.hora||"");
-      (movsTransf||[]).forEach(mv=>{
-        const cl=clientes.find(x=>x.id===mv.cliente_id);
-        if(cl&&!movsVinculados.find(m=>m.mvId===mv.id))
-          movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+(cl.apellido||""),monto:mv.monto,moneda:mv.moneda,tipo:mv.tipo});
-      });
+      const destOp=op.destinos||op.datos?.destinos||[];
+      const ccOrigenId=Number(op.ccOrigenId||op.datos?.ccOrigenId||0);
+      const idsABuscar=[...destOp.map(d=>Number(d.clienteId)),ccOrigenId].filter(Boolean);
+      if(idsABuscar.length>0){
+        const {data:movsTransf}=await SB.from("movimientos_cc")
+          .select("id,cliente_id,monto,moneda,tipo,nota")
+          .eq("fecha",op.fecha)
+          .in("cliente_id",idsABuscar);
+        // Filtrar solo los que coinciden en monto con lo que se registró
+        const montosTrans=destOp.map(d=>parse(d.monto));
+        const netoOr=parse(op.netoOrigen||op.datos?.netoOrigen||0);
+        (movsTransf||[]).forEach(mv=>{
+          const coincide = montosTrans.some(m=>Math.abs(m-mv.monto)<1) || Math.abs(netoOr-mv.monto)<1;
+          const cl=clientes.find(x=>x.id===mv.cliente_id);
+          if(cl&&coincide&&!movsVinculados.find(m=>m.mvId===mv.id))
+            movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+(cl.apellido||""),monto:mv.monto,moneda:mv.moneda,tipo:mv.tipo});
+        });
+      }
     }
     const detalleCC=movsVinculados.length>0
       ? "\n\nSe revertirán "+movsVinculados.length+" movimientos CC de:\n"+
