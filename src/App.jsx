@@ -3488,17 +3488,36 @@ function AppInterna({ usuario }) {
       const netoOrigen=tn-comOrigen;
       const destinos=tDestinos.filter(d=>d.clienteId&&parse(d.monto)>0);
       if(destinos.length===0){notify("Agregá al menos un destino",false);return;}
+      // ── Verificar duplicados en transferencias ──────────────────────
+      const ahoraMs = Date.now();
+      const dosHorasMs = 2*60*60*1000;
+      const posiblesDup = movsCC.filter(mv => {
+        if(mv.tipo!=="retiro_transf") return false;
+        const mvMs = new Date(mv.fecha+"T"+(mv.hora||"00:00").replace("p. m.","PM").replace("a. m.","AM")).getTime();
+        if(isNaN(mvMs)||Math.abs(ahoraMs-mvMs)>dosHorasMs) return false;
+        return destinos.some(d=>Number(d.clienteId)===mv.cliente_id&&Math.abs(parse(d.monto)-mv.monto)<1);
+      });
+      if(posiblesDup.length>0){
+        const clDup=clientes.find(x=>x.id===posiblesDup[0].cliente_id)?.nombre||"cliente";
+        const confirmDup=window.confirm("⚠ POSIBLE DUPLICADO\n\nYa existe una transferencia similar a "+clDup+" por $"+fmt(posiblesDup[0].monto)+" en las últimas 2 horas.\n\n¿Confirmar igualmente?");
+        if(!confirmDup) return;
+      }
       const nombreOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen";
       const totalComDest=destinos.reduce((s,d)=>{const m=parse(d.monto),p=parse(d.pct)||0;return s+m*(p/100);},0);
       const gananciaFin=comOrigen+totalComDest;
       const nombresDestino=destinos.map(d=>clientes.find(x=>x.id===Number(d.clienteId))?.nombre||"dest").join(", ");
       opData={tipo,hora,tn,tpct:pctOrigen,tpctOrigen:pctOrigen,tcom:gananciaFin,netoOrigen,monto:gananciaFin,ccOrigenId:form.ccOrigenId,tmoneda:tMon,destinos:destinos.map(d=>({clienteId:d.clienteId,monto:parse(d.monto),pct:parse(d.pct)||0,nota:d.nota})),cliente:form.cliente,nota:form.nota};
+      // Insertar operación primero para vincular movimientos CC con operacion_id
+      setSaldos(ns);
+      const {data:opIns}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo,datos:opData}).select().single();
+      const opIdTransf=opIns?.id||null;
+      if(opIns) setOps(p=>[...p,{...opData,id:opIns.id,fecha:hoy}]);
       // CC Origen: HABER por el neto (le debemos el neto)
       if(form.ccOrigenId){
         const cOrId=Number(form.ccOrigenId);
         const notaOr="Transf. → "+nombresDestino+" - neto "+fmt(netoOrigen)+" "+tMon+(pctOrigen?" (com "+pctOrigen+"%)":"");
         const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr};
-        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr});
+        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr,operacion_id:opIdTransf});
         setClientes(p=>p.map(cl=>cl.id!==cOrId?cl:{...cl,movimientos:[...cl.movimientos,mvOr]}));
       }
       // CC Destinos: DEBE por monto + comision de cada uno
@@ -3509,11 +3528,13 @@ function AppInterna({ usuario }) {
         const clDest=clientes.find(x=>x.id===cDId);
         const notaDest=(d.nota||("Transf. de "+nombreOrigen+" - "+fmt(mDest)+" "+tMon+(pDest?" (com "+pDest+"%)":"")));
         const mvDest={id:Date.now()+(i+2),hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest};
-        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest});
+        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest,operacion_id:opIdTransf});
         setClientes(p=>p.map(cl=>cl.id!==cDId?cl:{...cl,movimientos:[...cl.movimientos,mvDest]}));
       }
       setF("tn",""); setF("tpctOrigen",""); setF("ccOrigenId",""); setF("ccOrigenBuscar","");
       setTDestinos([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
+      // Skip normal op insert — ya se insertó arriba
+      opData=null;
     }
     if (!opData) return;
     setSaldos(ns);
@@ -3551,15 +3572,38 @@ function AppInterna({ usuario }) {
 
   async function eliminarOpHoy(op) {
     const movsVinculados=[];
-    clientes.forEach(cl=>{
-      cl.movimientos.forEach(mv=>{
-        if(mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora){
-          movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+cl.apellido});
-        }
+    // Buscar por operacion_id (nuevo) o por nota "Op. vinculada" (legacy)
+    if(op.id){
+      const {data:movsDB}=await SB.from("movimientos_cc").select("id,cliente_id").eq("operacion_id",op.id);
+      (movsDB||[]).forEach(mv=>{
+        const cl=clientes.find(x=>x.id===mv.cliente_id);
+        if(cl) movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+(cl.apellido||"")});
       });
-    });
+    }
+    // Fallback legacy: buscar por nota
+    if(movsVinculados.length===0){
+      clientes.forEach(cl=>{
+        cl.movimientos.forEach(mv=>{
+          if(mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora){
+            movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+cl.apellido});
+          }
+        });
+      });
+    }
+    // Para transferencias: buscar todos los movimientos CC del mismo dia+hora
+    if(op.tipo==="transferencia"&&movsVinculados.length===0){
+      const {data:movsTransf}=await SB.from("movimientos_cc").select("id,cliente_id,monto,moneda,tipo,nota").eq("fecha",op.fecha).eq("hora",op.hora||"");
+      (movsTransf||[]).forEach(mv=>{
+        const cl=clientes.find(x=>x.id===mv.cliente_id);
+        if(cl&&!movsVinculados.find(m=>m.mvId===mv.id))
+          movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+(cl.apellido||""),monto:mv.monto,moneda:mv.moneda,tipo:mv.tipo});
+      });
+    }
     const detalleCC=movsVinculados.length>0
-      ? "\n\nTambien se van a borrar movimientos CC de:\n"+[...new Set(movsVinculados.map(x=>x.nombre))].join(", ")
+      ? "\n\nSe revertirán "+movsVinculados.length+" movimientos CC de:\n"+
+        movsVinculados.map(m=>
+          "• "+(m.nombre||"cliente")+(m.monto?" — "+(m.tipo==="ingreso_transf"?"HABER":"DEBE")+" "+( m.moneda||"")+" $"+fmt(m.monto):"")
+        ).join("\n")
       : "";
     let baseImpacto=true;
     if(op.tipo==="compra"||op.tipo==="venta"){
@@ -5428,6 +5472,18 @@ function AppInterna({ usuario }) {
                         if(!transCC.destino){notify("Elegi una CC destino",false);return;}
                         const cDestId=Number(transCC.destino);
                         const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                        // Verificar duplicados
+                        const ahoraMs2=Date.now();
+                        const monto2=parse(transCC.monto);
+                        const dupCC=(c.movimientos||[]).filter(mv=>{
+                          if(mv.tipo!=="ingreso_transf"||mv.moneda!==transCC.moneda) return false;
+                          const mvMs=new Date(hoy+"T"+(mv.hora||"00:00").replace("p. m.","PM").replace("a. m.","AM")).getTime();
+                          return !isNaN(mvMs)&&Math.abs(ahoraMs2-mvMs)<2*60*60*1000&&Math.abs(mv.monto-monto2)<1;
+                        });
+                        if(dupCC.length>0){
+                          const okDup=window.confirm("⚠ POSIBLE DUPLICADO\n\nYa existe una transferencia de $"+fmt(monto2)+" en esta CC en las últimas 2 horas.\n\n¿Confirmar igualmente?");
+                          if(!okDup) return;
+                        }
                         const pctO=parse(transCC.pctOrigen)||0;
                         const pctD=parse(transCC.pctDestino)||0;
                         const comO=monto*pctO/100;
