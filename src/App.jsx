@@ -3489,18 +3489,23 @@ function AppInterna({ usuario }) {
       const destinos=tDestinos.filter(d=>d.clienteId&&parse(d.monto)>0);
       if(destinos.length===0){notify("Agregá al menos un destino",false);return;}
       // ── Verificar duplicados en transferencias ──────────────────────
-      const ahoraMs = Date.now();
-      const dosHorasMs = 2*60*60*1000;
-      const posiblesDup = movsCC.filter(mv => {
-        if(mv.tipo!=="retiro_transf") return false;
-        const mvMs = new Date(mv.fecha+"T"+(mv.hora||"00:00").replace("p. m.","PM").replace("a. m.","AM")).getTime();
-        if(isNaN(mvMs)||Math.abs(ahoraMs-mvMs)>dosHorasMs) return false;
-        return destinos.some(d=>Number(d.clienteId)===mv.cliente_id&&Math.abs(parse(d.monto)-mv.monto)<1);
-      });
-      if(posiblesDup.length>0){
-        const clDup=clientes.find(x=>x.id===posiblesDup[0].cliente_id)?.nombre||"cliente";
-        const confirmDup=window.confirm("⚠ POSIBLE DUPLICADO\n\nYa existe una transferencia similar a "+clDup+" por $"+fmt(posiblesDup[0].monto)+" en las últimas 2 horas.\n\n¿Confirmar igualmente?");
-        if(!confirmDup) return;
+      const destIdsCheck = destinos.map(d=>Number(d.clienteId)).filter(Boolean);
+      if(destIdsCheck.length>0){
+        const haceDoHoras = new Date(Date.now()-2*60*60*1000).toISOString();
+        const {data:dupCheck} = await SB.from("movimientos_cc")
+          .select("id,cliente_id,monto,moneda")
+          .in("cliente_id", destIdsCheck)
+          .eq("tipo","retiro_transf")
+          .eq("fecha", hoy)
+          .gte("created_at", haceDoHoras);
+        const posiblesDup=(dupCheck||[]).filter(mv=>
+          destinos.some(d=>Number(d.clienteId)===mv.cliente_id&&Math.abs(parse(d.monto)-mv.monto)<1)
+        );
+        if(posiblesDup.length>0){
+          const clDup=clientes.find(x=>x.id===posiblesDup[0].cliente_id)?.nombre||"cliente";
+          const confirmDup=window.confirm("⚠ POSIBLE DUPLICADO\n\nYa existe una transferencia similar a "+clDup+" por $"+fmt(posiblesDup[0].monto)+" en las últimas 2 horas.\n\n¿Confirmar igualmente?");
+          if(!confirmDup) return;
+        }
       }
       const nombreOrigen=clientes.find(x=>x.id===Number(form.ccOrigenId))?.nombre||"origen";
       const totalComDest=destinos.reduce((s,d)=>{const m=parse(d.monto),p=parse(d.pct)||0;return s+m*(p/100);},0);
