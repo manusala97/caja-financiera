@@ -1708,7 +1708,20 @@ function PantallaAnalisis() {
           o.tipo === "transferencia" &&
           o.fecha >= FECHA_CORTE2 && o.fecha <= FECHA_HASTA2
         );
-        const comOps = opsTransf.reduce((s,o) => s + parse(o.datos?.tcom || o.tcom || 0), 0);
+        // Separar por moneda
+        const comOpsARS = opsTransf
+          .filter(o => (o.datos?.tmoneda||o.tmoneda||"ARS")==="ARS")
+          .reduce((s,o) => s + parse(o.datos?.tcom || o.tcom || 0), 0);
+        const comOpsUSD = opsTransf
+          .filter(o => (o.datos?.tmoneda||o.tmoneda||"ARS")==="USD")
+          .reduce((s,o) => s + parse(o.datos?.tcom || o.tcom || 0), 0);
+        const comOps = comOpsARS; // ARS para el gráfico principal
+        // Para el gráfico: convertir USD a ARS usando blue actual
+        const blueActualTC = (()=>{
+          const uc=cierres[cierres.length-1];
+          return parse(uc?.cotiz_blue?.venta)||parse(uc?.cotiz_blue?.compra)||parse(uc?.cotizaciones?.ARS)||1500;
+        })();
+        const comOpsTotal = comOpsARS + comOpsUSD * blueActualTC;
 
         // 2. Recaudadora
         const recaudFiltrada = (recaudTransf||[]).filter(t => t.fecha >= FECHA_CORTE2 && t.fecha <= FECHA_HASTA2);
@@ -1733,9 +1746,11 @@ function PantallaAnalisis() {
         const semanasArr = Object.values(semanas).sort((a,b)=>a.key.localeCompare(b.key));
 
         return {
-          comOps, comRecaudPagado, comRecaudAcred, comRecaudPend,
-          totalEfectivo: comOps + comRecaudPagado,
-          totalTotal: comOps + comRecaudPagado + comRecaudAcred + comRecaudPend,
+          comOps, comOpsARS, comOpsUSD, comOpsTotal,
+          comRecaudPagado, comRecaudAcred, comRecaudPend,
+          totalEfectivo: comOpsARS + comRecaudPagado,
+          totalEfectivoUSD: comOpsUSD,
+          totalTotal: comOpsARS + comRecaudPagado + comRecaudAcred + comRecaudPend,
           semanasArr, opsTransf, recaudFiltrada
         };
       })(),
@@ -2142,7 +2157,8 @@ function PantallaAnalisis() {
             {/* KPIs */}
             <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
               {[
-                {l:"OPERACIONES + ENTRE CC",v:tc.comOps,c:"#38bdf8",hint:"Comisiones registradas en tabla operaciones"},
+                {l:"OPS/ENTRE CC — ARS",v:tc.comOpsARS,c:"#38bdf8",hint:"Comisiones en pesos"},
+                {l:"OPS/ENTRE CC — USD",v:tc.comOpsUSD,c:"#60a5fa",hint:"Comisiones en dólares"},
                 {l:"RECAUDADORA PAGADO",v:tc.comRecaudPagado,c:"#4ade80",hint:"Ganancia ya cobrada de recaudadora"},
                 {l:"RECAUDADORA ACREDITADO",v:tc.comRecaudAcred,c:"#f59e0b",hint:"Acreditado pero sin pagar al cliente aún"},
                 {l:"RECAUDADORA PENDIENTE",v:tc.comRecaudPend,c:"#f87171",hint:"Aún dentro de las 72hs"},
@@ -2834,6 +2850,7 @@ function AppInterna({ usuario }) {
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
   const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS", pctOrigen:"", pctDestino:""});
+  const [comTransf, setComTransf] = useState({activo:false, montoEnviado:"", pct:"", montoComision:"", nota:""});
   const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
   const [liquidacion, setLiquidacion] = useState({
@@ -5397,6 +5414,74 @@ function AppInterna({ usuario }) {
                       ⇄ Transferencia entre CCs
                     </button>
                   </div>
+
+                  {/* Comisión por transferencia */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,letterSpacing:2,color:"#38bdf8",marginBottom:5}}>COMISIÓN TRANSFERENCIA</div>
+                    <button onClick={()=>setComTransf(t=>({...t,activo:!t.activo}))}
+                      style={{...S.btn(comTransf.activo,"#38bdf8"),width:"100%"}}>
+                      💸 Registrar comisión
+                    </button>
+                  </div>
+                  {comTransf.activo&&(
+                    <div style={{background:"rgba(56,189,248,0.05)",border:"1px solid rgba(56,189,248,0.2)",borderRadius:8,padding:10,marginBottom:10}}>
+                      <div style={{fontSize:9,color:"#38bdf8",letterSpacing:2,marginBottom:8}}>COMISIÓN POR TRANSFERENCIA RECIBIDA</div>
+                      <div style={{...S.grid("1fr 1fr",8),marginBottom:8}}>
+                        <div>
+                          <Lbl>Monto enviado $</Lbl>
+                          <Inp type="number" placeholder="500000" value={comTransf.montoEnviado}
+                            onChange={e=>{
+                              const m=e.target.value;
+                              const com=parse(m)*parse(comTransf.pct)/100;
+                              setComTransf(t=>({...t,montoEnviado:m,montoComision:com?com.toFixed(2):""}));
+                            }}/>
+                        </div>
+                        <div>
+                          <Lbl>% Comisión</Lbl>
+                          <Inp type="number" placeholder="0.5" step="0.1" value={comTransf.pct}
+                            onChange={e=>{
+                              const p=e.target.value;
+                              const com=parse(comTransf.montoEnviado)*parse(p)/100;
+                              setComTransf(t=>({...t,pct:p,montoComision:com?com.toFixed(2):""}));
+                            }}/>
+                        </div>
+                        <div>
+                          <Lbl>Comisión ARS</Lbl>
+                          <Inp type="number" value={comTransf.montoComision}
+                            onChange={e=>setComTransf(t=>({...t,montoComision:e.target.value}))}/>
+                        </div>
+                        <div>
+                          <Lbl>Nota</Lbl>
+                          <Inp placeholder="opcional" value={comTransf.nota}
+                            onChange={e=>setComTransf(t=>({...t,nota:e.target.value}))}/>
+                        </div>
+                      </div>
+                      {comTransf.montoComision&&(
+                        <div style={{fontSize:11,color:"#38bdf8",marginBottom:8,padding:"6px 8px",background:"rgba(56,189,248,0.06)",borderRadius:6}}>
+                          Comisión: <strong>${fmt(parse(comTransf.montoComision))}</strong> ARS
+                          {comTransf.montoEnviado&&comTransf.pct&&<span style={{color:"#94a3b8"}}> ({comTransf.pct}% de ${fmt(parse(comTransf.montoEnviado))})</span>}
+                        </div>
+                      )}
+                      <button onClick={async()=>{
+                        const comMonto=parse(comTransf.montoComision);
+                        if(!comMonto){notify("Ingresá el monto de comisión",false);return;}
+                        const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                        const nota=comTransf.nota||`Comisión transf. ${comTransf.pct?comTransf.pct+"%":""} s/$${fmt(parse(comTransf.montoEnviado))} enviados`;
+                        // 1. Movimiento HABER en CC del cliente (le cobramos la comisión = reduce lo que le debemos)
+                        const mv={id:Date.now(),hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:comMonto,nota};
+                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:comMonto,nota});
+                        setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv]}));
+                        // 2. Registrar en operaciones como transferencia con tcom
+                        const opData={tipo:"transferencia",hora,tn:parse(comTransf.montoEnviado),tpct:parse(comTransf.pct),tcom:comMonto,monto:comMonto,tmoneda:"ARS",cliente:c.nombre,nota,ccOrigenId:c.id};
+                        const {data:opIns}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"transferencia",datos:opData}).select().single();
+                        if(opIns) setOps(p=>[...p,{...opData,id:opIns.id,fecha:hoy}]);
+                        setComTransf({activo:false,montoEnviado:"",pct:"",montoComision:"",nota:""});
+                        notify("Comisión registrada ✓ — aparece en Análisis CPP → Transferencias");
+                      }} style={{...S.btn(true,"#38bdf8"),width:"100%"}}>
+                        ✓ Registrar comisión
+                      </button>
+                    </div>
+                  )}
                   {transCC.activo?(
                     <div style={{background:"rgba(167,139,250,0.05)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:8,padding:10,marginBottom:10}}>
                       <div style={{fontSize:9,color:"#a78bfa",letterSpacing:2,marginBottom:8}}>ENVIAR A OTRA CC</div>
