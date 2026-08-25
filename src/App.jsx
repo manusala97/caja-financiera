@@ -784,18 +784,16 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
   );
 }
 
-function PantallaLibro({ops, clientes, gastos, movsCC, hoy}) {
+function PantallaLibro({ops, clientes, gastos, hoy}) {
   const [monedaLibro, setMonedaLibro] = useState("ARS");
-  const [desdeLibro, setDesdeLibro] = useState("");
-  const [hastaLibro, setHastaLibro] = useState("");
   const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
   const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
 
-  // Construir movimientos de caja
+  // Construir movimientos de caja del día actual
   const movimientos = [];
 
-  // 1. Operaciones que impactan caja
-  ops.forEach(op => {
+  // 1. Operaciones del día que impactan caja
+  ops.filter(o=>o.fecha===hoy).forEach(op => {
     const t = op.tipo;
     const d = op.datos || op;
     const moneda = d.moneda || "";
@@ -806,182 +804,141 @@ function PantallaLibro({ops, clientes, gastos, movsCC, hoy}) {
     const hora = d.hora || op.hora || "";
 
     if(t === "compra") {
-      // Compra: sale ARS, entra moneda extranjera
       if(moneda2 === "ARS") {
-        movimientos.push({fecha:op.fecha,hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:"ARS",monto:-(monto*cotiz),impacto:"salida"});
-        movimientos.push({fecha:op.fecha,hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:moneda,monto:monto,impacto:"entrada"});
+        movimientos.push({hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:"ARS",monto:-(monto*cotiz)});
+        movimientos.push({hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:moneda,monto:monto});
       }
     } else if(t === "venta") {
-      // Venta: entra ARS, sale moneda extranjera
       if(moneda2 === "ARS" && moneda !== "ARS") {
-        movimientos.push({fecha:op.fecha,hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:moneda,monto:-monto,impacto:"salida"});
-        movimientos.push({fecha:op.fecha,hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:"ARS",monto:monto*cotiz,impacto:"entrada"});
+        movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:moneda,monto:-monto});
+        movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:"ARS",monto:monto*cotiz});
       }
     } else if(t === "cheque_dia") {
-      const ccom = parse(d.ccom||0);
-      const cn = parse(d.cn||0);
-      movimientos.push({fecha:op.fecha,hora,tipo:"CHEQUE DÍA",concepto:`Cheque al día — nominal $${fmt(cn)}`,nombre:cliente,moneda:"ARS",monto:ccom,impacto:"entrada"});
+      movimientos.push({hora,tipo:"CHEQUE DÍA",concepto:`Nominal $${fmt(parse(d.cn||0))}`,nombre:cliente,moneda:"ARS",monto:parse(d.ccom||0)});
     } else if(t === "cheque_dif" && (!d.pagoCheqDif || d.pagoCheqDif==="caja")) {
-      const mFinal = parse(d.montoFinal||d.monto||0);
-      movimientos.push({fecha:op.fecha,hora,tipo:"CHEQUE DIF",concepto:`Cheque diferido — acredita ${d.dfa||""}`,nombre:cliente,moneda:"ARS",monto:-mFinal,impacto:"salida"});
+      movimientos.push({hora,tipo:"CHEQUE DIF",concepto:`Acredita ${d.dfa||""}`,nombre:cliente,moneda:"ARS",monto:-parse(d.montoFinal||d.monto||0)});
     } else if(t === "transferencia") {
       const tcom = parse(d.tcom||0);
-      const tmon = d.tmoneda||"ARS";
-      if(tcom>0) movimientos.push({fecha:op.fecha,hora,tipo:"TRANSFERENCIA",concepto:`Comisión transferencia`,nombre:cliente,moneda:tmon,monto:tcom,impacto:"entrada"});
+      if(tcom>0) movimientos.push({hora,tipo:"TRANSFERENCIA",concepto:"Comisión",nombre:cliente,moneda:d.tmoneda||"ARS",monto:tcom});
     } else if(t === "ajuste") {
-      const delta = parse(d.delta||0);
-      const mon = d.moneda||"ARS";
-      movimientos.push({fecha:op.fecha,hora,tipo:"AJUSTE",concepto:d.nota||"Ajuste",nombre:"",moneda:mon,monto:delta,impacto:delta>=0?"entrada":"salida"});
+      movimientos.push({hora,tipo:"AJUSTE",concepto:d.nota||"Ajuste",nombre:"",moneda:d.moneda||"ARS",monto:parse(d.delta||0)});
     }
   });
 
-  // 2. Gastos
-  (gastos||[]).forEach(g => {
-    movimientos.push({fecha:g.fecha,hora:"",tipo:"GASTO",concepto:g.categoria+(g.nota?` — ${g.nota}`:""),nombre:"",moneda:g.moneda||"ARS",monto:-(parse(g.monto)),impacto:"salida"});
-  });
-
-  // 3. Movimientos CC que impactan caja
-  (movsCC||[]).forEach(mv => {
-    if(!mv.impacta_caja) return;
-    const cl = clientes.find(x=>x.id===mv.cliente_id);
-    const nombre = cl ? `${cl.nombre} ${cl.apellido||""}`.trim() : "";
-    const esEntrada = mv.tipo==="retiro_efectivo"||mv.tipo==="retiro_transf";
-    movimientos.push({
-      fecha:mv.fecha,hora:mv.hora||"",
-      tipo:"CC",concepto:`${mv.tipo==="retiro_efectivo"?"Retiro efectivo":mv.tipo==="ingreso_dep"?"Ingreso depósito":mv.tipo} CC`,
-      nombre,moneda:mv.moneda||"ARS",
-      monto:esEntrada?parse(mv.monto):-parse(mv.monto),
-      impacto:esEntrada?"entrada":"salida"
+  // 2. Movimientos CC del día que impactan caja física
+  clientes.forEach(cl => {
+    (cl.movimientos||[]).filter(mv=>mv.fecha===hoy&&mv.impacta_caja).forEach(mv => {
+      const esEntrada = mv.tipo==="retiro_efectivo"; // cliente retira = entra a nuestra caja
+      const esSalida = mv.tipo==="ingreso_dep"; // cliente deposita = sale de nuestra caja
+      if(!esEntrada && !esSalida) return;
+      movimientos.push({
+        hora:mv.hora||"",tipo:"CC",
+        concepto:mv.tipo==="retiro_efectivo"?"Retiro efectivo":"Ingreso depósito",
+        nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),
+        moneda:mv.moneda||"ARS",
+        monto:esEntrada?parse(mv.monto):-parse(mv.monto)
+      });
     });
   });
 
-  // Filtrar por moneda y fechas
+  // 3. Gastos del día
+  (gastos||[]).filter(g=>g.fecha===hoy).forEach(g => {
+    if(g.categoria==="Fondo de Reserva") return; // no impacta caja
+    movimientos.push({hora:"",tipo:"GASTO",concepto:g.categoria+(g.nota?` — ${g.nota}`:""),nombre:"",moneda:g.moneda||"ARS",monto:-parse(g.monto)});
+  });
+
+  // Filtrar por moneda y ordenar por hora
   const filtrados = movimientos
     .filter(m => m.moneda === monedaLibro)
-    .filter(m => !desdeLibro || m.fecha >= desdeLibro)
-    .filter(m => !hastaLibro || m.fecha <= hastaLibro)
-    .sort((a,b) => a.fecha.localeCompare(b.fecha)||a.hora.localeCompare(b.hora));
+    .sort((a,b) => (a.hora||"").localeCompare(b.hora||""));
 
-  // Calcular saldo acumulado
-  let saldoAcum = 0;
-  const conSaldo = filtrados.map(m => {
-    saldoAcum += m.monto;
-    return {...m, saldoAcum};
-  });
-
-  // Agrupar por fecha
-  const porFecha = {};
-  conSaldo.forEach(m => {
-    if(!porFecha[m.fecha]) porFecha[m.fecha] = [];
-    porFecha[m.fecha].push(m);
-  });
-  const fechas = Object.keys(porFecha).sort((a,b)=>b.localeCompare(a));
+  // Saldo acumulado
+  let saldo = 0;
+  const conSaldo = filtrados.map(m => { saldo += m.monto; return {...m, saldoAcum:saldo}; });
 
   const MONEDAS_LIBRO = ["ARS","USD","USDT","EUR","BRL","GBP"];
-  const colorTipo = {
-    "COMPRA":"#38bdf8","VENTA":"#4ade80","CHEQUE DÍA":"#c084fc",
-    "CHEQUE DIF":"#a78bfa","TRANSFERENCIA":"#f59e0b","GASTO":"#f87171",
-    "AJUSTE":"#94a3b8","CC":"#e879f9"
-  };
+  const colorTipo = {"COMPRA":"#38bdf8","VENTA":"#4ade80","CHEQUE DÍA":"#c084fc","CHEQUE DIF":"#a78bfa","TRANSFERENCIA":"#f59e0b","GASTO":"#f87171","AJUSTE":"#94a3b8","CC":"#e879f9"};
+  const totalEntradas = conSaldo.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
+  const totalSalidas = conSaldo.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
 
   return (
     <div style={{padding:"16px 16px 40px",maxWidth:1000,margin:"0 auto"}}>
       <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:4,fontWeight:700}}>LIBRO DE CAJA</div>
-      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:16}}>Movimientos que impactaron caja física</div>
+      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Movimientos del día — {hoy}</div>
+      <div style={{fontSize:11,color:"#6b7280",marginBottom:16}}>Todo lo que impactó la caja física hoy</div>
 
-      {/* Filtros */}
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:20,
-        background:"rgba(52,211,153,0.04)",border:"1px solid rgba(52,211,153,0.15)",borderRadius:10,padding:"12px 16px"}}>
-        {/* Selector moneda */}
-        <div style={{display:"flex",gap:6}}>
-          {MONEDAS_LIBRO.map(m=>(
-            <button key={m} onClick={()=>setMonedaLibro(m)}
-              style={{padding:"5px 12px",borderRadius:6,border:"1px solid "+(monedaLibro===m?"#34d399":"#1f2937"),
-                background:monedaLibro===m?"rgba(52,211,153,0.1)":"transparent",
-                color:monedaLibro===m?"#34d399":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-              {m}
-            </button>
-          ))}
-        </div>
-        <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:"auto"}}>
-          <input type="date" value={desdeLibro} onChange={e=>setDesdeLibro(e.target.value)}
-            style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
-          <span style={{color:"#374151"}}>→</span>
-          <input type="date" value={hastaLibro} onChange={e=>setHastaLibro(e.target.value)}
-            style={{background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontFamily:"inherit",fontSize:11,outline:"none"}}/>
-          {(desdeLibro||hastaLibro)&&(
-            <button onClick={()=>{setDesdeLibro("");setHastaLibro("");}}
-              style={{padding:"5px 10px",borderRadius:6,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11}}>
-              Reset
-            </button>
-          )}
-        </div>
+      {/* Selector moneda */}
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {MONEDAS_LIBRO.map(m=>(
+          <button key={m} onClick={()=>setMonedaLibro(m)}
+            style={{padding:"6px 14px",borderRadius:6,border:"1px solid "+(monedaLibro===m?"#34d399":"#1f2937"),
+              background:monedaLibro===m?"rgba(52,211,153,0.1)":"transparent",
+              color:monedaLibro===m?"#34d399":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+            {m}
+          </button>
+        ))}
       </div>
 
       {/* Resumen */}
       <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
         {[
-          {l:"ENTRADAS",v:conSaldo.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0),c:"#4ade80"},
-          {l:"SALIDAS",v:conSaldo.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0),c:"#f87171"},
-          {l:"SALDO NETO",v:conSaldo.reduce((s,m)=>s+m.monto,0),c:"#34d399"},
-          {l:"MOVIMIENTOS",v:conSaldo.length,c:"#94a3b8",fmt:true},
-        ].map(({l,v,c,fmt:isFmt})=>(
+          {l:"ENTRADAS",v:totalEntradas,c:"#4ade80"},
+          {l:"SALIDAS",v:Math.abs(totalSalidas),c:"#f87171"},
+          {l:"SALDO NETO",v:totalEntradas+totalSalidas,c:"#34d399"},
+          {l:"MOVIMIENTOS",v:conSaldo.length,c:"#94a3b8",isCount:true},
+        ].map(({l,v,c,isCount})=>(
           <div key={l} style={{flex:"1 1 140px",background:"#0f1623",border:`1px solid ${c}22`,borderRadius:10,padding:"12px 14px"}}>
             <div style={{fontSize:9,color:"#6b7280",letterSpacing:1,marginBottom:4}}>{l}</div>
             <div style={{fontSize:16,fontWeight:700,color:c,fontFamily:"monospace"}}>
-              {isFmt?v:(v>=0?"+":"")+fmt(Math.round(Math.abs(v)))} {!isFmt&&monedaLibro}
+              {isCount?v:fmt(Math.round(v))+" "+monedaLibro}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Tabla por fecha */}
-      {fechas.length===0?(
-        <div style={{textAlign:"center",color:"#374151",padding:40,fontSize:13}}>
-          Sin movimientos en {monedaLibro} para el período seleccionado
+      {/* Tabla */}
+      {conSaldo.length===0?(
+        <div style={{textAlign:"center",color:"#374151",padding:40,fontSize:13,background:"#0f1623",borderRadius:12,border:"1px solid #1f2937"}}>
+          Sin movimientos en {monedaLibro} hoy
         </div>
       ):(
-        fechas.map(fecha=>(
-          <div key={fecha} style={{marginBottom:16}}>
-            <div style={{fontSize:10,color:"#34d399",letterSpacing:2,fontWeight:700,marginBottom:6,padding:"4px 0",borderBottom:"1px solid #1f2937"}}>
-              📅 {fecha}
-            </div>
-            <div style={{background:"#0f1623",borderRadius:10,overflow:"hidden"}}>
-              {porFecha[fecha].reverse().map((m,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"60px 110px 1fr 120px 120px 120px",
-                  borderBottom:"1px solid #0a0a0a",alignItems:"center"}}>
-                  <div style={{padding:"8px 10px",fontSize:10,color:"#6b7280"}}>{m.hora}</div>
-                  <div style={{padding:"8px 10px"}}>
-                    <span style={{fontSize:9,padding:"2px 7px",borderRadius:4,
-                      background:`rgba(${colorTipo[m.tipo]?.replace("#","").match(/.{2}/g)?.map(x=>parseInt(x,16)).join(",")},0.1)`,
-                      color:colorTipo[m.tipo]||"#94a3b8",fontWeight:700}}>
-                      {m.tipo}
-                    </span>
-                  </div>
-                  <div style={{padding:"8px 10px",fontSize:11,color:"#e2e8f0"}}>
-                    {m.concepto}
-                    {m.nombre&&<span style={{color:"#6b7280",marginLeft:6,fontSize:10}}>· {m.nombre}</span>}
-                  </div>
-                  <div style={{padding:"8px 10px",fontFamily:"monospace",fontSize:12,
-                    color:m.monto>=0?"#4ade80":"#f87171",fontWeight:700,textAlign:"right"}}>
-                    {m.monto>=0?"+":""}{fmt(Math.round(Math.abs(m.monto)))}
-                  </div>
-                  <div style={{padding:"8px 10px",fontSize:9,color:"#6b7280",textAlign:"right"}}>
-                    {m.impacto==="entrada"?"↑ entrada":"↓ salida"}
-                  </div>
-                  <div style={{padding:"8px 10px",fontFamily:"monospace",fontSize:11,
-                    color:m.saldoAcum>=0?"#94a3b8":"#f87171",textAlign:"right"}}>
-                    {fmt(Math.round(m.saldoAcum))}
-                  </div>
+        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"70px 120px 1fr 130px 60px 130px"}}>
+            {["Hora","Tipo","Concepto / Cliente","Monto","","Saldo"].map(h=>(
+              <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
+            ))}
+            {conSaldo.map((m,i)=>(
+              <Fragment key={i}>
+                <div style={{padding:"10px",fontSize:11,color:"#6b7280",borderBottom:"1px solid #0a0a0a"}}>{m.hora}</div>
+                <div style={{padding:"10px",borderBottom:"1px solid #0a0a0a"}}>
+                  <span style={{fontSize:9,padding:"2px 7px",borderRadius:4,background:`${colorTipo[m.tipo]||"#94a3b8"}18`,color:colorTipo[m.tipo]||"#94a3b8",fontWeight:700}}>
+                    {m.tipo}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div style={{padding:"10px",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #0a0a0a"}}>
+                  {m.concepto}
+                  {m.nombre&&<span style={{color:"#9ca3af",marginLeft:6,fontSize:11}}>· {m.nombre}</span>}
+                </div>
+                <div style={{padding:"10px",fontFamily:"monospace",fontSize:13,fontWeight:700,
+                  color:m.monto>=0?"#4ade80":"#f87171",textAlign:"right",borderBottom:"1px solid #0a0a0a"}}>
+                  {m.monto>=0?"+":"-"}{fmt(Math.round(Math.abs(m.monto)))}
+                </div>
+                <div style={{padding:"10px",fontSize:10,color:"#6b7280",textAlign:"center",borderBottom:"1px solid #0a0a0a"}}>
+                  {m.monto>=0?"↑":"↓"}
+                </div>
+                <div style={{padding:"10px",fontFamily:"monospace",fontSize:12,
+                  color:m.saldoAcum>=0?"#94a3b8":"#f87171",textAlign:"right",borderBottom:"1px solid #0a0a0a"}}>
+                  {fmt(Math.round(m.saldoAcum))}
+                </div>
+              </Fragment>
+            ))}
           </div>
-        ))
+        </div>
       )}
     </div>
   );
 }
+
 
 function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, notify}) {
   const [formR, setFormR] = useState({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
@@ -8068,7 +8025,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
 
         {pant==="pnl"&&<PantallaPnl pnlData={pnlData}/>}
         {pant==="recaudadora"&&<PantallaRecaudadora recaudTransf={recaudTransf} setRecaudTransf={setRecaudTransf} clientes={clientes} hoy={hoy} SB={SB} notify={notify}/>}
-        {pant==="libro"&&<PantallaLibro ops={ops.map(o=>({...o,...(o.datos||{})}))} clientes={clientes} gastos={gastos} movsCC={clientes.flatMap(cl=>(cl.movimientos||[]).map(m=>({...m,cliente_id:cl.id})))} hoy={hoy}/>}
+        {pant==="libro"&&<PantallaLibro ops={ops.map(o=>({...o,...(o.datos||{})}))} clientes={clientes} gastos={gastos} hoy={hoy}/>}
 
       </main>
     </div>
