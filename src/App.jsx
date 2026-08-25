@@ -837,16 +837,20 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
     // Transferencias: NO impactan caja física, van a CC
   });
 
-  // 1b. Movimientos CC del cliente que impactan caja (retiro_efectivo, ingreso_dep)
+  // 1b. Movimientos CC que tienen impacta_caja = true
   clientes.forEach(cl => {
-    (cl.movimientos||[]).filter(mv=>mv.fecha===hoy).forEach(mv => {
-      if(mv.tipo==="retiro_efectivo") {
-        // Cliente retira efectivo de su CC → sale de nuestra caja
-        movimientos.push({hora:mv.hora||"",tipo:"CC → CAJA",concepto:"Pago efectivo al cliente",nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),moneda:mv.moneda||"ARS",monto:-parse(mv.monto)});
-      } else if(mv.tipo==="ingreso_dep"||mv.tipo==="cc_retiro_efectivo") {
-        // Cliente deposita efectivo → entra a nuestra caja
-        movimientos.push({hora:mv.hora||"",tipo:"CAJA ← CC",concepto:"Depósito efectivo del cliente",nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),moneda:mv.moneda||"ARS",monto:parse(mv.monto)});
-      }
+    (cl.movimientos||[]).filter(mv=>mv.fecha===hoy&&(mv.impacta_caja||mv.impactaCaja)).forEach(mv => {
+      const ing = mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+      // ing=true → cliente nos debe → entra a nuestra caja
+      // ing=false → le debemos al cliente → sale de nuestra caja
+      movimientos.push({
+        hora:mv.hora||"",
+        tipo: ing ? "CAJA ← CC" : "CC → CAJA",
+        concepto: mv.nota || (ing?"Ingreso en caja":"Salida de caja"),
+        nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),
+        moneda:mv.moneda||"ARS",
+        monto: ing ? parse(mv.monto) : -parse(mv.monto)
+      });
     });
   });
 
@@ -3909,8 +3913,8 @@ function AppInterna({ usuario }) {
       setSaldos(ns);
       await guardarDia(ns,null,null);
     }
-    const mv={id:Date.now(),hora,fecha:hoy,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota};
-    await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||""});
+    const mv={id:Date.now(),hora,fecha:hoy,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota,impacta_caja:formCC.impactaCaja||false};
+    await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||"",impacta_caja:formCC.impactaCaja||false});
     setClientes(p=>p.map(c=>c.id!==cId?c:{...c,movimientos:[...c.movimientos,mv]}));
     setFormCC(f=>({...f,monto:"",nota:""})); notify("Movimiento registrado");
   }
