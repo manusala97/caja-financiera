@@ -802,46 +802,55 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
     const cotiz = parse(d.cotizacion);
     const cliente = d.cliente || d.nota || "";
     const hora = d.hora || op.hora || "";
+    const impactaCaja = d.baseImpactaCaja !== "no"; // default: sí impacta
 
     if(t === "compra") {
+      if(!impactaCaja) return; // pagada por transferencia, no toca caja
       if(moneda2 === "ARS") {
         movimientos.push({hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:"ARS",monto:-(monto*cotiz)});
         movimientos.push({hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:moneda,monto:monto});
       }
     } else if(t === "venta") {
+      if(!impactaCaja) return; // cobrada por transferencia, no toca caja
       if(moneda2 === "ARS" && moneda !== "ARS") {
         movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:moneda,monto:-monto});
         movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:"ARS",monto:monto*cotiz});
       }
+      // Desglose: solo las líneas que impactan caja
+      (d.desglose||[]).forEach(linea => {
+        if(linea.tipo==="efectivo"||linea.impactaCaja) {
+          const lMonto = parse(linea.monto);
+          movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda} — efectivo`,nombre:cliente,moneda:moneda2||"ARS",monto:lMonto});
+        }
+      });
     } else if(t === "cheque_dia") {
+      // Cheque al día: la comisión entra a caja
       movimientos.push({hora,tipo:"CHEQUE DÍA",concepto:`Nominal $${fmt(parse(d.cn||0))}`,nombre:cliente,moneda:"ARS",monto:parse(d.ccom||0)});
-    } else if(t === "cheque_dif" && (!d.pagoCheqDif || d.pagoCheqDif==="caja")) {
-      movimientos.push({hora,tipo:"CHEQUE DIF",concepto:`Acredita ${d.dfa||""}`,nombre:cliente,moneda:"ARS",monto:-parse(d.montoFinal||d.monto||0)});
-    } else if(t === "transferencia") {
-      const tcom = parse(d.tcom||0);
-      if(tcom>0) movimientos.push({hora,tipo:"TRANSFERENCIA",concepto:"Comisión",nombre:cliente,moneda:d.tmoneda||"ARS",monto:tcom});
+    } else if(t === "cheque_dif") {
+      // Solo si el pago fue de caja física (no CC)
+      if(!d.pagoCheqDif || d.pagoCheqDif==="caja") {
+        movimientos.push({hora,tipo:"CHEQUE DIF",concepto:`Acredita ${d.dfa||""}`,nombre:cliente,moneda:"ARS",monto:-parse(d.montoFinal||d.monto||0)});
+      }
     } else if(t === "ajuste") {
       movimientos.push({hora,tipo:"AJUSTE",concepto:d.nota||"Ajuste",nombre:"",moneda:d.moneda||"ARS",monto:parse(d.delta||0)});
     }
+    // Transferencias: NO impactan caja física, van a CC
   });
 
-  // 2. Movimientos CC del día que impactan caja física
+  // 1b. Movimientos CC del cliente que impactan caja (retiro_efectivo, ingreso_dep)
   clientes.forEach(cl => {
-    (cl.movimientos||[]).filter(mv=>mv.fecha===hoy&&mv.impacta_caja).forEach(mv => {
-      const esEntrada = mv.tipo==="retiro_efectivo"; // cliente retira = entra a nuestra caja
-      const esSalida = mv.tipo==="ingreso_dep"; // cliente deposita = sale de nuestra caja
-      if(!esEntrada && !esSalida) return;
-      movimientos.push({
-        hora:mv.hora||"",tipo:"CC",
-        concepto:mv.tipo==="retiro_efectivo"?"Retiro efectivo":"Ingreso depósito",
-        nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),
-        moneda:mv.moneda||"ARS",
-        monto:esEntrada?parse(mv.monto):-parse(mv.monto)
-      });
+    (cl.movimientos||[]).filter(mv=>mv.fecha===hoy).forEach(mv => {
+      if(mv.tipo==="retiro_efectivo") {
+        // Cliente retira efectivo de su CC → sale de nuestra caja
+        movimientos.push({hora:mv.hora||"",tipo:"CC → CAJA",concepto:"Pago efectivo al cliente",nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),moneda:mv.moneda||"ARS",monto:-parse(mv.monto)});
+      } else if(mv.tipo==="ingreso_dep"||mv.tipo==="cc_retiro_efectivo") {
+        // Cliente deposita efectivo → entra a nuestra caja
+        movimientos.push({hora:mv.hora||"",tipo:"CAJA ← CC",concepto:"Depósito efectivo del cliente",nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),moneda:mv.moneda||"ARS",monto:parse(mv.monto)});
+      }
     });
   });
 
-  // 3. Gastos del día
+  // 2. Gastos del día
   (gastos||[]).filter(g=>g.fecha===hoy).forEach(g => {
     if(g.categoria==="Fondo de Reserva") return; // no impacta caja
     movimientos.push({hora:"",tipo:"GASTO",concepto:g.categoria+(g.nota?` — ${g.nota}`:""),nombre:"",moneda:g.moneda||"ARS",monto:-parse(g.monto)});
@@ -857,7 +866,7 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
   const conSaldo = filtrados.map(m => { saldo += m.monto; return {...m, saldoAcum:saldo}; });
 
   const MONEDAS_LIBRO = ["ARS","USD","USDT","EUR","BRL","GBP"];
-  const colorTipo = {"COMPRA":"#38bdf8","VENTA":"#4ade80","CHEQUE DÍA":"#c084fc","CHEQUE DIF":"#a78bfa","TRANSFERENCIA":"#f59e0b","GASTO":"#f87171","AJUSTE":"#94a3b8","CC":"#e879f9"};
+  const colorTipo = {"COMPRA":"#38bdf8","VENTA":"#4ade80","CHEQUE DÍA":"#c084fc","CHEQUE DIF":"#a78bfa","GASTO":"#f87171","AJUSTE":"#94a3b8","CC → CAJA":"#f97316","CAJA ← CC":"#34d399"};
   const totalEntradas = conSaldo.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
   const totalSalidas = conSaldo.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
 
