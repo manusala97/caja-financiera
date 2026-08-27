@@ -3155,7 +3155,8 @@ function AppInterna({ usuario }) {
           id:c.id, nombre:c.nombre, apellido:c.apellido, socio:c.socio, oculto:c.oculto||false,
           movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(c.id)).map(m=>({
             id:m.id, hora:m.hora, fecha:m.fecha, tipo:m.tipo,
-            moneda:m.moneda, monto:Number(m.monto), nota:m.nota
+            moneda:m.moneda, monto:Number(m.monto), nota:m.nota,
+            impacta_caja:m.impacta_caja||false
           }))
         })));}
         // Facturacion
