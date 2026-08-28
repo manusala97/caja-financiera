@@ -4407,6 +4407,45 @@ function AppInterna({ usuario }) {
               {difPend.length>0&&(
                 <Card sx={{border:"1px solid #c084fc22",marginBottom:16}}>
                   <div style={{fontSize:10,color:"#c084fc",fontWeight:700,letterSpacing:1,marginBottom:12}}>CHEQUES A COBRAR — cronograma</div>
+                  {/* Gráfico de barras por fecha */}
+                  {(()=>{
+                    // Agrupar por fecha de acreditación
+                    const porFecha = {};
+                    difPend.forEach(d => {
+                      const f = d.fechaAcr||"";
+                      if(!f) return;
+                      if(!porFecha[f]) porFecha[f] = {fecha:f, total:0, cheques:[]};
+                      porFecha[f].total += d.nominal||0;
+                      porFecha[f].cheques.push(d);
+                    });
+                    const barras = Object.values(porFecha).sort((a,b)=>a.fecha.localeCompare(b.fecha)).slice(0,12);
+                    if(barras.length<2) return null;
+                    const maxVal = Math.max(...barras.map(b=>b.total),1);
+                    const BAR_H = 70;
+                    return (
+                      <div style={{marginBottom:16,overflowX:"auto"}}>
+                        <div style={{display:"flex",alignItems:"flex-end",gap:6,minWidth:Math.max(barras.length*60,300),height:BAR_H+40,paddingBottom:24}}>
+                          {barras.map((b,i)=>{
+                            const h = Math.max(b.total/maxVal*BAR_H, 3);
+                            const dr = diasEntre(hoy, b.fecha);
+                            const isVenc = dr===0;
+                            const isUrg = dr<=3&&!isVenc;
+                            const color = isVenc?"#f43f5e":isUrg?"#f59e0b":"#c084fc";
+                            return (
+                              <div key={b.fecha} style={{flex:1,minWidth:50,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                                <div style={{fontSize:9,color:color,fontFamily:"monospace",whiteSpace:"nowrap"}}>
+                                  ${fmt(Math.round(b.total/1000))}k
+                                </div>
+                                <div style={{width:"100%",height:h,background:color,borderRadius:"4px 4px 0 0",opacity:0.8}}/>
+                                <div style={{fontSize:8,color:"#374151",fontFamily:"monospace",whiteSpace:"nowrap",textAlign:"center"}}>{b.fecha.slice(5)}</div>
+                                <div style={{fontSize:8,color:"#374151"}}>{b.cheques.length}ch</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {[...difPend].sort((a,b)=>a.fechaAcr?.localeCompare(b.fechaAcr)).map(d=>{
                     const dr=diasEntre(hoy,d.fechaAcr);
                     const venc=dr===0,urg=dr<=3&&!venc;
