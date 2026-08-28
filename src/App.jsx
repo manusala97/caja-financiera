@@ -4409,40 +4409,73 @@ function AppInterna({ usuario }) {
                   <div style={{fontSize:10,color:"#c084fc",fontWeight:700,letterSpacing:1,marginBottom:12}}>CHEQUES A COBRAR — cronograma</div>
                   {/* Gráfico de barras por fecha */}
                   {(()=>{
-                    // Agrupar por fecha de acreditación
+                    const [filtroCheqGraf, setFiltroCheqGraf] = React.useState("mes");
+                    const hoyD = new Date(hoy);
+                    const getFechaHasta = (filtro) => {
+                      const d = new Date(hoy);
+                      if(filtro==="semana") d.setDate(d.getDate()+7);
+                      else if(filtro==="mes") d.setMonth(d.getMonth()+1);
+                      else if(filtro==="90d") d.setDate(d.getDate()+90);
+                      else d.setFullYear(d.getFullYear()+1);
+                      return d.toISOString().split("T")[0];
+                    };
+                    const fechaHasta = getFechaHasta(filtroCheqGraf);
                     const porFecha = {};
-                    difPend.forEach(d => {
+                    difPend.filter(d=>(d.fechaAcr||"")<=fechaHasta).forEach(d => {
                       const f = d.fechaAcr||"";
                       if(!f) return;
                       if(!porFecha[f]) porFecha[f] = {fecha:f, total:0, cheques:[]};
                       porFecha[f].total += d.nominal||0;
                       porFecha[f].cheques.push(d);
                     });
-                    const barras = Object.values(porFecha).sort((a,b)=>a.fecha.localeCompare(b.fecha)).slice(0,12);
-                    if(barras.length<2) return null;
+                    const barras = Object.values(porFecha).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+                    const totalFiltrado = barras.reduce((s,b)=>s+b.total,0);
                     const maxVal = Math.max(...barras.map(b=>b.total),1);
-                    const BAR_H = 70;
+                    const BAR_H = 80;
+                    const BTNS = [{v:"semana",l:"7 días"},{v:"mes",l:"30 días"},{v:"90d",l:"90 días"},{v:"todo",l:"Todo"}];
                     return (
-                      <div style={{marginBottom:16,overflowX:"auto"}}>
-                        <div style={{display:"flex",alignItems:"flex-end",gap:6,minWidth:Math.max(barras.length*60,300),height:BAR_H+40,paddingBottom:24}}>
-                          {barras.map((b,i)=>{
-                            const h = Math.max(b.total/maxVal*BAR_H, 3);
-                            const dr = diasEntre(hoy, b.fecha);
-                            const isVenc = dr===0;
-                            const isUrg = dr<=3&&!isVenc;
-                            const color = isVenc?"#f43f5e":isUrg?"#f59e0b":"#c084fc";
-                            return (
-                              <div key={b.fecha} style={{flex:1,minWidth:50,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                                <div style={{fontSize:9,color:color,fontFamily:"monospace",whiteSpace:"nowrap"}}>
-                                  ${fmt(Math.round(b.total/1000))}k
-                                </div>
-                                <div style={{width:"100%",height:h,background:color,borderRadius:"4px 4px 0 0",opacity:0.8}}/>
-                                <div style={{fontSize:8,color:"#374151",fontFamily:"monospace",whiteSpace:"nowrap",textAlign:"center"}}>{b.fecha.slice(5)}</div>
-                                <div style={{fontSize:8,color:"#374151"}}>{b.cheques.length}ch</div>
-                              </div>
-                            );
-                          })}
+                      <div style={{marginBottom:16}}>
+                        {/* Botones rápidos */}
+                        <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
+                          {BTNS.map(b=>(
+                            <button key={b.v} onClick={()=>setFiltroCheqGraf(b.v)}
+                              style={{padding:"4px 12px",borderRadius:6,border:"1px solid "+(filtroCheqGraf===b.v?"#c084fc":"#1f2937"),
+                                background:filtroCheqGraf===b.v?"rgba(192,132,252,0.1)":"transparent",
+                                color:filtroCheqGraf===b.v?"#c084fc":"#6b7280",
+                                cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                              {b.l}
+                            </button>
+                          ))}
+                          <span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#c084fc",fontFamily:"monospace"}}>
+                            Total: ${fmt(Math.round(totalFiltrado))}
+                          </span>
                         </div>
+                        {/* Barras */}
+                        {barras.length>0?(
+                          <div style={{overflowX:"auto"}}>
+                            <div style={{display:"flex",alignItems:"flex-end",gap:4,minWidth:Math.max(barras.length*55,300),height:BAR_H+44,paddingBottom:28}}>
+                              {barras.map((b,i)=>{
+                                const h = Math.max(b.total/maxVal*BAR_H, 3);
+                                const dr = diasEntre(hoy, b.fecha);
+                                const isVenc = dr<=0;
+                                const isUrg = dr<=3&&!isVenc;
+                                const color = isVenc?"#f43f5e":isUrg?"#f59e0b":"#c084fc";
+                                return (
+                                  <div key={b.fecha} style={{flex:1,minWidth:48,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                                    <div style={{fontSize:9,color:color,fontFamily:"monospace",whiteSpace:"nowrap"}}>
+                                      ${fmt(Math.round(b.total/1000))}k
+                                    </div>
+                                    <div style={{width:"100%",height:h,background:color,borderRadius:"4px 4px 0 0",opacity:0.85}}/>
+                                    <div style={{fontSize:8,color:isVenc?"#f43f5e":isUrg?"#f59e0b":"#6b7280",fontFamily:"monospace",whiteSpace:"nowrap",textAlign:"center",fontWeight:isUrg||isVenc?700:400}}>
+                                      {b.fecha.slice(5)}
+                                    </div>
+                                    <div style={{fontSize:8,color:"#374151"}}>{b.cheques.length}ch</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ):<div style={{textAlign:"center",color:"#374151",padding:20,fontSize:12}}>Sin cheques en este período</div>}
                       </div>
                     );
                   })()}
