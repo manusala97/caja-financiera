@@ -2736,11 +2736,17 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
             </div>
             {tn>0&&<div style={{background:"#0a1a0a",border:"1px solid #22c55e33",borderRadius:6,padding:"8px 12px",fontSize:11,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Neto a distribuir:</span><strong style={{color:"#e2e8f0"}}>{fmt(netoOr)}</strong></div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Total distribuido:</span><strong style={{color:"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#9ca3af"}}>Total distribuido:</span><strong style={{color:totalDistribuido>netoOr+1?"#f87171":"#e2e8f0"}}>{fmt(totalDistribuido)}</strong></div>
               <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
                 <span style={{color:Math.abs(diferencia)<0.01?"#6b7280":"#f87171",fontWeight:600}}>Diferencia:</span>
-                <strong style={{color:Math.abs(diferencia)<0.01?"#4ade80":"#f87171"}}>{Math.abs(diferencia)<0.01?"✓ Cuadra":fmt(diferencia)}</strong>
+                <strong style={{color:Math.abs(diferencia)<0.01?"#4ade80":"#f87171"}}>
+                  {Math.abs(diferencia)<0.01?"✓ Cuadra":(diferencia>0?"← FALTA $"+fmt(Math.round(diferencia)):"← SOBRA $"+fmt(Math.round(Math.abs(diferencia))))}
+                </strong>
               </div>
+              {!form.ccOrigenId&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
+                <span style={{color:"#f59e0b",fontWeight:700}}>⚠ Sin CC origen</span>
+                <strong style={{color:"#f59e0b",fontSize:10}}>no quedará registrado quién envió</strong>
+              </div>}
               {ganTotal>0&&<div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #1f2937",paddingTop:4,marginTop:2}}>
                 <span style={{color:"#f59e0b",fontWeight:600}}>Ganancia STS:</span>
                 <strong style={{color:"#f59e0b"}}>{fmt(ganTotal)}</strong>
@@ -2962,7 +2968,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
@@ -3649,11 +3655,12 @@ function AppInterna({ usuario }) {
       setF("cn",""); setF("cpct","");
     } else if (tipo==="cheque_dif") {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
+      if (!form.cliente.trim()) { notify("⚠ El nombre del cliente es obligatorio",false); return; }
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
       const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,fecha_venc:form.dfv||"",tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
       if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
-      opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota,pagoCheqDif:form.pagoCheqDif,pagoCheqDifCCId:form.pagoCheqDifCCId};
+      opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota,pagoCheqDif:form.pagoCheqDif,pagoCheqDifCCId:form.pagoCheqDifCCId,tipoCheqDif:form.tipoCheqDif||"echeq"};
       if(form.pagoCheqDif==="cc"&&form.pagoCheqDifCCId){
         // Pago a CC: genera ingreso_transf (le debemos al cliente)
         const cCCId=Number(form.pagoCheqDifCCId);
@@ -3670,13 +3677,34 @@ function AppInterna({ usuario }) {
       setF("dn",""); setF("dfa",""); setF("pagoCheqDif","caja"); setF("pagoCheqDifCCId",""); setF("pagoCheqDifCCBuscar","");
     } else if (tipo==="transferencia") {
       const tn=parse(form.tn);
-      if (!tn) { notify("Ingresa un monto",false); return; }
+      if (!tn) { notify("Ingresa un monto total",false); return; }
       const tMon=form.tmoneda||"ARS";
       const pctOrigen=parse(form.tpctOrigen)||0;
       const comOrigen=tn*(pctOrigen/100);
       const netoOrigen=tn-comOrigen;
       const destinos=tDestinos.filter(d=>d.clienteId&&parse(d.monto)>0);
-      if(destinos.length===0){notify("Agregá al menos un destino",false);return;}
+      // ── Validaciones obligatorias ─────────────────────────────────
+      if(destinos.length===0){notify("⚠ Agregá al menos un destino",false);return;}
+      // Validar CC origen obligatoria
+      if(!form.ccOrigenId){
+        const sinOrigen=window.confirm("⚠ NO PUSISTE LA CC ORIGEN\n\nSin la CC origen no se registra quién envió el dinero.\n\n¿Querés continuar de todas formas?");
+        if(!sinOrigen) return;
+      }
+      // Validar cuadre de montos
+      const totalDestinos=destinos.reduce((s,d)=>s+parse(d.monto),0);
+      const diferencia=Math.abs(tn-totalDestinos);
+      const tolerancia=tn*0.02; // 2% de tolerancia por comisiones
+      if(diferencia>tolerancia&&diferencia>100){
+        const faltaOSobra=totalDestinos>tn?"SOBRA":"FALTA";
+        const cuadreOk=window.confirm(
+          "⚠ LOS MONTOS NO CUADRAN\n\n"+
+          "Total origen: $"+fmt(Math.round(tn))+" "+tMon+"\n"+
+          "Total destinos: $"+fmt(Math.round(totalDestinos))+" "+tMon+"\n"+
+          faltaOSobra+": $"+fmt(Math.round(diferencia))+" "+tMon+"\n\n"+
+          "¿Querés continuar de todas formas?"
+        );
+        if(!cuadreOk) return;
+      }
       // ── Verificar duplicados en transferencias ──────────────────────
       const destIdsCheck = destinos.map(d=>Number(d.clienteId)).filter(Boolean);
       if(destIdsCheck.length>0){
@@ -4840,6 +4868,31 @@ function AppInterna({ usuario }) {
                   {form.cn&&form.cpct&&<div style={{gridColumn:"1/-1",background:"#0a1a0a",borderRadius:6,padding:"8px",fontSize:12}}>Com: <strong style={{color:"#4ade80"}}>${fmt(parse(form.cn)*parse(form.cpct)/100)}</strong></div>}
                 </div>)}
                 {form.tipo==="cheque_dif"&&(<div>
+                  {/* Tipo de cheque */}
+                  <div style={{marginBottom:10}}>
+                    <Lbl>Tipo</Lbl>
+                    <div style={{display:"flex",gap:8}}>
+                      {[{v:"echeq",l:"📱 E-Cheq"},{v:"cheque",l:"📄 Cheque físico"}].map(opt=>(
+                        <button key={opt.v} type="button" onClick={()=>setF("tipoCheqDif",opt.v)}
+                          style={{flex:1,padding:"7px",borderRadius:6,
+                            border:"1px solid "+(form.tipoCheqDif===opt.v||(!form.tipoCheqDif&&opt.v==="echeq")?"#c084fc":"#1f2937"),
+                            background:(form.tipoCheqDif===opt.v||(!form.tipoCheqDif&&opt.v==="echeq"))?"rgba(192,132,252,0.1)":"transparent",
+                            color:(form.tipoCheqDif===opt.v||(!form.tipoCheqDif&&opt.v==="echeq"))?"#c084fc":"#6b7280",
+                            cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                          {opt.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Cliente obligatorio */}
+                  <div style={{marginBottom:10}}>
+                    <Lbl>Cliente <span style={{color:"#f87171",fontSize:10}}>*obligatorio</span></Lbl>
+                    <div style={{position:"relative"}}>
+                      <Inp placeholder="Nombre del cliente..." value={form.cliente} onChange={e=>setF("cliente",e.target.value)}
+                        style={{border:!form.cliente.trim()?"1px solid #f8717144":"1px solid #1f2937"}}/>
+                      {!form.cliente.trim()&&<div style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#f87171"}}>⚠</div>}
+                    </div>
+                  </div>
                   <div style={S.grid("1fr 1fr 1fr",8)}>
                     <div><Lbl>Tasa mercado %</Lbl><Inp type="number" value={form.dtm} onChange={e=>setF("dtm",e.target.value)}/></div>
                     <div><Lbl>Tasa gestion %</Lbl><Inp type="number" value={form.dtg} onChange={e=>setF("dtg",e.target.value)}/></div>
@@ -5251,6 +5304,9 @@ function AppInterna({ usuario }) {
                         {urg&&<span style={{fontSize:10,color:"#f59e0b",fontWeight:700}}>VENCE EN {dr}d</span>}
                         {!venc&&!urg&&<span style={{fontSize:10,color:"#9ca3af"}}>Acredita {d.fechaAcr} - {dr}d</span>}
                         {d.cliente&&<span style={{fontSize:10,color:"#9ca3af"}}>👤 {d.cliente}</span>}
+                        <span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:"rgba(192,132,252,0.1)",color:"#c084fc",border:"1px solid #c084fc33"}}>
+                          {d.tipoCheqDif==="cheque"?"📄 CHEQUE":"📱 ECHEQ"}
+                        </span>
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
                         {/* Fila nominal */}
