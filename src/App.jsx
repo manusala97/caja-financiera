@@ -3015,6 +3015,7 @@ function AppInterna({ usuario }) {
   const [desglose, setDesglose] = useState([]); // [{id, tipo:"efectivo"|clienteId|"op_simultanea", monto:"", impactaCaja:true, cotizSim:"", clienteSim:"", monedaSim:"USD", impactaCajaSim:true, clienteSimId:"", clienteSimBuscar:""}]
   const [refForm, setRefForm] = useState({activo:false, clienteId:"", buscar:"", cotizRef:"", cotizTuya:""});
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
+  const [filtroCheqGraf, setFiltroCheqGraf] = useState("mes");
   const [pnlData, setPnlData] = useState([]);
   const [recaudTransf, setRecaudTransf] = useState([]);
   const [formRecaud, setFormRecaud] = useState({clienteId:"",clienteNombre:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,hora:"",nota:"",ccPagoId:""});
@@ -4409,7 +4410,6 @@ function AppInterna({ usuario }) {
                   <div style={{fontSize:10,color:"#c084fc",fontWeight:700,letterSpacing:1,marginBottom:12}}>CHEQUES A COBRAR — cronograma</div>
                   {/* Gráfico de barras por fecha */}
                   {(()=>{
-                    const [filtroCheqGraf, setFiltroCheqGraf] = React.useState("mes");
                     const hoyD = new Date(hoy);
                     const getFechaHasta = (filtro) => {
                       const d = new Date(hoy);
