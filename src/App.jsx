@@ -1733,7 +1733,7 @@ function PantallaCotizaciones() {
 }
 
 
-function PantallaAnalisis() {
+function PantallaAnalisis({rolUsuario="operador"}) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("estado");
@@ -2262,8 +2262,8 @@ function PantallaAnalisis() {
         </span>
       </div>
 
-      {/* ── RESUMEN DEL MES ── */}
-      {(()=>{
+      {/* ── RESUMEN DEL MES — solo admin ── */}
+      {rolUsuario==="admin"&&(()=>{
         const blueRef = parse(resultado.blueActual) || 1;
         const ganUSDars = resultado.monedas?.USD?.ganReal || 0;
         const ganUSDArsUSD = ganUSDars / blueRef;
@@ -8321,7 +8321,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
           );
         })()}
 
-        {pant==="analisis"&&<PantallaAnalisis/>}
+        {pant==="analisis"&&<PantallaAnalisis rolUsuario={rolUsuario}/>}
 
         {pant==="cotizaciones"&&<PantallaCotizaciones/>}
 
