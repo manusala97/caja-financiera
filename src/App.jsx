@@ -1703,7 +1703,7 @@ function PantallaAnalisis() {
         SB.from("operaciones").select("*").order("fecha", { ascending: true }).order("hora", { ascending: true }),
         SB.from("cierres").select("*").order("fecha", { ascending: true }),
         SB.from("dias").select("*").order("id", { ascending: true }),
-        SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000),
+        SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(50000),
         SB.from("diferidos").select("*"),
         SB.from("recaudadora_transferencias").select("*").order("fecha",{ascending:true}),
       ]);
@@ -3159,7 +3159,7 @@ function AppInterna({ usuario }) {
         })));
         // Clientes + movimientos - movimientos_cc tiene columnas propias
         const {data:cls} = await SB.from("clientes").select("*");
-        const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000);
+        const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(50000);
         if (cls) {
           const tresor=cls.find(x=>x.nombre==="TRESOR"||x.nombre==="Tresor");
           if(tresor) {
@@ -4131,7 +4131,7 @@ function AppInterna({ usuario }) {
   // ===== REALTIME =====
   const recargarMovimientos = useCallback(async()=>{
     if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 1500) return;
-    const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(10000);
+    const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(50000);
     if(!movs) return;
     setClientes(prev=>prev.map(c=>({
       ...c,
