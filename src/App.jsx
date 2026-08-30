@@ -2485,8 +2485,8 @@ function PantallaAnalisis({rolUsuario="operador"}) {
             {/* KPIs */}
             <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:16}}>
               {[
-                {l:"OPS/ENTRE CC — ARS",v:tc.comOpsARS,c:"#38bdf8",hint:"Comisiones en pesos"},
-                {l:"OPS/ENTRE CC — USD",v:tc.comOpsUSD,c:"#60a5fa",hint:"Comisiones en dólares"},
+                {l:"COMISIONES ARS",v:tc.comOpsARS,c:"#38bdf8",hint:"Comisiones en pesos",prefix:"$"},
+                {l:"COMISIONES USD",v:tc.comOpsUSD,c:"#60a5fa",hint:"Comisiones en dólares",prefix:"USD "},
                 {l:"RECAUDADORA PAGADO",v:tc.comRecaudPagado,c:"#4ade80",hint:"Ganancia ya cobrada de recaudadora"},
                 {l:"RECAUDADORA ACREDITADO",v:tc.comRecaudAcred,c:"#f59e0b",hint:"Acreditado pero sin pagar al cliente aún"},
                 {l:"RECAUDADORA PENDIENTE",v:tc.comRecaudPend,c:"#f87171",hint:"Aún dentro de las 72hs"},
@@ -2540,8 +2540,11 @@ function PantallaAnalisis({rolUsuario="operador"}) {
                             <td style={{padding:"6px 10px",color:"#64748b"}}>{o.hora||o.datos?.hora||""}</td>
                             <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#e2e8f0"}}>${fmtN(Math.round(tn))}</td>
                             <td style={{padding:"6px 10px",color:"#9ca3af"}}>{tpct}%</td>
-                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#38bdf8",fontWeight:700}}>${fmtN(Math.round(tcom))}</td>
-                            <td style={{padding:"6px 10px",color:"#94a3b8"}}>{o.datos?.cliente||o.cliente||""}</td>
+                            <td style={{padding:"6px 10px",fontFamily:"monospace",color:"#38bdf8",fontWeight:700}}>
+                              {(o.datos?.tmoneda||o.tmoneda||"ARS")==="USD"?"USD ":"$"}{fmtN(Math.round(tcom))}
+                              <span style={{fontSize:9,color:"#4b5563",marginLeft:3}}>{o.datos?.tmoneda||o.tmoneda||"ARS"}</span>
+                            </td>
+                            <td style={{padding:"6px 10px",color:"#94a3b8"}}>{o.datos?.cliente||o.cliente||"—"}</td>
                             <td style={{padding:"6px 10px",color:"#64748b",fontSize:10}}>{o.datos?.nota||o.nota||""}</td>
                           </tr>
                         ):null;
