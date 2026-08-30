@@ -1036,8 +1036,10 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
         tipo:"ingreso_transf",moneda:"ARS",monto:netoCliente,nota:notaCC
       }).select().single();
       if(mvCliente) setClientes(p=>p.map(cl=>cl.id!==Number(formR.clienteId)?cl:{...cl,movimientos:[...cl.movimientos,mvCliente]}));
-      // Impactar CC de la recaudadora (retiro = nos debe)
-      const clRecaud = clientes.find(x=>x.nombre?.toLowerCase().includes(formR.recaudadora));
+      // Impactar CC de la recaudadora (retiro = nos debe) — IDs fijos
+      const RECAUD_CC_MAP = {"maltu": 466, "devi": 467};
+      const recaudCCId = RECAUD_CC_MAP[formR.recaudadora?.toLowerCase()];
+      const clRecaud = recaudCCId ? clientes.find(x=>x.id===recaudCCId) : null;
       if(clRecaud){
         const netoRecaud = monto*(1-parse(formR.pctRecaud)/100);
         const notaRecaudCC = `Transferencia cliente ${cl?.nombre||""} — $${fmt(monto)} — nos debe $${fmt(netoRecaud)}`;
@@ -1432,7 +1434,14 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
                     if(!window.confirm("¿Borrar esta transferencia? Se revertirán los movimientos en CC del cliente y la recaudadora.")) return;
                     // 1. Buscar y borrar movimientos CC relacionados por nota
                     const notaCC = `Recaudadora ${t.recaudadora?.toUpperCase()} — $${fmt(t.monto_enviado)} enviado`;
-                    const {data:movsCC} = await SB.from("movimientos_cc").select("id").ilike("nota", `%${notaCC}%`);
+                    const RECAUD_MAP = {"maltu": 466, "devi": 467};
+                    const recaudId = RECAUD_MAP[t.recaudadora?.toLowerCase()];
+                    // Buscar movimientos del cliente y de la recaudadora
+                    const clienteIds = [Number(t.cliente_id), recaudId].filter(Boolean);
+                    const {data:movsCC} = await SB.from("movimientos_cc").select("id")
+                      .in("cliente_id", clienteIds)
+                      .eq("fecha", t.fecha)
+                      .ilike("nota", `%${fmt(t.monto_enviado)}%`);
                     if(movsCC&&movsCC.length>0){
                       await SB.from("movimientos_cc").delete().in("id", movsCC.map(m=>m.id));
                     }
