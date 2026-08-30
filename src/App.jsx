@@ -2262,6 +2262,75 @@ function PantallaAnalisis() {
         </span>
       </div>
 
+      {/* ── RESUMEN DEL MES ── */}
+      {(()=>{
+        const blueRef = parse(resultado.blueActual) || 1;
+        const ganUSDars = resultado.monedas?.USD?.ganReal || 0;
+        const ganUSDArsUSD = ganUSDars / blueRef;
+        const ganUSDT = resultado.monedas?.USDT?.ganReal || 0;
+        const ganEUR = resultado.monedas?.EUR?.ganReal || 0;
+        const ganGBP = resultado.monedas?.GBP?.ganReal || 0;
+        const ganBRL = resultado.monedas?.BRL?.ganReal || 0;
+        const ganTransfARS = resultado.transferenciaComisiones?.totalEfectivo || 0;
+        const ganTransfUSD = ganTransfARS / blueRef;
+        const ganCheqARS = resultado.chequeComisiones?.totalDevengado || 0;
+        const ganCheqUSD = ganCheqARS / blueRef;
+        const totalUSD = ganUSDArsUSD + ganUSDT + ganEUR + ganGBP + ganBRL + ganTransfUSD + ganCheqUSD;
+        const filas = [
+          {l:"📈 Spread USD/ARS", ars:ganUSDars, usd:ganUSDArsUSD},
+          {l:"📋 Cheques", ars:ganCheqARS, usd:ganCheqUSD},
+          {l:"💸 Transferencias", ars:ganTransfARS, usd:ganTransfUSD},
+          {l:"🟡 USDT/USD", ars:null, usd:ganUSDT},
+          {l:"💶 EUR/USD", ars:null, usd:ganEUR},
+          {l:"🇬🇧 GBP/USD", ars:null, usd:ganGBP},
+          {l:"🇧🇷 BRL/USD", ars:null, usd:ganBRL},
+        ].filter(f=>Math.abs(f.usd)>0.5);
+        return (
+          <div style={{background:"rgba(245,158,11,0.04)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:14,padding:"18px 20px",marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8}}>
+              <div>
+                <div style={{fontSize:10,letterSpacing:3,color:"#f59e0b",fontWeight:700,marginBottom:2}}>RESUMEN DE GANANCIA — PERÍODO</div>
+                <div style={{fontSize:11,color:"#6b7280"}}>Blue referencia: ${fmtN(Math.round(blueRef))} ARS/USD</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:9,color:"#6b7280",letterSpacing:1}}>TOTAL ESTIMADO</div>
+                <div style={{fontSize:22,fontWeight:700,color:"#f59e0b",fontFamily:"monospace"}}>USD {fmtN(Math.round(totalUSD))}</div>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",gap:"2px 16px",alignItems:"center"}}>
+              {/* Headers */}
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,paddingBottom:6,borderBottom:"1px solid #1f2937"}}>FUENTE</div>
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,paddingBottom:6,borderBottom:"1px solid #1f2937",textAlign:"right"}}>ARS</div>
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,paddingBottom:6,borderBottom:"1px solid #1f2937",textAlign:"right"}}>≈ USD</div>
+              <div style={{fontSize:9,color:"#4b5563",letterSpacing:1,paddingBottom:6,borderBottom:"1px solid #1f2937",textAlign:"right"}}>%</div>
+              {/* Filas */}
+              {filas.map((f,i)=>(
+                <Fragment key={f.l}>
+                  <div style={{fontSize:12,color:"#e2e8f0",paddingTop:6,paddingBottom:6,borderBottom:"1px solid #0a0a0a"}}>{f.l}</div>
+                  <div style={{fontSize:11,color:"#9ca3af",textAlign:"right",fontFamily:"monospace",paddingTop:6,borderBottom:"1px solid #0a0a0a"}}>
+                    {f.ars!=null?("$"+fmtN(Math.round(Math.abs(f.ars)))):"—"}
+                  </div>
+                  <div style={{fontSize:12,fontWeight:700,color:f.usd>=0?"#4ade80":"#f87171",textAlign:"right",fontFamily:"monospace",paddingTop:6,borderBottom:"1px solid #0a0a0a"}}>
+                    {f.usd>=0?"":"−"}USD {fmtN(Math.round(Math.abs(f.usd)))}
+                  </div>
+                  <div style={{fontSize:11,color:"#6b7280",textAlign:"right",paddingTop:6,borderBottom:"1px solid #0a0a0a"}}>
+                    {totalUSD>0?fmtN(Math.abs(f.usd)/totalUSD*100,1)+"%":"—"}
+                  </div>
+                </Fragment>
+              ))}
+              {/* Total */}
+              <div style={{fontSize:12,fontWeight:700,color:"#f59e0b",paddingTop:8}}>TOTAL</div>
+              <div style={{paddingTop:8}}/>
+              <div style={{fontSize:13,fontWeight:700,color:"#f59e0b",textAlign:"right",fontFamily:"monospace",paddingTop:8}}>USD {fmtN(Math.round(totalUSD))}</div>
+              <div style={{paddingTop:8}}/>
+            </div>
+            <div style={{marginTop:10,fontSize:10,color:"#374151",fontStyle:"italic"}}>
+              * Ganancia en ARS dolarizada usando blue de referencia. Aproximación de gestión, no contabilidad exacta.
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── TABS ── */}
       <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"1px solid #1f2937"}}>
         {[{id:"spread",l:"📈 Spread C/V"},{id:"transferencias",l:"💸 Transferencias"},{id:"cheques",l:"📋 Cheques"}].map(t=>(
