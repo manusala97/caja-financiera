@@ -953,7 +953,7 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
 }
 
 
-function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, notify, saldoCC}) {
+function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, setClientes, hoy, SB, notify, saldoCC}) {
   const [buscarCCRecaud, setBuscarCCRecaud] = useState("");
   const [ccRecaudId, setCCRecaudId] = useState("");
   const [formR, setFormR] = useState({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
@@ -8234,7 +8234,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
         {pant==="cotizaciones"&&<PantallaCotizaciones/>}
 
         {pant==="pnl"&&<PantallaPnl pnlData={pnlData}/>}
-        {pant==="recaudadora"&&<PantallaRecaudadora recaudTransf={recaudTransf} setRecaudTransf={setRecaudTransf} clientes={clientes} hoy={hoy} SB={SB} notify={notify} saldoCC={saldoCC}/>}
+        {pant==="recaudadora"&&<PantallaRecaudadora recaudTransf={recaudTransf} setRecaudTransf={setRecaudTransf} clientes={clientes} setClientes={setClientes} hoy={hoy} SB={SB} notify={notify} saldoCC={saldoCC}/>}
         {pant==="libro"&&<PantallaLibro ops={ops.map(o=>({...o,...(o.datos||{})}))} clientes={clientes} gastos={gastos} hoy={hoy}/>}
 
       </main>
