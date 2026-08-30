@@ -1039,7 +1039,7 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       // Impactar CC de la recaudadora (retiro = nos debe) — IDs fijos
       const RECAUD_CC_MAP = {"maltu": 466, "devi": 467};
       const recaudCCId = RECAUD_CC_MAP[formR.recaudadora?.toLowerCase()];
-      const clRecaud = recaudCCId ? clientes.find(x=>x.id===recaudCCId) : null;
+      const clRecaud = recaudCCId ? clientes.find(x=>Number(x.id)===Number(recaudCCId)) : null;
       if(clRecaud){
         const netoRecaud = monto*(1-parse(formR.pctRecaud)/100);
         const notaRecaudCC = `Transferencia cliente ${cl?.nombre||""} — $${fmt(monto)} — nos debe $${fmt(netoRecaud)}`;
