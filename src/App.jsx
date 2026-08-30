@@ -954,9 +954,12 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
 
 
 function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, notify, saldoCC}) {
+  const [buscarCCRecaud, setBuscarCCRecaud] = useState("");
+  const [ccRecaudId, setCCRecaudId] = useState("");
   const [formR, setFormR] = useState({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
   const [mostrarForm, setMostrarForm] = useState(false);
   const [buscarCl, setBuscarCl] = useState("");
+
   const [buscarCC, setBuscarCC] = useState("");
   const [filtroBuscar, setFiltroBuscar] = useState("");
   const [vistaRecaud, setVistaRecaud] = useState("transferencias");
@@ -1039,21 +1042,22 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       // Impactar CC de la recaudadora (retiro = nos debe) — IDs fijos
       const RECAUD_CC_MAP = {"maltu": 466, "devi": 467};
       const recaudCCId = RECAUD_CC_MAP[formR.recaudadora?.toLowerCase()];
-      const recaudInfo = RECAUDADORAS[formR.recaudadora?.toLowerCase()];
-      const recaudCCIdFinal = recaudInfo?.ccId || recaudCCId;
-      if(recaudCCIdFinal){
+      // CC Recaudadora: usar el ID seleccionado en el buscador
+      if(ccRecaudId){
         const netoRecaud = monto*(1-parse(formR.pctRecaud)/100);
         const notaRecaudCC = `Transferencia cliente ${cl?.nombre||""} — $${fmt(monto)} — nos debe $${fmt(netoRecaud)}`;
         const {data:mvRecaud, error:errRecaud} = await SB.from("movimientos_cc").insert({
-          cliente_id:Number(recaudCCIdFinal),hora,fecha:formR.fecha,
+          cliente_id:Number(ccRecaudId),hora,fecha:formR.fecha,
           tipo:"retiro_transf",moneda:"ARS",monto:netoRecaud,nota:notaRecaudCC
         }).select().single();
         if(mvRecaud){
-          setClientes(p=>p.map(cl=>Number(cl.id)===Number(recaudCCIdFinal)?{...cl,movimientos:[...(cl.movimientos||[]),mvRecaud]}:cl));
+          setClientes(p=>p.map(cl=>Number(cl.id)===Number(ccRecaudId)?{...cl,movimientos:[...(cl.movimientos||[]),mvRecaud]}:cl));
         } else {
           console.error("Error CC recaudadora:", errRecaud);
+          notify("Error al impactar CC recaudadora: " + (errRecaud?.message||""), false);
         }
       }
+      setCCRecaudId(""); setBuscarCCRecaud("");
       setMostrarForm(false);
       setFormR({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
       setBuscarCl(""); setBuscarCC("");
@@ -1318,15 +1322,50 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
             {/* Recaudadora */}
             <div>
               <label style={{fontSize:10,color:"#9ca3af",letterSpacing:1,display:"block",marginBottom:4}}>RECAUDADORA</label>
-              <div style={{display:"flex",gap:6}}>
+              <div style={{display:"flex",gap:6,marginBottom:6}}>
                 {Object.entries(RECAUDADORAS).map(([k,r])=>(
-                  <button key={k} onClick={()=>setFormR(f=>({...f,recaudadora:k,pctRecaud:r.pctDefault}))}
+                  <button key={k} onClick={()=>{setFormR(f=>({...f,recaudadora:k,pctRecaud:r.pctDefault}));setCCRecaudId(String(r.ccId));setBuscarCCRecaud("");}}
                     style={{flex:1,padding:"7px",borderRadius:6,border:`1px solid ${formR.recaudadora===k?r.color+"66":"#1f2937"}`,
                       background:formR.recaudadora===k?`rgba(${k==="maltu"?"56,189,248":"244,114,182"},0.1)`:"transparent",
                       color:formR.recaudadora===k?r.color:"#94a3b8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
                     {r.label}
                   </button>
                 ))}
+              </div>
+              {/* Buscador CC recaudadora */}
+              <div style={{position:"relative"}}>
+                <label style={{fontSize:9,color:"#6b7280",letterSpacing:1,display:"block",marginBottom:3}}>CC RECAUDADORA</label>
+                {(()=>{
+                  const clRecaud = clientes.find(x=>Number(x.id)===Number(ccRecaudId));
+                  const filtRecaud = clientes.filter(x=>!x.oculto&&(x.nombre+" "+(x.apellido||"")).toLowerCase().includes(buscarCCRecaud.toLowerCase())).slice(0,8);
+                  return (
+                    <div>
+                      {clRecaud&&!buscarCCRecaud?(
+                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          <div style={{flex:1,padding:"6px 10px",background:"rgba(232,121,249,0.08)",border:"1px solid #e879f944",borderRadius:6,fontSize:12,color:"#e879f9",fontWeight:600}}>
+                            {clRecaud.nombre} {clRecaud.apellido||""}
+                          </div>
+                          <button onClick={()=>{setCCRecaudId("");setBuscarCCRecaud("");}}
+                            style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#9ca3af",cursor:"pointer",fontSize:11}}>✕</button>
+                        </div>
+                      ):(
+                        <input placeholder="Buscar CC recaudadora..." value={buscarCCRecaud}
+                          onChange={e=>setBuscarCCRecaud(e.target.value)}
+                          style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+                      )}
+                      {buscarCCRecaud&&filtRecaud.length>0&&(
+                        <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                          {filtRecaud.map(cl=>(
+                            <div key={cl.id} onClick={()=>{setCCRecaudId(String(cl.id));setBuscarCCRecaud("");}}
+                              style={{padding:"8px 12px",cursor:"pointer",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                              {cl.nombre} {cl.apellido||""}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
