@@ -1898,20 +1898,41 @@ function PantallaAnalisis() {
         const cotizEnUSD = cotizOp / cotizCierre; // ARS por USDT → USD por USDT
         procesarOp("USDT", monto, cotizEnUSD, esCompra, op.fecha, hora, cliente, 1);
       }
-      // EUR/ARS — CPP en ARS
-      else if (moneda === "EUR" && moneda2 === "ARS") {
+      // EUR/USD — CPP en USD
+      else if (moneda === "EUR" && moneda2 === "USD") {
         const esCompra = op.tipo === "compra";
         procesarOp("EUR", monto, cotizOp, esCompra, op.fecha, hora, cliente, 0);
       }
-      // BRL/ARS — CPP en ARS
-      else if (moneda === "BRL" && moneda2 === "ARS") {
+      // EUR/ARS — convertir a USD usando cotiz cierre
+      else if (moneda === "EUR" && moneda2 === "ARS") {
+        const esCompra = op.tipo === "compra";
+        const cotizCierre = getCotizCierre(op.fecha) || 1;
+        const cotizEnUSD = cotizOp / cotizCierre;
+        procesarOp("EUR", monto, cotizEnUSD, esCompra, op.fecha, hora, cliente, 0);
+      }
+      // GBP/USD — CPP en USD
+      else if (moneda === "GBP" && moneda2 === "USD") {
+        const esCompra = op.tipo === "compra";
+        procesarOp("GBP", monto, cotizOp, esCompra, op.fecha, hora, cliente, 0);
+      }
+      // GBP/ARS — convertir a USD usando cotiz cierre
+      else if (moneda === "GBP" && moneda2 === "ARS") {
+        const esCompra = op.tipo === "compra";
+        const cotizCierre = getCotizCierre(op.fecha) || 1;
+        const cotizEnUSD = cotizOp / cotizCierre;
+        procesarOp("GBP", monto, cotizEnUSD, esCompra, op.fecha, hora, cliente, 0);
+      }
+      // BRL/USD — CPP en USD
+      else if (moneda === "BRL" && moneda2 === "USD") {
         const esCompra = op.tipo === "compra";
         procesarOp("BRL", monto, cotizOp, esCompra, op.fecha, hora, cliente, 0);
       }
-      // GBP/ARS — CPP en ARS
-      else if (moneda === "GBP" && moneda2 === "ARS") {
+      // BRL/ARS — convertir a USD usando cotiz cierre
+      else if (moneda === "BRL" && moneda2 === "ARS") {
         const esCompra = op.tipo === "compra";
-        procesarOp("GBP", monto, cotizOp, esCompra, op.fecha, hora, cliente, 0);
+        const cotizCierre = getCotizCierre(op.fecha) || 1;
+        const cotizEnUSD = cotizOp / cotizCierre;
+        procesarOp("BRL", monto, cotizEnUSD, esCompra, op.fecha, hora, cliente, 0);
       }
     });
 
@@ -2048,9 +2069,9 @@ function PantallaAnalisis() {
       monedas: {
         USD:  { ...estado.USD,  resumenDias: Object.values(estado.USD.resumenDias),  noRealizada: noRealizadaUSD,  unidad: "ARS", label: "💵 USD",  color: "#f59e0b" },
         USDT: { ...estado.USDT, resumenDias: Object.values(estado.USDT.resumenDias), noRealizada: noRealizadaUSDT, unidad: "USD", label: "🟡 USDT", color: "#fbbf24" },
-        EUR:  { ...estado.EUR,  resumenDias: Object.values(estado.EUR.resumenDias),  noRealizada: null,            unidad: "ARS", label: "💶 EUR",  color: "#a78bfa" },
-        BRL:  { ...estado.BRL,  resumenDias: Object.values(estado.BRL.resumenDias),  noRealizada: null,            unidad: "ARS", label: "🇧🇷 BRL",  color: "#4ade80" },
-        GBP:  { ...estado.GBP,  resumenDias: Object.values(estado.GBP.resumenDias),  noRealizada: null,            unidad: "ARS", label: "🇬🇧 GBP",  color: "#e879f9" },
+        EUR:  { ...estado.EUR,  resumenDias: Object.values(estado.EUR.resumenDias),  noRealizada: null,            unidad: "USD", label: "💶 EUR",  color: "#a78bfa" },
+        BRL:  { ...estado.BRL,  resumenDias: Object.values(estado.BRL.resumenDias),  noRealizada: null,            unidad: "USD", label: "🇧🇷 BRL",  color: "#4ade80" },
+        GBP:  { ...estado.GBP,  resumenDias: Object.values(estado.GBP.resumenDias),  noRealizada: null,            unidad: "USD", label: "🇬🇧 GBP",  color: "#e879f9" },
       },
     };
   }
