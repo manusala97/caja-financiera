@@ -1014,7 +1014,9 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, setClient
 
   const guardarTransf = async() => {
     const monto = parse(formR.montoEnviado);
-    if(!formR.clienteId||!monto){notify("Completá cliente y monto",false);return;}
+    if(!formR.clienteId){notify("⚠ Seleccioná el cliente",false);return;}
+    if(!monto){notify("⚠ Ingresá el monto enviado",false);return;}
+    if(!ccRecaudId){notify("⚠ Seleccioná la CC de la recaudadora",false);return;}
     const cl = clientes.find(x=>x.id===Number(formR.clienteId));
     const hora = new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const {data:ins} = await SB.from("recaudadora_transferencias").insert({
