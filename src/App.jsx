@@ -1039,15 +1039,16 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       // Impactar CC de la recaudadora (retiro = nos debe) — IDs fijos
       const RECAUD_CC_MAP = {"maltu": 466, "devi": 467};
       const recaudCCId = RECAUD_CC_MAP[formR.recaudadora?.toLowerCase()];
-      const clRecaud = recaudCCId ? clientes.find(x=>Number(x.id)===Number(recaudCCId)) : null;
-      if(clRecaud){
+      if(recaudCCId){
         const netoRecaud = monto*(1-parse(formR.pctRecaud)/100);
         const notaRecaudCC = `Transferencia cliente ${cl?.nombre||""} — $${fmt(monto)} — nos debe $${fmt(netoRecaud)}`;
         const {data:mvRecaud} = await SB.from("movimientos_cc").insert({
-          cliente_id:clRecaud.id,hora,fecha:formR.fecha,
+          cliente_id:recaudCCId,hora,fecha:formR.fecha,
           tipo:"retiro_transf",moneda:"ARS",monto:netoRecaud,nota:notaRecaudCC
         }).select().single();
-        if(mvRecaud) setClientes(p=>p.map(cl=>cl.id!==clRecaud.id?cl:{...cl,movimientos:[...cl.movimientos,mvRecaud]}));
+        if(mvRecaud){
+          setClientes(p=>p.map(cl=>Number(cl.id)===Number(recaudCCId)?{...cl,movimientos:[...(cl.movimientos||[]),mvRecaud]}:cl));
+        }
       }
       setMostrarForm(false);
       setFormR({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
