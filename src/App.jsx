@@ -955,7 +955,7 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
 
 function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, setClientes, hoy, SB, notify, saldoCC}) {
   const [buscarCCRecaud, setBuscarCCRecaud] = useState("");
-  const [ccRecaudId, setCCRecaudId] = useState("");
+  const [ccRecaudId, setCCRecaudId] = useState("466"); // default Maltu
   const [formR, setFormR] = useState({clienteId:"",recaudadora:"maltu",montoEnviado:"",pctRecaud:1,pctComision:3,fecha:hoy,nota:"",ccPagoId:""});
   const [mostrarForm, setMostrarForm] = useState(false);
   const [buscarCl, setBuscarCl] = useState("");
