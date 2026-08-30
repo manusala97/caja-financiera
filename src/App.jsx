@@ -1795,6 +1795,8 @@ function PantallaAnalisis() {
       if (cotiz > 100000) return false; // cotización absurda
       // Ignorar ARS/USD (venta de ARS contra USD — caso mal cargado)
       if (o.moneda === "ARS" && o.moneda2 === "USD" && parse(o.monto2) > 10000) return false;
+      // Ignorar USDT/USD con cotización > 1.20 (error histórico — era ARS)
+      if ((o.moneda === "USDT" && o.moneda2 === "USD") && cotiz > 1.20) return false;
       return true;
     });
 
@@ -1819,10 +1821,11 @@ function PantallaAnalisis() {
         procesarOp("USD", monto2, cotiz, esCompra, op.fecha, hora, cliente, esCompra ? blueV : blueC);
       }
       // USDT/USD — CPP en USD
+      // Filtro defensivo: cotización > 1.20 es error histórico (fue cargado como ARS)
       else if (moneda === "USDT" && moneda2 === "USD") {
+        if (cotizOp > 1.20) return; // ignorar — cotización absurda para USD, era ARS
         const esCompra = op.tipo === "compra";
-        // cotizOp = USD por USDT
-        procesarOp("USDT", monto, cotizOp, esCompra, op.fecha, hora, cliente, 1); // ref = 1 USD = 1 USD
+        procesarOp("USDT", monto, cotizOp, esCompra, op.fecha, hora, cliente, 1);
       }
       // USDT/ARS — convertir a USD usando cotiz cierre
       else if (moneda === "USDT" && moneda2 === "ARS") {
@@ -2792,7 +2795,8 @@ function ModalCierre({ saldos, clientes, diferidos, inversiones=[], saldoCC, onC
       return s+inv.monto+calcIntC(inv.monto,inv.tasa,dias);
     },0);
     // Tots sin clientes en inversión (ya están en fila Inversiones)
-    const totsCC=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).filter(c=>!idsInvCierre.includes(Number(c.id))).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
+    // CC de inversores incluida — no se excluye del patrimonio
+    const totsCC=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(clientes||[]).reduce((s,cl)=>s+(saldoCC?saldoCC(cl)[mId]:0),0)]));
     // Patrimonio = Caja + CC(sin inversores) + Cheques + Inversiones
     const patrimonioSaldos=Object.fromEntries(["USD","ARS","BRL","GBP","EUR","USDT"].map(mId=>[mId,(saldos[mId]||0)+totsCC[mId]+(mId==="ARS"?totalDif:0)-(mId==="USD"?totalInv:0)]));
     return {
@@ -6210,7 +6214,8 @@ function AppInterna({ usuario }) {
         {pant==="posicion"&&(()=>{
           const getS=(cId,mId)=>{ const k=cId+"_"+mId; return posOvr[k]!==undefined?posOvr[k]:(saldoCC(clientes.find(x=>x.id===cId))[mId]||0); };
           const tots=Object.fromEntries(MONEDAS.map(m=>[m.id,clientes.reduce((s,c)=>s+getS(c.id,m.id),0)]));
-          const totsCC=Object.fromEntries(MONEDAS.map(m=>[m.id,tots[m.id]-((inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada").reduce((s,x)=>{const cl=clientes.find(c=>Number(c.id)===Number(x.cliente_id));return s+(cl?saldoCC(cl)[m.id]||0:0);},0))]));
+          // CC de inversores incluida en TOTAL CC — solo se muestra separada visualmente
+          const totsCC=Object.fromEntries(MONEDAS.map(m=>[m.id,tots[m.id]]));
           const meses=Object.entries(fact.meses||{});
           const ganAcum=meses.reduce((s,[,v])=>s+parse(v),0),obj=parse(fact.objetivo);
 
@@ -6502,7 +6507,8 @@ function AppInterna({ usuario }) {
                       // Patrimonio total = caja fisica + CCs + cheques a cobrar + inversiones
                       const invsActPat=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");
                       const totalInvPat=invsActPat.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);
-                      const invsActPos=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");const totalInvPos=invsActPos.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+totsCC[m.id]+(m.id==="ARS"?totalDif:0)-(m.id==="USD"?totalInvPos:0)]));
+                      const invsActPos=(inversiones||[]).filter(x=>x.activa!==false&&x.estado!=="finalizada");const totalInvPos=invsActPos.reduce((s,inv)=>{const d=Math.floor((new Date(hoy)-new Date(inv.fecha_inicio))/86400000);return s+inv.monto+inv.monto*(Math.pow(1+inv.tasa/100,d/365)-1);},0);// Inversiones ya están en CC — no restar del patrimonio
+const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+totsCC[m.id]+(m.id==="ARS"?totalDif:0)]));
                       return (<>
                         <tr style={{borderTop:"2px solid #1f2937",background:"#0a1a0a"}}>
                           <td style={{padding:"9px 10px",fontSize:9,color:"#4ade80",fontWeight:700,letterSpacing:1}}>CAJA OFICINA</td>
