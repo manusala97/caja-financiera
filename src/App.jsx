@@ -978,8 +978,8 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
   };
 
   const RECAUDADORAS = {
-    maltu: {label:"Maltu", color:"#38bdf8", pctDefault:1},
-    devi:  {label:"Devi",  color:"#f472b6", pctDefault:2.7},
+    maltu: {label:"Maltu", color:"#38bdf8", pctDefault:1, ccId:466},
+    devi:  {label:"Devi",  color:"#f472b6", pctDefault:2.7, ccId:467},
   };
 
   // Calcular totales por recaudadora
@@ -1039,15 +1039,19 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
       // Impactar CC de la recaudadora (retiro = nos debe) — IDs fijos
       const RECAUD_CC_MAP = {"maltu": 466, "devi": 467};
       const recaudCCId = RECAUD_CC_MAP[formR.recaudadora?.toLowerCase()];
-      if(recaudCCId){
+      const recaudInfo = RECAUDADORAS[formR.recaudadora?.toLowerCase()];
+      const recaudCCIdFinal = recaudInfo?.ccId || recaudCCId;
+      if(recaudCCIdFinal){
         const netoRecaud = monto*(1-parse(formR.pctRecaud)/100);
         const notaRecaudCC = `Transferencia cliente ${cl?.nombre||""} — $${fmt(monto)} — nos debe $${fmt(netoRecaud)}`;
-        const {data:mvRecaud} = await SB.from("movimientos_cc").insert({
-          cliente_id:recaudCCId,hora,fecha:formR.fecha,
+        const {data:mvRecaud, error:errRecaud} = await SB.from("movimientos_cc").insert({
+          cliente_id:Number(recaudCCIdFinal),hora,fecha:formR.fecha,
           tipo:"retiro_transf",moneda:"ARS",monto:netoRecaud,nota:notaRecaudCC
         }).select().single();
         if(mvRecaud){
-          setClientes(p=>p.map(cl=>Number(cl.id)===Number(recaudCCId)?{...cl,movimientos:[...(cl.movimientos||[]),mvRecaud]}:cl));
+          setClientes(p=>p.map(cl=>Number(cl.id)===Number(recaudCCIdFinal)?{...cl,movimientos:[...(cl.movimientos||[]),mvRecaud]}:cl));
+        } else {
+          console.error("Error CC recaudadora:", errRecaud);
         }
       }
       setMostrarForm(false);
@@ -1069,9 +1073,17 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
 
       {/* Cards por recaudadora */}
       <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-        {Object.entries(RECAUDADORAS).map(([key,r])=>(
+        {Object.entries(RECAUDADORAS).map(([key,r])=>{
+          const clRecaud = clientes.find(x=>Number(x.id)===Number(r.ccId));
+          const saldoRecaud = clRecaud ? saldoCC(clRecaud).ARS : 0;
+          return (
           <div key={key} style={{flex:"1 1 200px",background:"#0f1623",border:`1px solid ${r.color}33`,borderRadius:14,padding:"16px 18px"}}>
             <div style={{fontSize:10,color:r.color,fontWeight:700,letterSpacing:2,marginBottom:12}}>{r.label.toUpperCase()}</div>
+            {/* Saldo CC recaudadora */}
+            <div style={{marginBottom:10,padding:"6px 10px",background:`rgba(${r.color.replace("#","").match(/.{2}/g).map(x=>parseInt(x,16)).join(",")},0.08)`,borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:9,color:"#94a3b8"}}>CC — nos debe</span>
+              <span style={{fontSize:14,fontWeight:700,color:saldoRecaud>=0?"#4ade80":"#f87171",fontFamily:"monospace"}}>${fmt(Math.abs(Math.round(saldoRecaud)))}</span>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               <div>
                 <div style={{fontSize:9,color:"#94a3b8",marginBottom:2}}>PENDIENTE DE COBRAR</div>
@@ -1091,7 +1103,8 @@ function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, hoy, SB, 
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {/* Alertas 72hs */}
         {(()=>{
