@@ -2736,10 +2736,26 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
   const calcDif = useMemo(()=>{
     const n=parse(f.dn),tm=parse(f.dtm),tg=parse(f.dtg),dias=diasEntre(f.dfr,f.dfa);
+    const tnaDeseada=parse(f.dTnaDeseada);
     if (!n||!dias) return null;
-    const postG=n*(1-tg/100),tasaD=(tm/100/360)*dias,mFinal=postG*(1-tasaD);
-    return {n,postG,tasaD:tasaD*100,mFinal,ganancia:n-mFinal,dias};
-  },[f.dn,f.dtm,f.dtg,f.dfr,f.dfa]);
+    // Si hay TNA deseada, calcular tasa de mercado implícita
+    let tmEfectivo=tm, tgEfectivo=tg;
+    if(tnaDeseada>0){
+      // TNA deseada es sobre lo que recibe el cliente
+      // Recibe = Nominal / (1 + TNA*dias/365)
+      const mFinalDeseado = n / (1 + tnaDeseada/100*dias/365);
+      // Mantenemos tg fijo y calculamos tm implícito
+      const postGDeseado = n*(1-tg/100);
+      const tasaDDeseada = 1 - mFinalDeseado/postGDeseado;
+      tmEfectivo = tasaDDeseada/(dias/360)*100;
+    }
+    const postG=n*(1-tgEfectivo/100),tasaD=(tmEfectivo/100/360)*dias,mFinal=postG*(1-tasaD);
+    const ganancia=n-mFinal;
+    // TNA efectiva para el cliente (sobre lo que recibe)
+    const tnaEfectiva = mFinal>0 ? (ganancia/mFinal)*(365/dias)*100 : 0;
+    const costoMensual = mFinal>0 ? (ganancia/mFinal)*(30/dias)*100 : 0;
+    return {n,postG,tasaD:tasaD*100,mFinal,ganancia,dias,tnaEfectiva,costoMensual,tmEfectivo};
+  },[f.dn,f.dtm,f.dtg,f.dfr,f.dfa,f.dTnaDeseada]);
 
   function construir() {
     const t=f.tipo;
@@ -2797,8 +2813,13 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
       )}
       {f.tipo==="cheque_dif"&&(
         <div>
+          {/* TNA deseada */}
+          <div style={{marginBottom:8,padding:"8px 10px",background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:8}}>
+            <Lbl>TNA deseada % <span style={{color:"#4b5563",fontWeight:400}}>(opcional — calcula tasa de mercado automáticamente)</span></Lbl>
+            <Inp type="number" placeholder="ej: 70" value={f.dTnaDeseada||""} onChange={e=>sf("dTnaDeseada",e.target.value)}/>
+          </div>
           <div style={S.grid("1fr 1fr 1fr",8)}>
-            <div><Lbl>Tasa mercado %</Lbl><Inp type="number" value={f.dtm} onChange={e=>sf("dtm",e.target.value)}/></div>
+            <div><Lbl>Tasa mercado %</Lbl><Inp type="number" value={f.dtm} onChange={e=>{sf("dtm",e.target.value);sf("dTnaDeseada","");}}/></div>
             <div><Lbl>Tasa gestion %</Lbl><Inp type="number" value={f.dtg} onChange={e=>sf("dtg",e.target.value)}/></div>
             <div><Lbl>Nominal</Lbl><Inp type="number" value={f.dn} onChange={e=>sf("dn",e.target.value)}/></div>
             <div><Lbl>Fecha recepcion</Lbl><Inp type="date" value={f.dfr} onChange={e=>sf("dfr",e.target.value)}/></div>
@@ -2815,11 +2836,22 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
             </div>
             <div style={{display:"flex",alignItems:"flex-end",paddingBottom:6}}><span style={{fontSize:11,color:"#9ca3af"}}>{calcDif?.dias||0}d</span></div>
           </div>
-          {calcDif&&<div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #c084fc33",borderRadius:8,padding:10,...S.grid("1fr 1fr 1fr 1fr",8),fontSize:11}}>
-            {[["Post-gest.",fmt(calcDif.postG),"#9ca3af"],["Tasa",calcDif.tasaD.toFixed(2)+"%","#9ca3af"],["Pagas",fmt(calcDif.mFinal),"#f87171"],["Ganancia",fmt(calcDif.ganancia),"#4ade80"]].map(([k,v,c])=>(
-              <div key={k}><div style={{color:"#94a3b8",marginBottom:2}}>{k}</div><div style={{color:c,fontWeight:700}}>${v}</div></div>
-            ))}
-          </div>}
+          {calcDif&&(
+            <div style={{marginTop:8,background:"#0a0a0a",border:"1px solid #c084fc33",borderRadius:8,padding:10,fontSize:11}}>
+              <div style={{...S.grid("1fr 1fr 1fr 1fr",8),marginBottom:8}}>
+                {[["Post-gest.",fmt(calcDif.postG),"#9ca3af"],["Tasa",calcDif.tasaD.toFixed(2)+"%","#9ca3af"],["Pagas",fmt(calcDif.mFinal),"#f87171"],["Ganancia",fmt(calcDif.ganancia),"#4ade80"]].map(([k,v,col])=>(
+                  <div key={k}><div style={{color:"#94a3b8",marginBottom:2}}>{k}</div><div style={{color:col,fontWeight:700}}>${v}</div></div>
+                ))}
+              </div>
+              <div style={{borderTop:"1px solid #1a1a1a",paddingTop:8,display:"flex",gap:16,flexWrap:"wrap",alignItems:"center"}}>
+                <div style={{fontSize:10,color:"#6b7280"}}>Para el cliente:</div>
+                <div><span style={{color:"#6b7280",fontSize:10}}>Recibe </span><span style={{color:"#e2e8f0",fontWeight:700,fontFamily:"monospace"}}>${fmt(calcDif.mFinal)}</span></div>
+                <div><span style={{color:"#6b7280",fontSize:10}}>TNA </span><span style={{color:"#f59e0b",fontWeight:700}}>{calcDif.tnaEfectiva?.toFixed(1)||"0"}%</span></div>
+                <div><span style={{color:"#6b7280",fontSize:10}}>Costo mensual </span><span style={{color:"#f59e0b",fontWeight:700}}>{calcDif.costoMensual?.toFixed(2)||"0"}%</span></div>
+                {f.dTnaDeseada&&<div><span style={{color:"#6b7280",fontSize:10}}>Tasa mercado implícita </span><span style={{color:"#a78bfa",fontWeight:700}}>{calcDif.tmEfectivo?.toFixed(2)||"0"}%</span></div>}
+              </div>
+            </div>
+          )}
         </div>
       )}
       {f.tipo==="transferencia"&&(()=>{
@@ -3129,7 +3161,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"" });
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
