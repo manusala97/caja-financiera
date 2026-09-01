@@ -2731,7 +2731,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     dfr: fechaDefault||hoy, dfa: opInicial?.dfa||"",
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
     tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", tmoneda: opInicial?.tmoneda||"ARS", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
-    ccOrigenBuscar:"", ccDestinoBuscar:"",
+    ccOrigenBuscar:"", ccDestinoBuscar:"", dTnaDeseada:"",
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
   const calcDif = useMemo(()=>{
