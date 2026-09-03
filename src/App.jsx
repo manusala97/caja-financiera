@@ -8289,7 +8289,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                           notify("Liquidacion confirmada ✓");
                           setLiquidacion(l=>({...l,mostrando:false,patrimonioManual:"",sociosCCMap:{},sociosBuscar:{},periodo:"",fechaImpacto:"",empleados:l.empleados.map(e=>({...e,sueldoFijo:"",cotizSueldo:"",ccId:"",ccBuscar:""}))}));
                         }} disabled={gananciaBruta<=0}
-                          style={{width:"100%",padding:12,borderRadius:8,background:gananciaBruta>0?"rgba(99,102,241,0.15)":"#0a0a0a",border:"1px solid "+(gananciaBruta>0?"#6366f1":"#1f2937"),color:gananciaBruta>0?"#a5b4fc":"#374151",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:gananciaBruta>0?"pointer":"not-allowed",letterSpacing:1}}>
+                          style={{width:"100%",padding:12,borderRadius:8,background:"rgba(99,102,241,0.15)",border:"1px solid #6366f1",color:"#a5b4fc",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
                           CONFIRMAR LIQUIDACION
                         </button>
                       </Card>
