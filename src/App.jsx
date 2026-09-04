@@ -1864,13 +1864,15 @@ function PantallaAnalisis({rolUsuario="operador"}) {
       return true;
     });
 
-    // Ordenar: mismo timestamp → compras antes que ventas
+    // Ordenar: mismo día → compras antes que ventas; distinto día → cronológico
     const opsOrdenadas = [...opsValidas].sort((a,b)=>{
-      const fa=(a.fecha||"")+(a.hora||""), fb=(b.fecha||"")+(b.hora||"");
+      const fa=a.fecha||"", fb=b.fecha||"";
       if(fa!==fb) return fa.localeCompare(fb);
+      // Mismo día: compras primero, ventas después
       if(a.tipo==="compra"&&b.tipo==="venta") return -1;
       if(a.tipo==="venta"&&b.tipo==="compra") return 1;
-      return 0;
+      // Mismo tipo: orden cronológico por hora
+      return (a.hora||"").localeCompare(b.hora||"");
     });
 
     opsOrdenadas.forEach(op => {
