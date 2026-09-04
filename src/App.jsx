@@ -1864,7 +1864,16 @@ function PantallaAnalisis({rolUsuario="operador"}) {
       return true;
     });
 
-    opsValidas.forEach(op => {
+    // Ordenar: mismo timestamp → compras antes que ventas
+    const opsOrdenadas = [...opsValidas].sort((a,b)=>{
+      const fa=(a.fecha||"")+(a.hora||""), fb=(b.fecha||"")+(b.hora||"");
+      if(fa!==fb) return fa.localeCompare(fb);
+      if(a.tipo==="compra"&&b.tipo==="venta") return -1;
+      if(a.tipo==="venta"&&b.tipo==="compra") return 1;
+      return 0;
+    });
+
+    opsOrdenadas.forEach(op => {
       const moneda = op.moneda || "", moneda2 = op.moneda2 || "";
       const monto = parse(op.monto), monto2 = parse(op.monto2);
       const cotizOp = parse(op.cotizacion) || (monto2 && monto ? monto2 / monto : 0);
