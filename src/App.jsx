@@ -4355,15 +4355,16 @@ function AppInterna({ usuario }) {
     if(sf) setSaldos(Object.fromEntries(MONEDAS.map(m=>[m.id,Number(sf[m.id])||0])));
   },[hoy]);
 
-  useEffect(()=>{
-    const channel = SB.channel("realtime_caja")
-      .on("postgres_changes",{event:"*",schema:"public",table:"movimientos_cc"},()=>recargarMovimientos())
-      .on("postgres_changes",{event:"*",schema:"public",table:"operaciones"},()=>recargarOperaciones())
-      .on("postgres_changes",{event:"*",schema:"public",table:"diferidos"},()=>recargarDiferidos())
-      .on("postgres_changes",{event:"*",schema:"public",table:"dias"},()=>recargarDia())
-      .subscribe();
-    return ()=>{ SB.removeChannel(channel); };
-  },[recargarMovimientos,recargarOperaciones,recargarDiferidos,recargarDia]);
+  // REALTIME temporalmente desactivado por errores en Supabase
+  // useEffect(()=>{
+  //   const channel = SB.channel("realtime_caja")
+  //     .on("postgres_changes",{event:"*",schema:"public",table:"movimientos_cc"},()=>recargarMovimientos())
+  //     .on("postgres_changes",{event:"*",schema:"public",table:"operaciones"},()=>recargarOperaciones())
+  //     .on("postgres_changes",{event:"*",schema:"public",table:"diferidos"},()=>recargarDiferidos())
+  //     .on("postgres_changes",{event:"*",schema:"public",table:"dias"},()=>recargarDia())
+  //     .subscribe();
+  //   return ()=>{ SB.removeChannel(channel); };
+  // },[recargarMovimientos,recargarOperaciones,recargarDiferidos,recargarDia]);
   // ===== FIN REALTIME =====
 
   if (cargando) return (
