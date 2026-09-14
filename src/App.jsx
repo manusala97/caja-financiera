@@ -2803,7 +2803,13 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
       {(f.tipo==="compra"||f.tipo==="venta")&&(
         <div>
           <div style={S.grid("1fr 1fr",8)}>
-            <div><Lbl>Moneda base</Lbl><MonedasSel value={f.moneda} onChange={v=>sf("moneda",v)}/></div>
+            <div><Lbl>Moneda base</Lbl><MonedasSel value={f.moneda} onChange={v=>{
+              sf("moneda",v);
+              // Reset moneda2 al default correcto según moneda seleccionada
+              if(v==="USD") sf("moneda2","ARS");
+              else sf("moneda2","USD");
+              sf("cotizacion",""); sf("monto",""); sf("monto2","");
+            }}/></div>
             <div><Lbl>Moneda destino</Lbl><MonedasSel value={f.moneda2} onChange={v=>sf("moneda2",v)} exclude={f.moneda}/></div>
           </div>
           <div style={{marginTop:8,...S.grid("1fr 1fr 1fr",8)}}>
@@ -4827,7 +4833,12 @@ function AppInterna({ usuario }) {
                 {(form.tipo==="compra"||form.tipo==="venta")&&(
                   <div>
                     <div style={S.grid("1fr 1fr",8)}>
-                      <div><Lbl>Moneda base</Lbl><MonedasSel value={form.moneda} onChange={v=>setF("moneda",v)}/></div>
+                      <div><Lbl>Moneda base</Lbl><MonedasSel value={form.moneda} onChange={v=>{
+                        setF("moneda",v);
+                        if(v==="USD") setF("moneda2","ARS");
+                        else setF("moneda2","USD");
+                        setF("cotizacion",""); setF("monto",""); setF("monto2","");
+                      }}/></div>
                       <div><Lbl>Moneda destino</Lbl><MonedasSel value={form.moneda2} onChange={v=>setF("moneda2",v)} exclude={form.moneda}/></div>
                     </div>
                     <div style={{marginTop:8,...S.grid("1fr 1fr 1fr",8)}}>
