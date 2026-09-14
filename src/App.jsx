@@ -4367,6 +4367,40 @@ function AppInterna({ usuario }) {
   // },[recargarMovimientos,recargarOperaciones,recargarDiferidos,recargarDia]);
   // ===== FIN REALTIME =====
 
+  // ===== POLLING SILENCIOSO CADA 30 SEGUNDOS =====
+  useEffect(()=>{
+    const interval = setInterval(async()=>{
+      // Solo actualiza si no hay una operación en curso
+      if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 5000) return;
+      
+      // Actualizar operaciones del día en segundo plano
+      const {data:opsData} = await SB.from("operaciones").select("*").eq("dia_id",hoy).order("hora",{ascending:true});
+      if(opsData) setOps(opsData.map(o=>({...(o.datos||{}),id:o.id,fecha:o.fecha||o.datos?.fecha,hora:o.hora||o.datos?.hora,tipo:o.tipo})));
+      
+      // Actualizar movimientos CC en segundo plano
+      const {data:movs} = await SB.from("movimientos_cc").select("*").order("id",{ascending:true}).limit(50000);
+      if(movs) setClientes(prev=>prev.map(cl=>({
+        ...cl,
+        movimientos:(movs||[]).filter(m=>Number(m.cliente_id)===Number(cl.id)).map(m=>({
+          id:m.id,hora:m.hora,fecha:m.fecha,tipo:m.tipo,moneda:m.moneda,monto:Number(m.monto),nota:m.nota,impacta_caja:m.impacta_caja||false
+        }))
+      })));
+
+      // Actualizar diferidos en segundo plano
+      const {data:difs} = await SB.from("diferidos").select("*").order("fecha_acr",{ascending:true});
+      if(difs) setDiferidos(difs.map(d=>({
+        id:d.id,cliente:d.cliente,nominal:Number(d.nominal),mFinal:Number(d.m_final),
+        ganancia:Number(d.ganancia),fechaAcr:d.fecha_acr,fechaVenc:d.fecha_venc||"",
+        tm:Number(d.tm||0),dias:Number(d.dias||0),cobrado:d.cobrado||false,
+        tipoCheqDif:d.tipo_cheq||"echeq"
+      })));
+
+    }, 30000); // cada 30 segundos
+
+    return ()=>clearInterval(interval);
+  },[hoy]);
+  // ===== FIN POLLING =====
+
   if (cargando) return (
     <div style={{...S.app,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
