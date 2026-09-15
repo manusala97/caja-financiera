@@ -3250,6 +3250,115 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+function SwapForm({form, setF, clientes, swapDesglose, setSwapDesglose, fmt, parse, S, Lbl, Inp}) {
+  const SWAP_MONEDAS = [{v:"USDT",l:"🟡 USDT"},{v:"EUR",l:"💶 EUR"},{v:"GBP",l:"🇬🇧 GBP"}];
+  const cant = parse(form.swapCantidad||0);
+  const tcD = parse(form.swapTCDolar||0);
+  const tcM = parse(form.swapTCMoneda||0);
+  const totalARS = cant * tcD * tcM;
+  const usdBruto = Math.round(cant * tcM * 100) / 100;
+  const totalDesgl = swapDesglose.reduce((s,d)=>s+parse(d.monto||0),0);
+  const diferenciaARS = totalARS - totalDesgl;
+  const gananciaUSD = form.swapDir==="vendo" ? (tcM - 1) * cant : (1 - tcM) * cant;
+
+  return (
+    <div>
+      {/* Moneda */}
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        {SWAP_MONEDAS.map(m=>(
+          <button key={m.v} type="button" onClick={()=>setF("swapMoneda",m.v)}
+            style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+((form.swapMoneda||"USDT")===m.v?"#06b6d4":"#1f2937"),
+              background:(form.swapMoneda||"USDT")===m.v?"rgba(6,182,212,0.1)":"transparent",
+              color:(form.swapMoneda||"USDT")===m.v?"#06b6d4":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+            {m.l}
+          </button>
+        ))}
+      </div>
+      {/* Dirección */}
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        {[{v:"vendo",l:"📤 Vendo "+(form.swapMoneda||"USDT")},{v:"compro",l:"📥 Compro "+(form.swapMoneda||"USDT")}].map(d=>(
+          <button key={d.v} type="button" onClick={()=>setF("swapDir",d.v)}
+            style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+((form.swapDir||"vendo")===d.v?"#06b6d4":"#1f2937"),
+              background:(form.swapDir||"vendo")===d.v?"rgba(6,182,212,0.1)":"transparent",
+              color:(form.swapDir||"vendo")===d.v?"#06b6d4":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+            {d.l}
+          </button>
+        ))}
+      </div>
+      {/* Campos */}
+      <div style={S.grid("1fr 1fr 1fr",8)}>
+        <div><Lbl>Cantidad {form.swapMoneda||"USDT"}</Lbl><Inp type="number" value={form.swapCantidad||""} onChange={e=>setF("swapCantidad",e.target.value)}/></div>
+        <div><Lbl>TC Dólar (ARS)</Lbl><Inp type="number" placeholder="1545" value={form.swapTCDolar||""} onChange={e=>setF("swapTCDolar",e.target.value)}/></div>
+        <div><Lbl>TC {form.swapMoneda||"USDT"}/USD</Lbl><Inp type="number" placeholder="1.035" step="0.001" value={form.swapTCMoneda||""} onChange={e=>setF("swapTCMoneda",e.target.value)}/></div>
+      </div>
+      {/* Cliente */}
+      <div style={{marginTop:8}}>
+        <Lbl>Cliente <span style={{color:"#f87171",fontSize:10}}>*obligatorio</span></Lbl>
+        <Inp placeholder="Nombre del cliente" value={form.swapCliente||""} onChange={e=>setF("swapCliente",e.target.value)}/>
+      </div>
+      {/* Preview */}
+      {cant>0&&tcD>0&&tcM>0&&(
+        <div style={{marginTop:8,background:"rgba(6,182,212,0.06)",border:"1px solid rgba(6,182,212,0.2)",borderRadius:8,padding:10,fontSize:11}}>
+          <div style={{...S.grid("1fr 1fr 1fr 1fr",6),marginBottom:4}}>
+            <div><div style={{color:"#6b7280",marginBottom:2}}>ARS totales</div><div style={{color:"#e2e8f0",fontWeight:700}}>${fmt(Math.round(totalARS))}</div></div>
+            <div><div style={{color:"#6b7280",marginBottom:2}}>USD (leg 1)</div><div style={{color:"#60a5fa",fontWeight:700}}>{usdBruto} USD</div></div>
+            <div><div style={{color:"#6b7280",marginBottom:2}}>{form.swapMoneda||"USDT"} (leg 2)</div><div style={{color:"#06b6d4",fontWeight:700}}>{cant}</div></div>
+            <div><div style={{color:"#6b7280",marginBottom:2}}>Ganancia</div><div style={{color:"#4ade80",fontWeight:700}}>{fmt(Math.round(gananciaUSD*100)/100)} USD</div></div>
+          </div>
+        </div>
+      )}
+      {/* Desglose CCs */}
+      <div style={{marginTop:10}}>
+        <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:6}}>DESGLOSE — QUIÉN ENVÍA LOS PESOS</div>
+        {swapDesglose.map((d,i)=>(
+          <div key={d.id} style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+            <div style={{flex:2,position:"relative"}}>
+              {clientes.find(x=>x.id===Number(d.clienteId))&&!d.buscar?(
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <div style={{flex:1,padding:"5px 8px",background:"rgba(6,182,212,0.08)",border:"1px solid #06b6d444",borderRadius:6,fontSize:11,color:"#06b6d4"}}>
+                    {clientes.find(x=>x.id===Number(d.clienteId))?.nombre}
+                  </div>
+                  <button type="button" onClick={()=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteId:"",buscar:""}))}
+                    style={{padding:"3px 6px",background:"transparent",border:"1px solid #374151",borderRadius:4,color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>
+                </div>
+              ):(
+                <div>
+                  <Inp placeholder="Buscar CC..." value={d.buscar||""} onChange={e=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,buscar:e.target.value}))}/>
+                  {d.buscar&&(
+                    <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                      {clientes.filter(x=>!x.oculto&&(x.nombre+" "+(x.apellido||"")).toLowerCase().includes(d.buscar.toLowerCase())).slice(0,6).map(cl=>(
+                        <div key={cl.id} onClick={()=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteId:String(cl.id),buscar:""}))}
+                          style={{padding:"6px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                          {cl.nombre} {cl.apellido||""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div style={{flex:1}}><Inp type="number" placeholder="Monto ARS" value={d.monto||""} onChange={e=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monto:e.target.value}))}/></div>
+            {swapDesglose.length>1&&<button type="button" onClick={()=>setSwapDesglose(p=>p.filter(x=>x.id!==d.id))}
+              style={{padding:"4px 8px",background:"transparent",border:"1px solid #f87171",borderRadius:4,color:"#f87171",cursor:"pointer",fontSize:10}}>✕</button>}
+          </div>
+        ))}
+        <button type="button" onClick={()=>setSwapDesglose(p=>[...p,{id:Date.now(),clienteId:"",buscar:"",monto:""}])}
+          style={{fontSize:11,color:"#06b6d4",background:"transparent",border:"1px dashed #06b6d444",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontFamily:"inherit"}}>
+          + Agregar CC
+        </button>
+        {swapDesglose.some(d=>d.monto)&&(
+          <div style={{marginTop:6,fontSize:11,display:"flex",gap:12}}>
+            <span style={{color:"#6b7280"}}>Distribuido: <b style={{color:"#e2e8f0"}}>${fmt(Math.round(totalDesgl))}</b></span>
+            <span style={{color:Math.abs(diferenciaARS)<100?"#4ade80":"#f87171"}}>
+              {diferenciaARS>100?"FALTA":"SOBRA"} ${fmt(Math.round(Math.abs(diferenciaARS)))}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AppInterna({ usuario }) {
   const [rolUsuario, setRolUsuario] = useState("operador"); // default restringido
   const [hoyState, setHoyState] = useState(getHoy());
@@ -3287,7 +3396,8 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapCliente:"" });
+  const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
@@ -5434,6 +5544,14 @@ function AppInterna({ usuario }) {
                     })()}
                   </div>
                 </div>)}
+                {form.tipo==="swap"&&(
+                  <SwapForm
+                    form={form} setF={setF}
+                    clientes={clientes}
+                    swapDesglose={swapDesglose} setSwapDesglose={setSwapDesglose}
+                    fmt={fmt} parse={parse} S={S} Lbl={Lbl} Inp={Inp}
+                  />
+                )}
                 {form.tipo==="transferencia"&&(()=>{
                   const tn=parse(form.tn), pctOr=parse(form.tpctOrigen)||0;
                   const comOr=tn*(pctOr/100), netoOr=tn-comOr;
