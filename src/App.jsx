@@ -4376,7 +4376,11 @@ function AppInterna({ usuario }) {
   // ===== POLLING SILENCIOSO CADA 30 SEGUNDOS =====
   useEffect(()=>{
     const interval = setInterval(async()=>{
-      // Solo actualiza si no hay una operación en curso
+      // No actualizar si hay un input activo (usuario escribiendo en formulario)
+      const activeEl = document.activeElement;
+      const esInput = activeEl && (activeEl.tagName==="INPUT"||activeEl.tagName==="TEXTAREA"||activeEl.tagName==="SELECT");
+      if(esInput) return;
+      // No actualizar si acabamos de insertar algo
       if(ultimoInsertRef.current && Date.now()-ultimoInsertRef.current < 5000) return;
       
       // Actualizar operaciones del día en segundo plano
@@ -4392,14 +4396,7 @@ function AppInterna({ usuario }) {
         }))
       })));
 
-      // Actualizar diferidos en segundo plano
-      const {data:difs} = await SB.from("diferidos").select("*").order("fecha_acr",{ascending:true});
-      if(difs) setDiferidos(difs.map(d=>({
-        id:d.id,cliente:d.cliente,nominal:Number(d.nominal),mFinal:Number(d.m_final),
-        ganancia:Number(d.ganancia),fechaAcr:d.fecha_acr,fechaVenc:d.fecha_venc||"",
-        tm:Number(d.tm||0),dias:Number(d.dias||0),cobrado:d.cobrado||false,
-        tipoCheqDif:d.tipo_cheq||"echeq"
-      })));
+      // Diferidos NO se actualizan en el polling — el usuario los edita manualmente en Cartera
 
     }, 30000); // cada 30 segundos
 
