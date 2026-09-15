@@ -21,6 +21,7 @@ const TIPOS_OP = {
   venta:              { label:"Venta",                icon:"-", color:"#f87171" },
   cheque_dia:         { label:"Cheque al dia",        icon:"C", color:"#fb923c" },
   cheque_dif:         { label:"Cheque diferido",      icon:"D", color:"#c084fc" },
+  swap:               { label:"Swap",                  icon:"⇄", color:"#06b6d4" },
   transferencia:      { label:"Transferencia",        icon:"T", color:"#38bdf8" },
   ajuste:             { label:"Ajuste",               icon:"A", color:"#9ca3af" },
   cobro_dif:          { label:"Cobro diferido",       icon:"C", color:"#c084fc" },
@@ -2743,8 +2744,10 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
     tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", tmoneda: opInicial?.tmoneda||"ARS", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
     ccOrigenBuscar:"", ccDestinoBuscar:"", dTnaDeseada:"",
+    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapCliente:"",
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
+  const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
   const calcDif = useMemo(()=>{
     const n=parse(f.dn),tm=parse(f.dtm),tg=parse(f.dtg),dias=diasEntre(f.dfr,f.dfa);
     const tnaDeseada=parse(f.dTnaDeseada);
@@ -2795,6 +2798,112 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     <div style={{background:"#0d0d0d",border:"1px solid "+color+"33",borderRadius:10,padding:16}}>
       {titulo&&<div style={{fontSize:10,letterSpacing:3,color,marginBottom:12}}>{titulo}</div>}
       <div style={{marginBottom:12,maxWidth:150}}><Lbl>Hora</Lbl><Inp placeholder="14:30" value={f.hora} onChange={e=>sf("hora",e.target.value)}/></div>
+      {f.tipo==="swap"&&(()=>{
+        const SWAP_MONEDAS = [{v:"USDT",l:"🟡 USDT"},{v:"EUR",l:"💶 EUR"},{v:"GBP",l:"🇬🇧 GBP"}];
+        const cant = parse(f.swapCantidad||0);
+        const tcDolar = parse(f.swapTCDolar||0);
+        const tcMoneda = parse(f.swapTCMoneda||0);
+        const totalARS = cant * tcDolar * tcMoneda;
+        const usdBruto = cant * tcMoneda;
+        const totalDesgl = swapDesglose.reduce((s,d)=>s+parse(d.monto||0),0);
+        const diferenciaARS = totalARS - totalDesgl;
+        const gananciaUSD = f.swapDir==="vendo" ? (tcMoneda - 1) * cant : (1 - tcMoneda) * cant;
+        return (
+          <div>
+            {/* Moneda y dirección */}
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              {SWAP_MONEDAS.map(m=>(
+                <button key={m.v} type="button" onClick={()=>sf("swapMoneda",m.v)}
+                  style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+(f.swapMoneda===m.v?"#06b6d4":"#1f2937"),
+                    background:f.swapMoneda===m.v?"rgba(6,182,212,0.1)":"transparent",
+                    color:f.swapMoneda===m.v?"#06b6d4":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                  {m.l}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              {[{v:"vendo",l:"📤 Vendo "+f.swapMoneda},{v:"compro",l:"📥 Compro "+f.swapMoneda}].map(d=>(
+                <button key={d.v} type="button" onClick={()=>sf("swapDir",d.v)}
+                  style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+(f.swapDir===d.v?"#06b6d4":"#1f2937"),
+                    background:f.swapDir===d.v?"rgba(6,182,212,0.1)":"transparent",
+                    color:f.swapDir===d.v?"#06b6d4":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                  {d.l}
+                </button>
+              ))}
+            </div>
+            {/* Campos */}
+            <div style={S.grid("1fr 1fr 1fr",8)}>
+              <div><Lbl>Cantidad {f.swapMoneda}</Lbl><Inp type="number" value={f.swapCantidad||""} onChange={e=>sf("swapCantidad",e.target.value)}/></div>
+              <div><Lbl>TC Dólar (ARS)</Lbl><Inp type="number" placeholder="1545" value={f.swapTCDolar||""} onChange={e=>sf("swapTCDolar",e.target.value)}/></div>
+              <div><Lbl>TC {f.swapMoneda}/USD</Lbl><Inp type="number" placeholder="1.035" step="0.001" value={f.swapTCMoneda||""} onChange={e=>sf("swapTCMoneda",e.target.value)}/></div>
+            </div>
+            {/* Cliente */}
+            <div style={{marginTop:8}}>
+              <Lbl>Cliente</Lbl>
+              <Inp placeholder="Nombre del cliente" value={f.swapCliente||""} onChange={e=>sf("swapCliente",e.target.value)}/>
+            </div>
+            {/* Preview */}
+            {cant>0&&tcDolar>0&&tcMoneda>0&&(
+              <div style={{marginTop:8,background:"rgba(6,182,212,0.06)",border:"1px solid rgba(6,182,212,0.2)",borderRadius:8,padding:10,fontSize:11}}>
+                <div style={{...S.grid("1fr 1fr 1fr 1fr",6),marginBottom:6}}>
+                  <div><div style={{color:"#6b7280",marginBottom:2}}>ARS totales</div><div style={{color:"#e2e8f0",fontWeight:700}}>${fmt(Math.round(totalARS))}</div></div>
+                  <div><div style={{color:"#6b7280",marginBottom:2}}>USD leg 1</div><div style={{color:"#60a5fa",fontWeight:700}}>{fmt(Math.round(usdBruto))} USD</div></div>
+                  <div><div style={{color:"#6b7280",marginBottom:2}}>{f.swapMoneda} leg 2</div><div style={{color:"#06b6d4",fontWeight:700}}>{fmt(cant)} {f.swapMoneda}</div></div>
+                  <div><div style={{color:"#6b7280",marginBottom:2}}>Ganancia</div><div style={{color:"#4ade80",fontWeight:700}}>{fmt(Math.round(gananciaUSD*100)/100)} USD</div></div>
+                </div>
+              </div>
+            )}
+            {/* Desglose de CCs que envían pesos */}
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:6}}>DESGLOSE — QUIÉN ENVÍA LOS PESOS</div>
+              {swapDesglose.map((d,i)=>(
+                <div key={d.id} style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                  <div style={{flex:2,position:"relative"}}>
+                    {clientes.find(x=>x.id===Number(d.clienteId))&&!d.buscar?(
+                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                        <div style={{flex:1,padding:"5px 8px",background:"rgba(6,182,212,0.08)",border:"1px solid #06b6d444",borderRadius:6,fontSize:11,color:"#06b6d4"}}>
+                          {clientes.find(x=>x.id===Number(d.clienteId))?.nombre}
+                        </div>
+                        <button type="button" onClick={()=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteId:"",buscar:""}))}
+                          style={{padding:"3px 6px",background:"transparent",border:"1px solid #374151",borderRadius:4,color:"#6b7280",cursor:"pointer",fontSize:10}}>✕</button>
+                      </div>
+                    ):(
+                      <div>
+                        <Inp placeholder="Buscar CC..." value={d.buscar||""} onChange={e=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,buscar:e.target.value}))}/>
+                        {d.buscar&&(
+                          <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:120,overflowY:"auto",marginTop:2}}>
+                            {clientes.filter(x=>!x.oculto&&(x.nombre+" "+(x.apellido||"")).toLowerCase().includes(d.buscar.toLowerCase())).slice(0,6).map(cl=>(
+                              <div key={cl.id} onClick={()=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,clienteId:String(cl.id),buscar:""}))}
+                                style={{padding:"6px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                                {cl.nombre} {cl.apellido||""}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{flex:1}}><Inp type="number" placeholder="Monto ARS" value={d.monto||""} onChange={e=>setSwapDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,monto:e.target.value}))}/></div>
+                  {swapDesglose.length>1&&<button type="button" onClick={()=>setSwapDesglose(p=>p.filter(x=>x.id!==d.id))}
+                    style={{padding:"4px 8px",background:"transparent",border:"1px solid #f87171",borderRadius:4,color:"#f87171",cursor:"pointer",fontSize:10}}>✕</button>}
+                </div>
+              ))}
+              <button type="button" onClick={()=>setSwapDesglose(p=>[...p,{id:Date.now(),clienteId:"",buscar:"",monto:""}])}
+                style={{fontSize:11,color:"#06b6d4",background:"transparent",border:"1px dashed #06b6d444",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontFamily:"inherit"}}>
+                + Agregar CC
+              </button>
+              {swapDesglose.some(d=>d.monto)&&(
+                <div style={{marginTop:6,fontSize:11,display:"flex",gap:12}}>
+                  <span style={{color:"#6b7280"}}>Distribuido: <b style={{color:"#e2e8f0"}}>${fmt(Math.round(totalDesgl))}</b></span>
+                  <span style={{color:Math.abs(diferenciaARS)<100?"#4ade80":"#f87171"}}>
+                    Diferencia: <b>{diferenciaARS>=0?"FALTA":"SOBRA"} ${fmt(Math.round(Math.abs(diferenciaARS)))}</b>
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
         {Object.entries(TIPOS_OP).filter(([id])=>!id.startsWith("cc_")&&id!=="ajuste"&&id!=="cobro_dif").map(([id,t])=>(
           <button key={id} onClick={()=>sf("tipo",id)} style={S.btn(f.tipo===id,t.color)}>{t.label}</button>
@@ -3713,6 +3822,50 @@ function AppInterna({ usuario }) {
     const {tipo}=form;
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     let opData=null, ns=await leerSaldoFresco();
+
+    // ── SWAP ────────────────────────────────────────────────────
+    if(tipo==="swap"){
+      const cant=parse(form.swapCantidad||0), tcD=parse(form.swapTCDolar||0), tcM=parse(form.swapTCMoneda||0);
+      if(!cant||!tcD||!tcM){notify("Completá cantidad, TC dólar y TC moneda",false);setGuardando(false);return;}
+      if(!form.swapCliente){notify("Ingresá el nombre del cliente",false);setGuardando(false);return;}
+      const usdMonto=Math.round(cant*tcM*100)/100;
+      const vendo=form.swapDir==="vendo";
+
+      // Leg 1: USD/ARS
+      const leg1={tipo:vendo?"venta":"compra",moneda:"USD",moneda2:"ARS",monto:usdMonto,cotizacion:tcD,cliente:form.swapCliente,nota:"Swap leg 1 - "+form.swapMoneda+"/ARS"};
+      const {data:op1}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg1.tipo,datos:leg1}).select().single();
+      if(op1) setOps(p=>[...p,{...leg1,id:op1.id,fecha:hoy,hora}]);
+
+      // Leg 2: moneda/USD
+      const leg2={tipo:vendo?"venta":"compra",moneda:form.swapMoneda,moneda2:"USD",monto:cant,cotizacion:tcM,cliente:form.swapCliente,nota:"Swap leg 2 - "+form.swapMoneda+"/USD"};
+      const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2.tipo,datos:leg2}).select().single();
+      if(op2) setOps(p=>[...p,{...leg2,id:op2.id,fecha:hoy,hora}]);
+
+      // CC cliente: pendiente de entrega
+      const clienteCC=clientes.find(x=>(x.nombre+" "+(x.apellido||"")).toLowerCase().includes(form.swapCliente.toLowerCase()));
+      if(clienteCC){
+        const monedaCC=vendo?form.swapMoneda:"ARS";
+        const montoCC=vendo?cant:usdMonto*tcD;
+        const notaCC=`Swap ${vendo?"entrega":"recibe"} ${form.swapMoneda} — ${fmt(cant)} — pendiente`;
+        const {data:mvCl}=await SB.from("movimientos_cc").insert({cliente_id:clienteCC.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:monedaCC,monto:montoCC,nota:notaCC}).select().single();
+        if(mvCl) setClientes(p=>p.map(cl=>cl.id!==clienteCC.id?cl:{...cl,movimientos:[...cl.movimientos,mvCl]}));
+      }
+
+      // Desglose CCs que envían pesos
+      for(const d of swapDesglose.filter(x=>x.clienteId&&parse(x.monto)>0)){
+        const cId=Number(d.clienteId);
+        const notaD=`Swap — envió $${fmt(parse(d.monto))} ARS`;
+        const {data:mvD}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:parse(d.monto),nota:notaD}).select().single();
+        if(mvD) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mvD]}));
+      }
+
+      setForm(f=>({...f,swapCantidad:"",swapTCDolar:"",swapTCMoneda:"",swapCliente:""}));
+      setSwapDesglose([{id:1,clienteId:"",buscar:"",monto:""}]);
+      notify("Swap registrado ✓ — "+cant+" "+form.swapMoneda+(vendo?" vendidos":" comprados"));
+      setGuardando(false);
+      return;
+    }
+
     if (tipo==="compra"||tipo==="venta") {
       const m=parse(form.monto),m2=parse(form.monto2);
       if (!m||!m2) { notify("Ingresa montos validos",false); return; }
