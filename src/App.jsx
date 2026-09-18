@@ -2835,7 +2835,21 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
             <div style={S.grid("1fr 1fr 1fr",8)}>
               <div><Lbl>Cantidad {f.swapMoneda}</Lbl><Inp type="number" value={f.swapCantidad||""} onChange={e=>sf("swapCantidad",e.target.value)}/></div>
               <div><Lbl>TC Dólar (ARS)</Lbl><Inp type="number" placeholder="1545" value={f.swapTCDolar||""} onChange={e=>sf("swapTCDolar",e.target.value)}/></div>
-              <div><Lbl>TC {f.swapMoneda}/USD</Lbl><Inp type="number" placeholder="1.035" step="0.001" value={f.swapTCMoneda||""} onChange={e=>sf("swapTCMoneda",e.target.value)}/></div>
+              <div>
+                <Lbl>Monto ARS recibido</Lbl>
+                <Inp type="number" placeholder="322000" value={f.swapMontoARS||""}
+                  onChange={e=>{
+                    const arsVal=e.target.value;
+                    sf("swapMontoARS",arsVal);
+                    const cant2=parse(f.swapCantidad||0), tcD2=parse(f.swapTCDolar||0), ars2=parse(arsVal);
+                    if(cant2>0&&tcD2>0&&ars2>0){
+                      const usd2=ars2/tcD2;
+                      const tcM2=usd2/cant2;
+                      sf("swapTCMoneda",tcM2.toFixed(4));
+                    }
+                  }}/>
+                {f.swapTCMoneda&&<div style={{fontSize:10,color:"#06b6d4",marginTop:2}}>TC: {parseFloat(f.swapTCMoneda).toFixed(4)} {f.swapMoneda||"USDT"}/USD</div>}
+              </div>
             </div>
             {/* Cliente */}
             <div style={{marginTop:8}}>
