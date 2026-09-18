@@ -2744,7 +2744,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
     tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", tmoneda: opInicial?.tmoneda||"ARS", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
     ccOrigenBuscar:"", ccDestinoBuscar:"", dTnaDeseada:"",
-    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapCliente:"",
+    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"",
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
@@ -3289,7 +3289,21 @@ function SwapForm({form, setF, clientes, swapDesglose, setSwapDesglose, fmt, par
       <div style={S.grid("1fr 1fr 1fr",8)}>
         <div><Lbl>Cantidad {form.swapMoneda||"USDT"}</Lbl><Inp type="number" value={form.swapCantidad||""} onChange={e=>setF("swapCantidad",e.target.value)}/></div>
         <div><Lbl>TC Dólar (ARS)</Lbl><Inp type="number" placeholder="1545" value={form.swapTCDolar||""} onChange={e=>setF("swapTCDolar",e.target.value)}/></div>
-        <div><Lbl>TC {form.swapMoneda||"USDT"}/USD</Lbl><Inp type="number" placeholder="1.035" step="0.001" value={form.swapTCMoneda||""} onChange={e=>setF("swapTCMoneda",e.target.value)}/></div>
+        <div>
+          <Lbl>Monto ARS recibido</Lbl>
+          <Inp type="number" placeholder="322000" value={form.swapMontoARS||""}
+            onChange={e=>{
+              const arsVal=e.target.value;
+              setF("swapMontoARS",arsVal);
+              const cant2=parse(form.swapCantidad||0), tcD2=parse(form.swapTCDolar||0), ars2=parse(arsVal);
+              if(cant2>0&&tcD2>0&&ars2>0){
+                const usd2=ars2/tcD2;
+                const tcM2=usd2/cant2;
+                setF("swapTCMoneda",tcM2.toFixed(4));
+              }
+            }}/>
+          {form.swapTCMoneda&&<div style={{fontSize:10,color:"#06b6d4",marginTop:2}}>TC calculado: {parseFloat(form.swapTCMoneda).toFixed(4)} {form.swapMoneda||"USDT"}/USD</div>}
+        </div>
       </div>
       {/* Cliente */}
       <div style={{marginTop:8}}>
@@ -3396,7 +3410,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapCliente:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"" });
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
@@ -3569,6 +3583,7 @@ function AppInterna({ usuario }) {
           id:d.id, hora:d.hora, fecha:d.fecha, cliente:d.cliente,
           nominal:d.nominal, mFinal:d.m_final, ganancia:d.ganancia,
           fechaAcr:d.fecha_acr, tm:d.tm, dias:d.dias, cobrado:d.cobrado,
+          tipoCheqDif:d.tipo_cheq||"echeq",
           nota:d.nota||"", manual:d.manual||false,
           fechaCobro:d.fecha_cobro||"", tasaEndoso:d.tasa_endoso||"", fechaVenc:d.fecha_venc||""
         })));
@@ -4131,7 +4146,7 @@ function AppInterna({ usuario }) {
       if (!calcDif) { notify("Completa todos los campos",false); return; }
       if (!form.cliente.trim()) { notify("⚠ El nombre del cliente es obligatorio",false); return; }
       const dif={id:Date.now(),hora,fecha:hoy,cliente:form.cliente,nominal:calcDif.n,mFinal:calcDif.mFinal,ganancia:calcDif.ganancia,fechaAcr:form.dfa,tm:parse(form.dtm),dias:calcDif.dias,cobrado:false};
-      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,fecha_venc:form.dfv||"",tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:""}).select().single();
+      const {data:difIns}=await SB.from("diferidos").insert({hora:dif.hora,fecha:dif.fecha,cliente:dif.cliente||"",nominal:dif.nominal,m_final:dif.mFinal,ganancia:dif.ganancia,fecha_acr:dif.fechaAcr,fecha_venc:form.dfv||"",tm:dif.tm,dias:dif.dias,cobrado:false,fecha_cobro:"",tasa_endoso:"",tipo_cheq:form.tipoCheqDif||"echeq"}).select().single();
       if(difIns) dif.id=difIns.id;
       setDiferidos(d=>[...d,dif]);
       opData={tipo,hora,dn:calcDif.n,montoFinal:calcDif.mFinal,dfa:form.dfa,monto:calcDif.mFinal,cliente:form.cliente,nota:form.nota,pagoCheqDif:form.pagoCheqDif,pagoCheqDifCCId:form.pagoCheqDifCCId,tipoCheqDif:form.tipoCheqDif||"echeq"};
