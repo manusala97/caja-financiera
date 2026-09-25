@@ -2744,7 +2744,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
     tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", tmoneda: opInicial?.tmoneda||"ARS", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
     ccOrigenBuscar:"", ccDestinoBuscar:"", dTnaDeseada:"",
-    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"",
+    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"", swapImpactaCaja:true,
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
@@ -2867,6 +2867,22 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
                 </div>
               </div>
             )}
+            {/* Selector impacta caja o CC */}
+            <div style={{marginTop:10,marginBottom:10}}>
+              <Lbl>{f.swapDir==="vendo"?"Entrego "+(f.swapMoneda||"USDT")+" desde":"Recibo "+(f.swapMoneda||"USDT")+" en"}</Lbl>
+              <div style={{display:"flex",gap:8}}>
+                {[{v:true,l:"💵 Caja física"},{v:false,l:"🔄 CC del cliente"}].map(opt=>(
+                  <button key={String(opt.v)} type="button" onClick={()=>sf("swapImpactaCaja",opt.v)}
+                    style={{flex:1,padding:"7px",borderRadius:6,
+                      border:"1px solid "+((f.swapImpactaCaja!==false)===opt.v?"#06b6d4":"#1f2937"),
+                      background:(f.swapImpactaCaja!==false)===opt.v?"rgba(6,182,212,0.1)":"transparent",
+                      color:(f.swapImpactaCaja!==false)===opt.v?"#06b6d4":"#6b7280",
+                      cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+            </div>
             {/* Desglose de CCs que envían pesos */}
             <div style={{marginTop:10}}>
               <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:6}}>DESGLOSE — QUIÉN ENVÍA LOS PESOS</div>
@@ -3465,7 +3481,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"", swapImpactaCaja:true });
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
@@ -4023,17 +4039,14 @@ function AppInterna({ usuario }) {
       const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2tipo,datos:leg2}).select().single();
       if(op2) setOps(p=>[...p,{...leg2,id:op2.id,fecha:hoy,hora}]);
 
-      // Impactar caja
-      if(vendo){
-        // Vendo moneda: entra USD (compramos USD con ARS del cliente), sale moneda
-        ns.USD = (ns.USD||0) + usdImplicito;
-        ns[form.swapMoneda] = (ns[form.swapMoneda]||0) - cant;
-        ns.USD = ns.USD - usdImplicito; // USD se cierra con el leg 2
-      } else {
-        // Compro moneda: sale USD (vendemos USD al proveedor), entra moneda
-        ns.USD = (ns.USD||0) - usdImplicito;
-        ns[form.swapMoneda] = (ns[form.swapMoneda]||0) + cant;
-        ns.USD = ns.USD + usdImplicito; // USD se cierra con el leg 2
+      // Impactar caja solo si impactaCaja=true
+      const swapImpactaCaja = form.swapImpactaCaja !== false;
+      if(swapImpactaCaja){
+        if(vendo){
+          ns[form.swapMoneda] = (ns[form.swapMoneda]||0) - cant; // sale moneda de caja
+        } else {
+          ns[form.swapMoneda] = (ns[form.swapMoneda]||0) + cant; // entra moneda a caja
+        }
       }
 
       // Movimientos CC del desglose
@@ -4046,19 +4059,25 @@ function AppInterna({ usuario }) {
         const cantProp=Math.round(cant*prop*100)/100;
 
         if(vendo){
-          // Vendo USDT: cliente nos da pesos → le debemos USDT
-          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — envió $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          // Vendo USDT: cliente nos manda pesos → HABER ARS en su CC (nos acredita)
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — recibimos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
           if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
           if(!form.swapDestinoDif){
-            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — le debemos ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+            // DEBE moneda en su CC (le debemos la moneda)
+            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — le debemos ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
             if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
           }
         } else {
-          // Compro USDT: proveedor nos da USDT, le damos pesos
-          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap compra ${form.swapMoneda} — pagamos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          // Compro USDT: proveedor nos manda pesos → HABER ARS en su CC
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:arsEnv,nota:`Swap compra ${form.swapMoneda} — recibimos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
           if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
-          const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito ${fmt(usdProp)} USD`}).select().single();
+          // DEBE USD en su CC (le entregamos USD)
+          const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito entrega ${fmt(usdProp)} USD`}).select().single();
           if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
+          // HABER USD en su CC (TRESOR nos devuelve USD — neta el leg anterior)
+          const {data:m2b}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito devolución ${fmt(usdProp)} USD`}).select().single();
+          if(m2b) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2b]}));
+          // HABER USDT en su CC (nos debe la moneda)
           const {data:m3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — nos debe ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
           if(m3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m3]}));
         }
