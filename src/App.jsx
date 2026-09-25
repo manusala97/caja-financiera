@@ -2885,7 +2885,23 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
             </div>
             {/* Desglose de CCs que envían pesos */}
             <div style={{marginTop:10}}>
-              <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:6}}>DESGLOSE — QUIÉN ENVÍA LOS PESOS</div>
+              {/* Selector impacta caja o CC */}
+        <div style={{marginBottom:10}}>
+          <Lbl>{form.swapDir==="vendo"?"Entrego "+(form.swapMoneda||"USDT")+" desde":"Recibo "+(form.swapMoneda||"USDT")+" en"}</Lbl>
+          <div style={{display:"flex",gap:8}}>
+            {[{v:true,l:"💵 Caja física"},{v:false,l:"🔄 CC del cliente"}].map(opt=>(
+              <button key={String(opt.v)} type="button" onClick={()=>setF("swapImpactaCaja",opt.v)}
+                style={{flex:1,padding:"7px",borderRadius:6,
+                  border:"1px solid "+((form.swapImpactaCaja!==false)===opt.v?"#06b6d4":"#1f2937"),
+                  background:(form.swapImpactaCaja!==false)===opt.v?"rgba(6,182,212,0.1)":"transparent",
+                  color:(form.swapImpactaCaja!==false)===opt.v?"#06b6d4":"#6b7280",
+                  cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                {opt.l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:6}}>DESGLOSE — QUIÉN ENVÍA LOS PESOS</div>
               {swapDesglose.map((d,i)=>(
                 <div key={d.id} style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
                   <div style={{flex:2,position:"relative"}}>
@@ -4077,9 +4093,12 @@ function AppInterna({ usuario }) {
           // HABER USD en su CC (TRESOR nos devuelve USD — neta el leg anterior)
           const {data:m2b}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito devolución ${fmt(usdProp)} USD`}).select().single();
           if(m2b) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2b]}));
-          // HABER USDT en su CC (nos debe la moneda)
-          const {data:m3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — nos debe ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
-          if(m3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m3]}));
+          // USDT: solo en CC si NO impacta caja
+          if(!swapImpactaCaja){
+            // retiro_transf = ellos nos deben los USDT (a favor nuestro)
+            const {data:m3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — nos deben ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+            if(m3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m3]}));
+          }
         }
       }
 
