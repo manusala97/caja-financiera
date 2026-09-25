@@ -4007,62 +4007,72 @@ function AppInterna({ usuario }) {
     if(tipo==="swap"){
       const cant=parse(form.swapCantidad||0), tcD=parse(form.swapTCDolar||0), tcM=parse(form.swapTCMoneda||0);
       if(!cant||!tcD||!tcM){notify("Completá cantidad, TC dólar y TC moneda",false);setGuardando(false);return;}
-      if(!form.swapCliente){notify("Ingresá el nombre del cliente",false);setGuardando(false);return;}
-      const usdMonto=Math.round(cant*tcM*100)/100;
       const vendo=form.swapDir==="vendo";
+      const arsTotal = parse(form.swapMontoARS||0) || Math.round(cant*tcM*tcD);
+      const usdImplicito = Math.round(arsTotal/tcD*100)/100;
 
-      // Leg 1: USD/ARS
-      const leg1={tipo:vendo?"venta":"compra",moneda:"USD",moneda2:"ARS",monto:usdMonto,cotizacion:tcD,cliente:form.swapCliente,nota:"Swap leg 1 - "+form.swapMoneda+"/ARS"};
-      const {data:op1}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg1.tipo,datos:leg1}).select().single();
+      // Leg 1 — USD/ARS
+      const leg1tipo = vendo ? "compra" : "venta";
+      const leg1={tipo:leg1tipo,moneda:"USD",moneda2:"ARS",monto:usdImplicito,cotizacion:tcD,cliente:form.swapCliente,nota:"Swap leg 1 - "+form.swapMoneda+"/ARS"};
+      const {data:op1}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg1tipo,datos:leg1}).select().single();
       if(op1) setOps(p=>[...p,{...leg1,id:op1.id,fecha:hoy,hora}]);
 
-      // Leg 2: moneda/USD
-      const leg2={tipo:vendo?"venta":"compra",moneda:form.swapMoneda,moneda2:"USD",monto:cant,cotizacion:tcM,cliente:form.swapCliente,nota:"Swap leg 2 - "+form.swapMoneda+"/USD"};
-      const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2.tipo,datos:leg2}).select().single();
+      // Leg 2 — moneda/USD
+      const leg2tipo = vendo ? "venta" : "compra";
+      const leg2={tipo:leg2tipo,moneda:form.swapMoneda,moneda2:"USD",monto:cant,cotizacion:tcM,cliente:form.swapCliente,nota:"Swap leg 2 - "+form.swapMoneda+"/USD"};
+      const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2tipo,datos:leg2}).select().single();
       if(op2) setOps(p=>[...p,{...leg2,id:op2.id,fecha:hoy,hora}]);
 
-      // CC que recibe la moneda: puede ser la misma que paga o una distinta
-      const destinoCCId = form.swapDestinoDif && form.swapDestinoId
-        ? Number(form.swapDestinoId)
-        : (swapDesglose.find(d=>d.clienteId) ? Number(swapDesglose.find(d=>d.clienteId).clienteId) : null);
-      const destCC = clientes.find(x=>x.id===destinoCCId);
-      if(destCC){
-        const monedaCC=vendo?form.swapMoneda:"ARS";
-        const montoCC=vendo?cant:usdMonto*tcD;
-        const notaCC=`Swap ${vendo?"entrega":"recibe"} ${form.swapMoneda} — ${fmt(cant)} — pendiente`;
-        const {data:mvCl}=await SB.from("movimientos_cc").insert({cliente_id:destCC.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:monedaCC,monto:montoCC,nota:notaCC}).select().single();
-        if(mvCl) setClientes(p=>p.map(cl=>cl.id!==destCC.id?cl:{...cl,movimientos:[...cl.movimientos,mvCl]}));
+      // Impactar caja
+      if(vendo){
+        // Vendo moneda: entra USD (compramos USD con ARS del cliente), sale moneda
+        ns.USD = (ns.USD||0) + usdImplicito;
+        ns[form.swapMoneda] = (ns[form.swapMoneda]||0) - cant;
+        ns.USD = ns.USD - usdImplicito; // USD se cierra con el leg 2
+      } else {
+        // Compro moneda: sale USD (vendemos USD al proveedor), entra moneda
+        ns.USD = (ns.USD||0) - usdImplicito;
+        ns[form.swapMoneda] = (ns[form.swapMoneda]||0) + cant;
+        ns.USD = ns.USD + usdImplicito; // USD se cierra con el leg 2
       }
 
-      // Desglose CCs que envían pesos → 4 movimientos por leg
-      const usdImplicito = tcD>0 ? Math.round(parse(form.swapMontoARS||0)/tcD*100)/100 : usdMonto;
-      for(const d of swapDesglose.filter(x=>x.clienteId&&parse(x.monto)>0)){
+      // Movimientos CC del desglose
+      const desgloseFiltrado = swapDesglose.filter(x=>x.clienteId&&parse(x.monto)>0);
+      for(const d of desgloseFiltrado){
         const cId=Number(d.clienteId);
-        const arsEnviado=parse(d.monto);
-        const usdProp = usdImplicito * (arsEnviado / parse(form.swapMontoARS||arsEnviado));
-        const usdtProp = cant * (arsEnviado / parse(form.swapMontoARS||arsEnviado));
-        // Leg 1: nos mandó pesos (Haber ARS)
-        const n1=`Swap — envió $${fmt(Math.round(arsEnviado))} ARS`;
-        const {data:mv1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnviado,nota:n1}).select().single();
-        if(mv1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
+        const arsEnv=parse(d.monto);
+        const prop = arsTotal>0 ? arsEnv/arsTotal : 1;
+        const usdProp=Math.round(usdImplicito*prop*100)/100;
+        const cantProp=Math.round(cant*prop*100)/100;
+
         if(vendo){
-          // Vendo USDT: leg USD implícito (Debe USD — le compramos USD)
-          const n2=`Swap — USD implícito compra ${fmt(Math.round(usdProp))} USD`;
-          const {data:mv2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:Math.round(usdProp*100)/100,nota:n2}).select().single();
-          if(mv2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+          // Vendo USDT: cliente nos da pesos → le debemos USDT
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — envió $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
+          if(!form.swapDestinoDif){
+            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — le debemos ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+            if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
+          }
         } else {
-          // Compro USDT: leg USD implícito (Haber USD — le entregamos USD para que nos dé USDT)
-          const n2=`Swap — USD implícito venta ${fmt(Math.round(usdProp))} USD`;
-          const {data:mv2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:Math.round(usdProp*100)/100,nota:n2}).select().single();
-          if(mv2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
-          // Leg 3: le entregamos USD para que nos dé USDT (Debe USD)
-          const n3=`Swap — entrega ${fmt(Math.round(usdProp))} USD por USDT`;
-          const {data:mv3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:Math.round(usdProp*100)/100,nota:n3}).select().single();
-          if(mv3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv3]}));
+          // Compro USDT: proveedor nos da USDT, le damos pesos
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap compra ${form.swapMoneda} — pagamos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
+          const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito ${fmt(usdProp)} USD`}).select().single();
+          if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
+          const {data:m3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — nos debe ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+          if(m3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m3]}));
         }
       }
 
-      setForm(f=>({...f,swapCantidad:"",swapTCDolar:"",swapTCMoneda:"",swapCliente:""}));
+      // CC destino diferente
+      if(form.swapDestinoDif&&form.swapDestinoId){
+        const dId=Number(form.swapDestinoId);
+        const {data:mDest}=await SB.from("movimientos_cc").insert({cliente_id:dId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cant,nota:`Swap — ${vendo?"entrega":"recibe"} ${fmt(cant)} ${form.swapMoneda}`}).select().single();
+        if(mDest) setClientes(p=>p.map(cl=>cl.id!==dId?cl:{...cl,movimientos:[...cl.movimientos,mDest]}));
+      }
+
+      setSaldos(ns);
+      setForm(f=>({...f,swapCantidad:"",swapTCDolar:"",swapTCMoneda:"",swapCliente:"",swapMontoARS:"",swapDestinoDif:false,swapDestinoId:"",swapDestinoBuscar:""}));
       setSwapDesglose([{id:1,clienteId:"",buscar:"",monto:""}]);
       notify("Swap registrado ✓ — "+cant+" "+form.swapMoneda+(vendo?" vendidos":" comprados"));
       setGuardando(false);
