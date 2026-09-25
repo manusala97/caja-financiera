@@ -2744,7 +2744,7 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
     tn: opInicial?.tn?String(opInicial.tn):"", tpct: opInicial?.tpct?String(opInicial.tpct):"",
     tcomFijo: opInicial?.tcomFijo?String(opInicial.tcomFijo):"", tmoneda: opInicial?.tmoneda||"ARS", ccOrigenId: opInicial?.ccOrigenId||"", ccDestinoId: opInicial?.ccDestinoId||"",
     ccOrigenBuscar:"", ccDestinoBuscar:"", dTnaDeseada:"",
-    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"",
+    swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"",
   });
   const sf = (k,v) => setF(x=>({...x,[k]:v}));
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
@@ -2914,6 +2914,47 @@ function FormOp({ onGuardar, onCancelar, fechaDefault, titulo, color="#fb923c", 
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Destino diferente */}
+            <div style={{marginTop:10,padding:"8px 10px",background:"rgba(6,182,212,0.04)",border:"1px solid rgba(6,182,212,0.15)",borderRadius:8}}>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,color:"#94a3b8"}}>
+                <input type="checkbox" checked={f.swapDestinoDif||false} onChange={e=>sf("swapDestinoDif",e.target.checked)}
+                  style={{width:14,height:14,cursor:"pointer"}}/>
+                El {f.swapMoneda||"USDT"} va a una CC distinta de quien paga
+              </label>
+              {f.swapDestinoDif&&(()=>{
+                const clDest=clientes.find(x=>x.id===Number(f.swapDestinoId));
+                const filtDest=clientes.filter(x=>!x.oculto&&(x.nombre+" "+(x.apellido||"")).toLowerCase().includes((f.swapDestinoBuscar||"").toLowerCase())).slice(0,8);
+                return (
+                  <div style={{marginTop:8,position:"relative"}}>
+                    <Lbl>CC que recibe {f.swapMoneda||"USDT"}</Lbl>
+                    {clDest&&!f.swapDestinoBuscar?(
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <div style={{flex:1,padding:"6px 10px",background:"rgba(6,182,212,0.1)",border:"1px solid #06b6d444",borderRadius:6,fontSize:12,color:"#06b6d4",fontWeight:600}}>
+                          {clDest.nombre} {clDest.apellido||""}
+                        </div>
+                        <button type="button" onClick={()=>{sf("swapDestinoId","");sf("swapDestinoBuscar","");}}
+                          style={{padding:"4px 8px",borderRadius:5,background:"transparent",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:11}}>✕</button>
+                      </div>
+                    ):(
+                      <input placeholder={"Buscar CC destino "+(f.swapMoneda||"USDT")+"..."} value={f.swapDestinoBuscar||""}
+                        onChange={e=>sf("swapDestinoBuscar",e.target.value)}
+                        style={{width:"100%",background:"#0a0a0a",border:"1px solid #1f2937",borderRadius:6,padding:"6px 10px",color:"#e2e8f0",fontFamily:"inherit",fontSize:12,outline:"none"}}/>
+                    )}
+                    {f.swapDestinoBuscar&&filtDest.length>0&&(
+                      <div style={{position:"absolute",left:0,right:0,background:"#111",border:"1px solid #1f2937",borderRadius:6,zIndex:200,maxHeight:140,overflowY:"auto",marginTop:2}}>
+                        {filtDest.map(cl=>(
+                          <div key={cl.id} onClick={()=>{sf("swapDestinoId",String(cl.id));sf("swapDestinoBuscar","");}}
+                            style={{padding:"8px 12px",cursor:"pointer",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
+                            {cl.nombre} {cl.apellido||""}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         );
@@ -3269,11 +3310,11 @@ function SwapForm({form, setF, clientes, swapDesglose, setSwapDesglose, fmt, par
   const cant = parse(form.swapCantidad||0);
   const tcD = parse(form.swapTCDolar||0);
   const tcM = parse(form.swapTCMoneda||0);
-  const totalARS = cant * tcD * tcM;
-  const usdBruto = Math.round(cant * tcM * 100) / 100;
+  const totalARS = parse(form.swapMontoARS||0) || cant * tcD * tcM;
+  const usdBruto = tcD>0&&totalARS>0 ? Math.round(totalARS/tcD*100)/100 : Math.round(cant*tcM*100)/100;
   const totalDesgl = swapDesglose.reduce((s,d)=>s+parse(d.monto||0),0);
   const diferenciaARS = totalARS - totalDesgl;
-  const gananciaUSD = form.swapDir==="vendo" ? (tcM - 1) * cant : (1 - tcM) * cant;
+  const gananciaUSD = form.swapDir==="vendo" ? (usdBruto - cant) : (cant - usdBruto);
 
   return (
     <div>
@@ -3424,7 +3465,7 @@ function AppInterna({ usuario }) {
     const fechas = new Set(ops.map(o=>o.fecha));
     return [...fechas].sort().reverse();
   },[ops]);
-  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"" });
+  const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"" });
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
   const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
@@ -3980,22 +4021,45 @@ function AppInterna({ usuario }) {
       const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2.tipo,datos:leg2}).select().single();
       if(op2) setOps(p=>[...p,{...leg2,id:op2.id,fecha:hoy,hora}]);
 
-      // CC cliente: pendiente de entrega
-      const clienteCC=clientes.find(x=>(x.nombre+" "+(x.apellido||"")).toLowerCase().includes(form.swapCliente.toLowerCase()));
-      if(clienteCC){
+      // CC que recibe la moneda: puede ser la misma que paga o una distinta
+      const destinoCCId = form.swapDestinoDif && form.swapDestinoId
+        ? Number(form.swapDestinoId)
+        : (swapDesglose.find(d=>d.clienteId) ? Number(swapDesglose.find(d=>d.clienteId).clienteId) : null);
+      const destCC = clientes.find(x=>x.id===destinoCCId);
+      if(destCC){
         const monedaCC=vendo?form.swapMoneda:"ARS";
         const montoCC=vendo?cant:usdMonto*tcD;
         const notaCC=`Swap ${vendo?"entrega":"recibe"} ${form.swapMoneda} — ${fmt(cant)} — pendiente`;
-        const {data:mvCl}=await SB.from("movimientos_cc").insert({cliente_id:clienteCC.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:monedaCC,monto:montoCC,nota:notaCC}).select().single();
-        if(mvCl) setClientes(p=>p.map(cl=>cl.id!==clienteCC.id?cl:{...cl,movimientos:[...cl.movimientos,mvCl]}));
+        const {data:mvCl}=await SB.from("movimientos_cc").insert({cliente_id:destCC.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:monedaCC,monto:montoCC,nota:notaCC}).select().single();
+        if(mvCl) setClientes(p=>p.map(cl=>cl.id!==destCC.id?cl:{...cl,movimientos:[...cl.movimientos,mvCl]}));
       }
 
-      // Desglose CCs que envían pesos
+      // Desglose CCs que envían pesos → 4 movimientos por leg
+      const usdImplicito = tcD>0 ? Math.round(parse(form.swapMontoARS||0)/tcD*100)/100 : usdMonto;
       for(const d of swapDesglose.filter(x=>x.clienteId&&parse(x.monto)>0)){
         const cId=Number(d.clienteId);
-        const notaD=`Swap — envió $${fmt(parse(d.monto))} ARS`;
-        const {data:mvD}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:parse(d.monto),nota:notaD}).select().single();
-        if(mvD) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mvD]}));
+        const arsEnviado=parse(d.monto);
+        const usdProp = usdImplicito * (arsEnviado / parse(form.swapMontoARS||arsEnviado));
+        const usdtProp = cant * (arsEnviado / parse(form.swapMontoARS||arsEnviado));
+        // Leg 1: nos mandó pesos (Haber ARS)
+        const n1=`Swap — envió $${fmt(Math.round(arsEnviado))} ARS`;
+        const {data:mv1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnviado,nota:n1}).select().single();
+        if(mv1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
+        if(vendo){
+          // Vendo USDT: leg USD implícito (Debe USD — le compramos USD)
+          const n2=`Swap — USD implícito compra ${fmt(Math.round(usdProp))} USD`;
+          const {data:mv2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:Math.round(usdProp*100)/100,nota:n2}).select().single();
+          if(mv2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+        } else {
+          // Compro USDT: leg USD implícito (Haber USD — le entregamos USD para que nos dé USDT)
+          const n2=`Swap — USD implícito venta ${fmt(Math.round(usdProp))} USD`;
+          const {data:mv2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:Math.round(usdProp*100)/100,nota:n2}).select().single();
+          if(mv2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+          // Leg 3: le entregamos USD para que nos dé USDT (Debe USD)
+          const n3=`Swap — entrega ${fmt(Math.round(usdProp))} USD por USDT`;
+          const {data:mv3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:Math.round(usdProp*100)/100,nota:n3}).select().single();
+          if(mv3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,mv3]}));
+        }
       }
 
       setForm(f=>({...f,swapCantidad:"",swapTCDolar:"",swapTCMoneda:"",swapCliente:""}));
