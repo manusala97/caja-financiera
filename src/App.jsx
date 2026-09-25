@@ -4091,12 +4091,12 @@ function AppInterna({ usuario }) {
         const cantProp=Math.round(cant*prop*100)/100;
 
         if(vendo){
-          // Vendo USDT: cliente nos manda pesos → HABER ARS en su CC (nos acredita)
-          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — recibimos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          // Vendo USDT: le mandamos pesos al cliente → DEBE ARS en su CC (le acreditamos pesos)
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — pagamos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
           if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
-          if(!form.swapDestinoDif){
-            // DEBE moneda en su CC (le debemos la moneda)
-            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — le debemos ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+          if(!form.swapImpactaCaja){
+            // Si no impacta caja: cliente nos mandó USDT → HABER moneda en su CC
+            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — recibimos ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
             if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
           }
         } else {
