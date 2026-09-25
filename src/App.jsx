@@ -3408,6 +3408,22 @@ function SwapForm({form, setF, clientes, swapDesglose, setSwapDesglose, fmt, par
           </div>
         </div>
       )}
+      {/* Selector impacta caja o CC */}
+      <div style={{marginBottom:10}}>
+        <Lbl>{form.swapDir==="vendo"?"Entrego "+(form.swapMoneda||"USDT")+" desde":"Recibo "+(form.swapMoneda||"USDT")+" en"}</Lbl>
+        <div style={{display:"flex",gap:8}}>
+          {[{v:true,l:"💵 Caja física"},{v:false,l:"🔄 CC del cliente"}].map(opt=>(
+            <button key={String(opt.v)} type="button" onClick={()=>setF("swapImpactaCaja",opt.v)}
+              style={{flex:1,padding:"7px",borderRadius:6,
+                border:"1px solid "+((form.swapImpactaCaja!==false)===opt.v?"#06b6d4":"#1f2937"),
+                background:(form.swapImpactaCaja!==false)===opt.v?"rgba(6,182,212,0.1)":"transparent",
+                color:(form.swapImpactaCaja!==false)===opt.v?"#06b6d4":"#6b7280",
+                cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+              {opt.l}
+            </button>
+          ))}
+        </div>
+      </div>
       {/* Desglose CCs */}
       <div style={{marginTop:10}}>
         <div style={{fontSize:10,color:"#6b7280",letterSpacing:1,marginBottom:6}}>DESGLOSE — QUIÉN ENVÍA LOS PESOS</div>
