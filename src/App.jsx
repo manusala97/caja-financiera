@@ -4091,28 +4091,29 @@ function AppInterna({ usuario }) {
         const cantProp=Math.round(cant*prop*100)/100;
 
         if(vendo){
-          // Vendo USDT: le mandamos pesos al cliente → DEBE ARS en su CC (le acreditamos pesos)
-          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — pagamos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          // Vendo USDT: le mandamos pesos al cliente → DEBE ARS en su CC
+          const opIdRef = op1?.id || op2?.id;
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"ARS",monto:arsEnv,nota:`Swap venta ${form.swapMoneda} — pagamos $${fmt(Math.round(arsEnv))} ARS`,operacion_id:opIdRef}).select().single();
           if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
           if(!form.swapImpactaCaja){
             // Si no impacta caja: cliente nos mandó USDT → HABER moneda en su CC
-            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — recibimos ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+            const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — recibimos ${fmt(cantProp)} ${form.swapMoneda}`,operacion_id:opIdRef}).select().single();
             if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
           }
         } else {
           // Compro USDT: proveedor nos manda pesos → HABER ARS en su CC
-          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:arsEnv,nota:`Swap compra ${form.swapMoneda} — recibimos $${fmt(Math.round(arsEnv))} ARS`}).select().single();
+          const opIdRef2 = op1?.id || op2?.id;
+          const {data:m1}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"ARS",monto:arsEnv,nota:`Swap compra ${form.swapMoneda} — recibimos $${fmt(Math.round(arsEnv))} ARS`,operacion_id:opIdRef2}).select().single();
           if(m1) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m1]}));
           // DEBE USD en su CC (le entregamos USD)
-          const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito entrega ${fmt(usdProp)} USD`}).select().single();
+          const {data:m2}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito entrega ${fmt(usdProp)} USD`,operacion_id:opIdRef2}).select().single();
           if(m2) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2]}));
           // HABER USD en su CC (TRESOR nos devuelve USD — neta el leg anterior)
-          const {data:m2b}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito devolución ${fmt(usdProp)} USD`}).select().single();
+          const {data:m2b}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:"USD",monto:usdProp,nota:`Swap — USD implícito devolución ${fmt(usdProp)} USD`,operacion_id:opIdRef2}).select().single();
           if(m2b) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m2b]}));
           // USDT: solo en CC si NO impacta caja
           if(!swapImpactaCaja){
-            // retiro_transf = ellos nos deben los USDT (a favor nuestro)
-            const {data:m3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — nos deben ${fmt(cantProp)} ${form.swapMoneda}`}).select().single();
+            const {data:m3}=await SB.from("movimientos_cc").insert({cliente_id:cId,hora,fecha:hoy,tipo:"retiro_transf",moneda:form.swapMoneda,monto:cantProp,nota:`Swap — nos deben ${fmt(cantProp)} ${form.swapMoneda}`,operacion_id:opIdRef2}).select().single();
             if(m3) setClientes(p=>p.map(cl=>cl.id!==cId?cl:{...cl,movimientos:[...cl.movimientos,m3]}));
           }
         }
@@ -4497,12 +4498,27 @@ function AppInterna({ usuario }) {
     // imp2: cuanto impacto REALMENTE la caja en moneda2
     // Usar impactoReal2 si existe (guardado al registrar), sino monto2 completo
     const imp2=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
+    const esSwapLeg = (op.nota||op.datos?.nota||"").toLowerCase().includes("swap leg");
+    const esSwapLeg1 = (op.nota||op.datos?.nota||"").includes("leg 1");
+    const esSwapLeg2 = (op.nota||op.datos?.nota||"").includes("leg 2");
     if (t==="compra"){
-      if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0);
-      if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)+imp2;
+      if(esSwapLeg){
+        // Leg de swap: solo revertir si es leg 2 (moneda final) y swapImpactaCaja
+        if(esSwapLeg2 && baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0);
+        // Leg 1 USD no toca caja
+      } else {
+        if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0);
+        if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)+imp2;
+      }
     } else if (t==="venta"){
-      if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)+Number(op.monto||0);
-      if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)-imp2;
+      if(esSwapLeg){
+        // Leg de swap: solo revertir si es leg 2 (moneda final) y swapImpactaCaja
+        if(esSwapLeg2 && baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)+Number(op.monto||0);
+        // Leg 1 USD no toca caja
+      } else {
+        if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)+Number(op.monto||0);
+        if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)-imp2;
+      }
     } else if (t==="cheque_dia") { ns.ARS=Number(ns.ARS||0)-Number(op.cn||0); }
     else if (t==="cheque_dif") { ns.ARS=Number(ns.ARS||0)+Number(op.montoFinal||op.monto||0); }
     else if (t==="transferencia") { /* comision no impacta caja */ }
