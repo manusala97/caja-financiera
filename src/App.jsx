@@ -4525,13 +4525,14 @@ function AppInterna({ usuario }) {
     else if (t==="ajuste") { ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.delta||0); }
     else if (t==="cobro_dif") { ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0); }
     setSaldos(ns);
-    const {error:delErr}=await SB.from("operaciones").delete().eq("id",op.id);
-    if(delErr){ notify("Error al eliminar: "+delErr.message,false); return; }
-    setOps(p=>p.filter(o=>o.id!==op.id));
+    // Borrar movimientos CC PRIMERO (FK constraint)
     for(const mv of movsVinculados){
       await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
       setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
     }
+    const {error:delErr}=await SB.from("operaciones").delete().eq("id",op.id);
+    if(delErr){ notify("Error al eliminar: "+delErr.message,false); return; }
+    setOps(p=>p.filter(o=>o.id!==op.id));
     const {error:diaErr}=await guardarDia(ns,null,null);
     if(diaErr) console.error("Error guardando dia tras eliminar:",diaErr);
     notify("Eliminada"+(movsVinculados.length>0?" y movimientos CC revertidos":"")+" ✓");
