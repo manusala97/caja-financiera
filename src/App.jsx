@@ -4065,11 +4065,14 @@ function AppInterna({ usuario }) {
       const {data:op1}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg1tipo,datos:leg1}).select().single();
       if(op1) setOps(p=>[...p,{...leg1,id:op1.id,fecha:hoy,hora}]);
 
-      // Leg 2 — moneda/USD
+      // Leg 2 — moneda/USD — vinculado al swap_id del leg 1
+      const swapId = op1?.id || Date.now();
       const leg2tipo = vendo ? "venta" : "compra";
       const leg2={tipo:leg2tipo,moneda:form.swapMoneda,moneda2:"USD",monto:cant,cotizacion:tcM,cliente:form.swapCliente,nota:"Swap leg 2 - "+form.swapMoneda+"/USD"};
-      const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2tipo,datos:leg2}).select().single();
+      const {data:op2}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:leg2tipo,datos:leg2,swap_id:swapId}).select().single();
       if(op2) setOps(p=>[...p,{...leg2,id:op2.id,fecha:hoy,hora}]);
+      // Actualizar leg 1 con swap_id
+      if(op1) await SB.from("operaciones").update({swap_id:swapId}).eq("id",op1.id);
 
       // Impactar caja solo si impactaCaja=true
       const swapImpactaCaja = form.swapImpactaCaja !== false;
@@ -4126,9 +4129,17 @@ function AppInterna({ usuario }) {
         if(mDest) setClientes(p=>p.map(cl=>cl.id!==dId?cl:{...cl,movimientos:[...cl.movimientos,mDest]}));
       }
 
-      // Releer saldo fresco después de insertar ambas ops para asegurar consistencia
-      const nsFinal = await leerSaldoFresco();
-      setSaldos(nsFinal);
+      // Calcular saldo correcto sumando el impacto del swap al saldo guardado
+      const nsBase = await leerSaldoFresco();
+      if(swapImpactaCaja){
+        if(vendo){
+          nsBase[form.swapMoneda] = (nsBase[form.swapMoneda]||0) - cant;
+        } else {
+          nsBase[form.swapMoneda] = (nsBase[form.swapMoneda]||0) + cant;
+        }
+      }
+      await guardarDia(nsBase);
+      setSaldos(nsBase);
       setForm(f=>({...f,swapCantidad:"",swapTCDolar:"",swapTCMoneda:"",swapCliente:"",swapMontoARS:"",swapDestinoDif:false,swapDestinoId:"",swapDestinoBuscar:""}));
       setSwapDesglose([{id:1,clienteId:"",buscar:"",monto:""}]);
       notify("Swap registrado ✓ — "+cant+" "+form.swapMoneda+(vendo?" vendidos":" comprados"));
@@ -4428,6 +4439,61 @@ function AppInterna({ usuario }) {
 
   async function eliminarOpHoy(op) {
     const movsVinculados=[];
+    
+    // Si es un leg de Swap — buscar y borrar todo el paquete
+    const esSwapLeg = (op.nota||op.datos?.nota||"").toLowerCase().includes("swap leg");
+    const swapIdOp = op.swap_id || op.datos?.swap_id;
+    
+    if(esSwapLeg && (swapIdOp || op.id)){
+      const {data:swapOps}=await SB.from("operaciones").select("id,tipo,datos,hora").eq("swap_id", swapIdOp||op.id);
+      const allSwapIds = [...new Set([...(swapOps||[]).map(o=>o.id), op.id])];
+      
+      // Buscar todos los movimientos CC vinculados a cualquier leg
+      for(const sid of allSwapIds){
+        const {data:movsDB}=await SB.from("movimientos_cc").select("id,cliente_id,monto,moneda,tipo").eq("operacion_id",sid);
+        (movsDB||[]).forEach(mv=>{
+          const cl=clientes.find(x=>x.id===mv.cliente_id);
+          if(cl&&!movsVinculados.find(m=>m.mvId===mv.id))
+            movsVinculados.push({clienteId:cl.id,mvId:mv.id,nombre:cl.nombre+" "+(cl.apellido||""),monto:mv.monto,moneda:mv.moneda,tipo:mv.tipo});
+        });
+      }
+      
+      const detCC = movsVinculados.length>0
+        ? "\n\nSe revertirán "+movsVinculados.length+" movimientos CC de:\n"+
+          movsVinculados.map(m=>"• "+(m.nombre||"cliente")+" — "+(m.tipo==="ingreso_transf"?"HABER":"DEBE")+" "+( m.moneda||"")+" $"+(Number(m.monto||0).toLocaleString("es-AR"))).join("\n")
+        : "";
+      
+      if(!window.confirm("⚠ Este es un SWAP — se borrarán los "+allSwapIds.length+" legs juntos."+detCC+"\n\n¿Confirmar?")) return;
+      
+      // Borrar movimientos CC primero
+      for(const mv of movsVinculados){
+        await SB.from("movimientos_cc").delete().eq("id",mv.mvId);
+        setClientes(p=>p.map(cl=>cl.id!==mv.clienteId?cl:{...cl,movimientos:cl.movimientos.filter(m=>m.id!==mv.mvId)}));
+      }
+      
+      // Revertir caja — el leg 2 es el que impacta la moneda final
+      const swapLeg2 = (swapOps||[]).find(o=>(o.datos?.nota||"").includes("leg 2"));
+      if(swapLeg2){
+        const ns = await leerSaldoFresco();
+        const monSwap = swapLeg2.datos?.moneda;
+        const cantSwap = Number(swapLeg2.datos?.monto||0);
+        if(monSwap&&cantSwap>0){
+          if(swapLeg2.tipo==="compra") ns[monSwap]=(ns[monSwap]||0)-cantSwap;
+          else ns[monSwap]=(ns[monSwap]||0)+cantSwap;
+          await guardarDia(ns);
+          setSaldos(ns);
+        }
+      }
+      
+      // Borrar todas las ops del swap
+      for(const sid of allSwapIds){
+        await SB.from("operaciones").delete().eq("id",sid);
+      }
+      setOps(p=>p.filter(o=>!allSwapIds.includes(o.id)));
+      notify("Swap eliminado ✓ — "+allSwapIds.length+" legs revertidos");
+      return;
+    }
+
     // Buscar por operacion_id (nuevo) o por nota "Op. vinculada" (legacy)
     if(op.id){
       const {data:movsDB}=await SB.from("movimientos_cc").select("id,cliente_id").eq("operacion_id",op.id);
