@@ -4126,7 +4126,9 @@ function AppInterna({ usuario }) {
         if(mDest) setClientes(p=>p.map(cl=>cl.id!==dId?cl:{...cl,movimientos:[...cl.movimientos,mDest]}));
       }
 
-      setSaldos(ns);
+      // Releer saldo fresco después de insertar ambas ops para asegurar consistencia
+      const nsFinal = await leerSaldoFresco();
+      setSaldos(nsFinal);
       setForm(f=>({...f,swapCantidad:"",swapTCDolar:"",swapTCMoneda:"",swapCliente:"",swapMontoARS:"",swapDestinoDif:false,swapDestinoId:"",swapDestinoBuscar:""}));
       setSwapDesglose([{id:1,clienteId:"",buscar:"",monto:""}]);
       notify("Swap registrado ✓ — "+cant+" "+form.swapMoneda+(vendo?" vendidos":" comprados"));
