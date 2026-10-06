@@ -4566,23 +4566,16 @@ function AppInterna({ usuario }) {
     // imp2: cuanto impacto REALMENTE la caja en moneda2
     // Usar impactoReal2 si existe (guardado al registrar), sino monto2 completo
     const imp2=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
-    const esSwapLeg = (op.nota||op.datos?.nota||"").toLowerCase().includes("swap leg");
-    const esSwapLeg1 = (op.nota||op.datos?.nota||"").includes("leg 1");
-    const esSwapLeg2 = (op.nota||op.datos?.nota||"").includes("leg 2");
     if (t==="compra"){
       if(esSwapLeg){
-        // Leg de swap: solo revertir si es leg 2 (moneda final) y swapImpactaCaja
         if(esSwapLeg2 && baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0);
-        // Leg 1 USD no toca caja
       } else {
         if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)-Number(op.monto||0);
         if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)+imp2;
       }
     } else if (t==="venta"){
       if(esSwapLeg){
-        // Leg de swap: solo revertir si es leg 2 (moneda final) y swapImpactaCaja
         if(esSwapLeg2 && baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)+Number(op.monto||0);
-        // Leg 1 USD no toca caja
       } else {
         if(baseImpacto) ns[op.moneda]=Number(ns[op.moneda]||0)+Number(op.monto||0);
         if(imp2>0) ns[op.moneda2]=Number(ns[op.moneda2]||0)-imp2;
