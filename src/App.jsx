@@ -3515,7 +3515,7 @@ function AppInterna({ usuario }) {
   },[ops]);
   const [form, setForm] = useState({ tipo:"compra", moneda:"USD", monto:"", moneda2:"ARS", monto2:"", cotizacion:"", cliente:"", nota:"", cn:"", cpct:"", dn:"", dtm:"58", dtg:"2.5", dfr:hoy, dfv:"", dfa:"", tn:"", tpct:"", tcomFijo:"", tmoneda:"ARS", tpctOrigen:"", tpctDestino:"", ccOrigenBuscar:"", ccDestinoBuscar:"", baseImpactaCaja:"si", pagoCheqDif:"caja", pagoCheqDifCCId:"", pagoCheqDifCCBuscar:"", tipoCheqDif:"echeq", dTnaDeseada:"", swapMoneda:"USDT", swapDir:"vendo", swapCantidad:"", swapTCDolar:"", swapTCMoneda:"", swapMontoARS:"", swapCliente:"", swapDestinoDif:false, swapDestinoId:"", swapDestinoBuscar:"", swapImpactaCaja:true });
   const [swapDesglose, setSwapDesglose] = useState([{id:1,clienteId:"",buscar:"",monto:""}]);
-  const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true });
+  const [formCC, setFormCC] = useState({ tipo:"ingreso_transf", moneda:"ARS", monto:"", nota:"", impactaCaja:true, fecha:"" });
   const [tDestinos, setTDestinos] = useState([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
   const [trade, setTrade] = useState({ modo:"spread_pct", dir:"vendo_base", mBase:"USDT", mQuote:"USD", cant:"", pp:"", po:"", prp:"", pro:"", cCant:"", cPm:"", cPc:"", cCot:"" });
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -3573,7 +3573,7 @@ function AppInterna({ usuario }) {
   const [buscarResolverDrop, setBuscarResolverDrop] = useState({});
   const [usdPendiente, setUsdPendiente] = useState({clienteId:"", buscar:"", monto:"", activo:false});
   const [buscarDesglose, setBuscarDesglose] = useState({});
-  const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS", pctOrigen:"", pctDestino:""});
+  const [transCC, setTransCC] = useState({activo:false, destino:"", buscar:"", monto:"", moneda:"ARS", pctOrigen:"", pctDestino:"", fecha:""});
   const [comTransf, setComTransf] = useState({activo:false, montoEnviado:"", pct:"", montoComision:"", nota:""});
   const [convertirCC, setConvertirCC] = useState({activo:false, monedaOrigen:"USD", monedaDestino:"ARS", monto:"", cotiz:""});
   const [gastoCC, setGastoCC] = useState({activo:false, clienteId:"", buscar:""});
@@ -4644,6 +4644,7 @@ function AppInterna({ usuario }) {
   async function regMovCC(cId) {
     const monto=parse(formCC.monto); if (!monto) { notify("Ingresa un monto",false); return; }
     const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+    const fechaMov = formCC.fecha || hoy;
     const ing=formCC.tipo==="ingreso_transf"||formCC.tipo==="ingreso_dep";
     // Si impactaCaja=true, modificar el saldo fisico
     if (formCC.impactaCaja) {
@@ -4651,10 +4652,10 @@ function AppInterna({ usuario }) {
       setSaldos(ns);
       await guardarDia(ns,null,null);
     }
-    const mv={id:Date.now(),hora,fecha:hoy,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota,impacta_caja:formCC.impactaCaja||false};
+    const mv={id:Date.now(),hora,fecha:fechaMov,tipo:formCC.tipo,moneda:formCC.moneda,monto,nota:formCC.nota,impacta_caja:formCC.impactaCaja||false};
     await SB.from("movimientos_cc").insert({cliente_id:cId,hora:mv.hora,fecha:mv.fecha,tipo:mv.tipo,moneda:mv.moneda,monto:mv.monto,nota:mv.nota||"",impacta_caja:formCC.impactaCaja||false});
     setClientes(p=>p.map(c=>c.id!==cId?c:{...c,movimientos:[...c.movimientos,mv]}));
-    setFormCC(f=>({...f,monto:"",nota:""})); notify("Movimiento registrado");
+    setFormCC(f=>({...f,monto:"",nota:"",fecha:""})); notify("Movimiento registrado");
   }
 
   async function agregarCliente() {
@@ -6604,6 +6605,10 @@ function AppInterna({ usuario }) {
                           </div>
                         );
                       })()}
+                      <div style={{marginTop:8,marginBottom:8}}>
+                        <Lbl>Fecha <span style={{color:"#334155",fontSize:9,fontWeight:400,textTransform:"none",letterSpacing:0}}>(vacío = hoy)</span></Lbl>
+                        <Inp type="date" value={transCC.fecha} max={hoy} onChange={e=>setTransCC(t=>({...t,fecha:e.target.value}))}/>
+                      </div>
                       {/* Mostrar saldos de ambas CCs */}
                       {transCC.destino&&(()=>{
                         const clDest=clientes.find(x=>x.id===Number(transCC.destino));
@@ -6628,6 +6633,7 @@ function AppInterna({ usuario }) {
                         if(!transCC.destino){notify("Elegi una CC destino",false);return;}
                         const cDestId=Number(transCC.destino);
                         const hora=new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+                        const fechaMov = transCC.fecha || hoy;
                         // Verificar duplicados
                         const ahoraMs2=Date.now();
                         const monto2=parse(transCC.monto);
@@ -6650,12 +6656,12 @@ function AppInterna({ usuario }) {
                         const nota="Transf. → "+(clDest?.nombre||"")+(pctO?" (com "+pctO+"%)":"");
                         const notaDest="Transf. ← "+c.nombre+(pctD?" (com "+pctD+"%)":"");
                         // CC origen: ingreso_transf por el neto que recibe
-                        const mv1={id:Date.now(),hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota};
-                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:hoy,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota});
+                        const mv1={id:Date.now(),hora,fecha:fechaMov,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota};
+                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:fechaMov,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota});
                         setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
                         // CC destino: retiro_transf por el total + su comisión
-                        const mv2={id:Date.now()+1,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest};
-                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:hoy,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest});
+                        const mv2={id:Date.now()+1,hora,fecha:fechaMov,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest};
+                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:fechaMov,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest});
                         setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
                         // Registrar comisión en operaciones si hay comisión
                         const gananciaTransf = comO + comD;
@@ -6676,7 +6682,7 @@ function AppInterna({ usuario }) {
                           const {data:opIns}=await SB.from("operaciones").insert({dia_id:hoy,fecha:hoy,hora,tipo:"transferencia",datos:opTransf}).select().single();
                           if(opIns) setOps(p=>[...p,{...opTransf,id:opIns.id,fecha:hoy}]);
                         }
-                        setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS",pctOrigen:"",pctDestino:""});
+                        setTransCC({activo:false,destino:"",buscar:"",monto:"",moneda:"ARS",pctOrigen:"",pctDestino:"",fecha:""});
                         notify("Transferencia entre CCs registrada ✓"+(gananciaTransf>0?" — comisión $"+fmt(gananciaTransf)+" registrada":""));
                       }} style={{marginTop:10,width:"100%",padding:9,borderRadius:7,background:"rgba(167,139,250,0.1)",border:"1px solid #a78bfa",color:"#a78bfa",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                         ⇄ Confirmar transferencia
@@ -6689,6 +6695,10 @@ function AppInterna({ usuario }) {
                     <div><Lbl>Monto</Lbl><Inp type="number" placeholder="0" value={formCC.monto} onChange={e=>setFormCC(f=>({...f,monto:e.target.value}))}/></div>
                   </div>
                   <div style={{marginTop:8,marginBottom:10}}><Lbl>Nota</Lbl><Inp placeholder="Descripcion..." value={formCC.nota} onChange={e=>setFormCC(f=>({...f,nota:e.target.value}))}/></div>
+                  <div style={{marginTop:8,marginBottom:10}}>
+                    <Lbl>Fecha <span style={{color:"#334155",fontSize:9,fontWeight:400,textTransform:"none",letterSpacing:0}}>(vacío = hoy)</span></Lbl>
+                    <Inp type="date" value={formCC.fecha} max={hoy} onChange={e=>setFormCC(f=>({...f,fecha:e.target.value}))}/>
+                  </div>
                   <div onClick={()=>setFormCC(f=>({...f,impactaCaja:!f.impactaCaja}))} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,border:"1px solid "+(formCC.impactaCaja?"#f59e0b44":"rgba(255,255,255,0.06)"),background:formCC.impactaCaja?"rgba(245,158,11,0.08)":"transparent",cursor:"pointer",marginBottom:10,userSelect:"none"}}>
                     <div style={{width:16,height:16,borderRadius:4,border:"2px solid "+(formCC.impactaCaja?"#f59e0b":"#475569"),background:formCC.impactaCaja?"#f59e0b":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       {formCC.impactaCaja&&<span style={{color:"#000",fontSize:11,fontWeight:900}}>✓</span>}
