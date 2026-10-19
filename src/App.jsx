@@ -7,6 +7,9 @@ const SB = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdXlyand5dHl4YWJqeHlhZWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NDc2MzcsImV4cCI6MjA4ODQyMzYzN30.KgsY8Oyn17eZrxHODj5jDXba-XrGx1H1bSh68jlSmmw"
 );
 
+// ── AGENTE IA ──────────────────────────────────────────────────────────────────
+const ANTHROPIC_KEY = "REEMPLAZAR_CON_TU_API_KEY"; // sk-ant-api03-...
+
 const MONEDAS = [
   { id:"USD",  simbolo:"$",  color:"#4ade80", label:"Dolares" },
   { id:"ARS",  simbolo:"$",  color:"#f59e0b", label:"Pesos"   },
@@ -8935,7 +8938,312 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
         {pant==="libro"&&<PantallaLibro ops={ops.map(o=>({...o,...(o.datos||{})}))} clientes={clientes} gastos={gastos} hoy={hoy}/>}
 
       </main>
+      <AgenteIA clientes={clientes} ops={ops} gastos={gastos} hoy={hoy} />
     </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  AGENTE IA — Middle Office Assistant
+// ══════════════════════════════════════════════════════════════════════════════
+function AgenteIA({ clientes, ops, gastos, hoy }) {
+  const [abierto, setAbierto] = useState(false);
+  const [mensajes, setMensajes] = useState([
+    { rol:"asistente", texto:"Hola! Soy tu asistente de middle office. Podés preguntarme sobre movimientos, operaciones, saldos de CCs o pedirme un resumen del día." }
+  ]);
+  const [input, setInput] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const chatRef = useRef(null);
+
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [mensajes, abierto]);
+
+  // ── Construye el contexto del negocio para Claude ──────────────────────────
+  async function buildContexto(pregunta) {
+    const hoyDate = hoy;
+
+    // Clientes con sus saldos CC
+    const resumenClientes = clientes.map(c => {
+      const saldos = c.saldos || {};
+      const movHoy = (c.movimientos || []).filter(m => m.fecha === hoyDate);
+      return {
+        id: c.id,
+        nombre: `${c.nombre || ""} ${c.apellido || ""}`.trim(),
+        socio: c.socio,
+        saldos,
+        movHoy: movHoy.length
+      };
+    });
+
+    // Operaciones de hoy
+    const opsHoy = ops.filter(o => o.fecha === hoyDate).map(o => ({
+      hora: o.hora,
+      tipo: o.tipo,
+      moneda: o.datos?.moneda,
+      monto: o.datos?.monto,
+      moneda2: o.datos?.moneda2,
+      monto2: o.datos?.monto2,
+      cotizacion: o.datos?.cotizacion,
+      cliente: o.datos?.cliente,
+      nota: o.datos?.nota
+    }));
+
+    // Movimientos CC relevantes según pregunta — búsqueda por mes si se menciona
+    let movsCC = [];
+    const meses = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7, agosto:8, septiembre:9, octubre:10, noviembre:11, diciembre:12 };
+    const preqLower = pregunta.toLowerCase();
+    let mesNum = null;
+    let añoNum = null;
+    for (const [nombre, num] of Object.entries(meses)) {
+      if (preqLower.includes(nombre)) { mesNum = num; break; }
+    }
+    const matchAño = preqLower.match(/20\d\d/);
+    if (matchAño) añoNum = parseInt(matchAño[0]);
+
+    // Buscar cliente mencionado en la pregunta
+    let clienteFiltro = null;
+    for (const c of clientes) {
+      const nombre = `${c.nombre || ""} ${c.apellido || ""}`.toLowerCase();
+      if (nombre.split(" ").some(p => p.length > 3 && preqLower.includes(p))) {
+        clienteFiltro = c;
+        break;
+      }
+    }
+
+    if (mesNum || preqLower.includes("hoy") || clienteFiltro) {
+      const query = SB.from("movimientos_cc").select("*");
+      if (mesNum) {
+        const año = añoNum || parseInt(hoyDate.slice(0,4));
+        const desde = `${año}-${String(mesNum).padStart(2,"0")}-01`;
+        const hasta = `${año}-${String(mesNum).padStart(2,"0")}-31`;
+        query.gte("fecha", desde).lte("fecha", hasta);
+      } else if (preqLower.includes("hoy")) {
+        query.eq("fecha", hoyDate);
+      }
+      if (clienteFiltro) query.eq("cliente_id", clienteFiltro.id);
+      query.order("fecha", { ascending: false }).limit(200);
+      const { data } = await query;
+      movsCC = (data || []).map(m => ({
+        fecha: m.fecha,
+        tipo: m.tipo,
+        moneda: m.moneda,
+        monto: m.monto,
+        nota: m.nota,
+        impacta_caja: m.impacta_caja,
+        cliente_id: m.cliente_id,
+        clienteNombre: clientes.find(c => c.id === m.cliente_id)
+          ? `${clientes.find(c=>c.id===m.cliente_id).nombre||""} ${clientes.find(c=>c.id===m.cliente_id).apellido||""}`.trim()
+          : m.cliente_id
+      }));
+    }
+
+    return {
+      hoy: hoyDate,
+      clientes: resumenClientes,
+      operacionesHoy: opsHoy,
+      movimientosCC: movsCC,
+      gastos: gastos.filter(g => g.fecha === hoyDate)
+    };
+  }
+
+  // ── Llama a Claude API ─────────────────────────────────────────────────────
+  async function enviar() {
+    const texto = input.trim();
+    if (!texto || cargando) return;
+    setInput("");
+    const nuevosMsgs = [...mensajes, { rol:"usuario", texto }];
+    setMensajes(nuevosMsgs);
+    setCargando(true);
+
+    try {
+      const ctx = await buildContexto(texto);
+
+      const systemPrompt = `Sos el asistente de middle office de STS, una casa de cambio en Buenos Aires.
+Respondés en español, de forma directa y concisa.
+
+CONTEXTO DEL NEGOCIO:
+- Fecha hoy: ${ctx.hoy}
+- Clientes con CC: ${JSON.stringify(ctx.clientes.map(c=>({id:c.id,nombre:c.nombre,socio:c.socio,saldos:c.saldos})))}
+- Operaciones de hoy: ${JSON.stringify(ctx.operacionesHoy)}
+- Movimientos CC consultados: ${JSON.stringify(ctx.movimientosCC)}
+- Gastos de hoy: ${JSON.stringify(ctx.gastos)}
+
+REGLAS:
+- Cuando te pregunten por montos de CC de un cliente en un período, sumá los movimientos del tipo correcto (ingreso_transf, ingreso_dep = entradas; retiro_transf, retiro_efectivo = salidas).
+- Los saldos de CC están en el campo "saldos" de cada cliente (ARS, USD, USDT, EUR, etc.).
+- Si no tenés datos suficientes para responder, decilo claramente.
+- Nunca inventes datos. Solo usá la información del contexto.
+- Sé conciso. Usá números con formato argentino (puntos de miles, coma decimal).
+- Si te piden un resumen del día, incluí: operaciones de cambio, movimientos de CC que impactan caja, y gastos.`;
+
+      const historial = nuevosMsgs.slice(-10).map(m => ({
+        role: m.rol === "usuario" ? "user" : "assistant",
+        content: m.texto
+      }));
+
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-allow-browser": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-opus-4-5",
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: historial
+        })
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error?.message || resp.statusText);
+      }
+
+      const data = await resp.json();
+      const respuesta = data.content?.[0]?.text || "Sin respuesta";
+      setMensajes(prev => [...prev, { rol:"asistente", texto: respuesta }]);
+    } catch(e) {
+      setMensajes(prev => [...prev, { rol:"asistente", texto: `Error: ${e.message}` }]);
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  // ── RENDER ─────────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* Botón flotante */}
+      <button
+        onClick={() => setAbierto(v => !v)}
+        title="Asistente IA"
+        style={{
+          position:"fixed", bottom:24, right:24, zIndex:9999,
+          width:52, height:52, borderRadius:"50%",
+          background:"linear-gradient(135deg,#6366f1,#34d399)",
+          border:"none", cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:"0 4px 20px rgba(99,102,241,0.5)",
+          fontSize:22, transition:"transform 0.2s",
+          transform: abierto ? "rotate(45deg)" : "none"
+        }}
+      >
+        {abierto ? "×" : "✦"}
+      </button>
+
+      {/* Panel del chat */}
+      {abierto && (
+        <div style={{
+          position:"fixed", bottom:88, right:24, zIndex:9998,
+          width:380, height:520, borderRadius:16,
+          background:"#0f1117", border:"1px solid #1e2535",
+          boxShadow:"0 8px 40px rgba(0,0,0,0.6)",
+          display:"flex", flexDirection:"column", overflow:"hidden"
+        }}>
+          {/* Header */}
+          <div style={{
+            padding:"14px 18px", borderBottom:"1px solid #1e2535",
+            background:"linear-gradient(135deg,rgba(99,102,241,0.15),rgba(52,211,153,0.08))",
+            display:"flex", alignItems:"center", gap:10
+          }}>
+            <div style={{
+              width:32, height:32, borderRadius:10,
+              background:"linear-gradient(135deg,#6366f1,#34d399)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:14, fontWeight:700, color:"#fff"
+            }}>✦</div>
+            <div>
+              <div style={{color:"#e2e8f0", fontSize:13, fontWeight:700}}>Asistente STS</div>
+              <div style={{color:"#4ade80", fontSize:10, display:"flex", alignItems:"center", gap:4}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:"#4ade80",display:"inline-block"}}/>
+                Middle Office · IA
+              </div>
+            </div>
+          </div>
+
+          {/* Mensajes */}
+          <div ref={chatRef} style={{
+            flex:1, overflowY:"auto", padding:"14px 16px",
+            display:"flex", flexDirection:"column", gap:10
+          }}>
+            {mensajes.map((m, i) => (
+              <div key={i} style={{
+                display:"flex",
+                justifyContent: m.rol === "usuario" ? "flex-end" : "flex-start"
+              }}>
+                <div style={{
+                  maxWidth:"85%", padding:"9px 13px", borderRadius: m.rol==="usuario"?"12px 12px 3px 12px":"12px 12px 12px 3px",
+                  background: m.rol==="usuario" ? "linear-gradient(135deg,#6366f1,#4f46e5)" : "#1a1f2e",
+                  color: "#e2e8f0", fontSize:12, lineHeight:1.6,
+                  border: m.rol==="asistente" ? "1px solid #1e2535" : "none",
+                  whiteSpace:"pre-wrap"
+                }}>
+                  {m.texto}
+                </div>
+              </div>
+            ))}
+            {cargando && (
+              <div style={{display:"flex", justifyContent:"flex-start"}}>
+                <div style={{
+                  padding:"9px 14px", borderRadius:"12px 12px 12px 3px",
+                  background:"#1a1f2e", border:"1px solid #1e2535",
+                  color:"#6366f1", fontSize:12
+                }}>
+                  <span style={{animation:"pulse 1s infinite"}}>● ● ●</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sugerencias rápidas */}
+          <div style={{
+            padding:"6px 12px", display:"flex", gap:6, flexWrap:"wrap",
+            borderTop:"1px solid #1e2535"
+          }}>
+            {["Resumen de hoy","Saldos CC","Ops del mes"].map(s => (
+              <button key={s} onClick={() => { setInput(s); }}
+                style={{
+                  padding:"3px 10px", borderRadius:20, fontSize:10,
+                  background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.3)",
+                  color:"#a5b4fc", cursor:"pointer", fontFamily:"inherit"
+                }}>{s}</button>
+            ))}
+          </div>
+
+          {/* Input */}
+          <div style={{
+            padding:"10px 12px", borderTop:"1px solid #1e2535",
+            display:"flex", gap:8, alignItems:"flex-end"
+          }}>
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter" && !e.shiftKey) { e.preventDefault(); enviar(); }}}
+              placeholder="Preguntame algo..."
+              rows={2}
+              style={{
+                flex:1, resize:"none", background:"#0a0c13",
+                border:"1px solid #1e2535", borderRadius:10,
+                color:"#e2e8f0", fontSize:12, padding:"8px 10px",
+                fontFamily:"inherit", outline:"none", lineHeight:1.5
+              }}
+            />
+            <button onClick={enviar} disabled={!input.trim()||cargando}
+              style={{
+                width:36, height:36, borderRadius:10, border:"none",
+                background: input.trim()&&!cargando ? "linear-gradient(135deg,#6366f1,#34d399)" : "#1e2535",
+                color:"#fff", cursor: input.trim()&&!cargando ? "pointer":"default",
+                fontSize:16, display:"flex", alignItems:"center", justifyContent:"center",
+                flexShrink:0
+              }}>↑</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
