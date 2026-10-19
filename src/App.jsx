@@ -9083,13 +9083,11 @@ REGLAS:
         content: m.texto
       }));
 
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("https://aauyrjwytyxabjxyaech.supabase.co/functions/v1/quick-task", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-allow-browser": "true"
+          "Authorization": `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhdXlyand5dHl4YWJqeHlhZWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NDc2MzcsImV4cCI6MjA4ODQyMzYzN30.KgsY8Oyn17eZrxHODj5jDXba-XrGx1H1bSh68jlSmmw`
         },
         body: JSON.stringify({
           model: "claude-opus-4-5",
