@@ -9083,7 +9083,7 @@ REGLAS:
         content: m.texto
       }));
 
-      const resp = await fetch("https://aauyrjwytyxabjxyaech.supabase.co/functions/v1/quick-task", {
+      const resp = await fetch("https://aauyrjwytyxabjxyaech.supabase.co/functions/v1/anthropic-proxy", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
