@@ -9048,6 +9048,64 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     };
   }
 
+  // ── Genera Excel desde datos estructurados ────────────────────────────────
+  async function descargarExcel(datos, nombreArchivo) {
+    // Carga SheetJS dinámicamente
+    if (!window.XLSX) {
+      await new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    const XLSX = window.XLSX;
+    const wb = XLSX.utils.book_new();
+
+    if (Array.isArray(datos[0])) {
+      // Array de arrays: múltiples hojas [{nombre, filas}]
+      datos.forEach(({ nombre, filas }) => {
+        const ws = XLSX.utils.aoa_to_sheet(filas);
+        // Ancho automático de columnas
+        const cols = filas[0]?.map((_, i) => ({
+          wch: Math.max(...filas.map(r => String(r[i] ?? "").length), 8)
+        }));
+        if (cols) ws["!cols"] = cols;
+        XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31));
+      });
+    } else {
+      // Array plano de objetos
+      const ws = XLSX.utils.json_to_sheet(datos);
+      XLSX.utils.book_append_sheet(wb, ws, "Datos");
+    }
+    XLSX.writeFile(wb, nombreArchivo + ".xlsx");
+  }
+
+  // ── Extrae datos tabulares de la respuesta del agente ─────────────────────
+  function extraerTablaDeRespuesta(texto, contexto) {
+    // Busca tablas markdown en el texto
+    const filas = [];
+    const lineas = texto.split("\n");
+    let enTabla = false;
+    let headers = [];
+
+    for (const linea of lineas) {
+      if (linea.includes("|") && linea.trim().startsWith("|")) {
+        if (linea.includes("---")) continue; // separador
+        const celdas = linea.split("|").map(c => c.trim()).filter(Boolean);
+        if (!enTabla) { headers = celdas; enTabla = true; }
+        else filas.push(celdas);
+      } else if (enTabla && !linea.includes("|")) {
+        enTabla = false;
+      }
+    }
+
+    if (headers.length && filas.length) {
+      return [headers, ...filas];
+    }
+    return null;
+  }
+
   // ── Llama a Claude API ─────────────────────────────────────────────────────
   async function enviar() {
     const texto = input.trim();
@@ -9175,8 +9233,8 @@ REGLAS:
           }}>
             {mensajes.map((m, i) => (
               <div key={i} style={{
-                display:"flex",
-                justifyContent: m.rol === "usuario" ? "flex-end" : "flex-start"
+                display:"flex", flexDirection:"column",
+                alignItems: m.rol === "usuario" ? "flex-end" : "flex-start"
               }}>
                 <div style={{
                   maxWidth:"85%", padding:"9px 13px", borderRadius: m.rol==="usuario"?"12px 12px 3px 12px":"12px 12px 12px 3px",
@@ -9187,6 +9245,20 @@ REGLAS:
                 }}>
                   {m.texto}
                 </div>
+                {m.rol==="asistente" && (() => {
+                  const tabla = extraerTablaDeRespuesta(m.texto);
+                  if (!tabla) return null;
+                  return (
+                    <button onClick={()=>descargarExcel([{nombre:"Reporte", filas: tabla}], `STS_${hoy}`)}
+                      style={{
+                        marginTop:5, padding:"4px 12px", borderRadius:8, border:"1px solid rgba(52,211,153,0.3)",
+                        background:"rgba(52,211,153,0.08)", color:"#34d399", fontSize:10,
+                        cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:5
+                      }}>
+                      ⬇ Descargar Excel
+                    </button>
+                  );
+                })()}
               </div>
             ))}
             {cargando && (
