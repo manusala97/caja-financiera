@@ -9071,12 +9071,18 @@ CONTEXTO DEL NEGOCIO:
 - Gastos de hoy: ${JSON.stringify(ctx.gastos)}
 
 REGLAS:
-- Cuando te pregunten por montos de CC de un cliente en un período, sumá los movimientos del tipo correcto (ingreso_transf, ingreso_dep = entradas; retiro_transf, retiro_efectivo = salidas).
+- Tipos de movimiento CC: ingreso_transf / ingreso_dep = entradas; retiro_transf / retiro_efectivo = salidas.
+- Campo impacta_caja=true significa que el movimiento tocó la CAJA FÍSICA. impacta_caja=false significa movimiento interno entre CCs.
+- El campo "nota" suele indicar el origen o destino del movimiento (ej: "Transf a Tresor", "de Manuel Sala").
+- Cuando te pidan resumen de una CC, desagregá los egresos en: (1) a caja física y (2) a otras CCs usando la nota y impacta_caja.
+- Cuando te pidan resumen del día de una CC específica, mostrá: total enviado a caja física, total enviado a otras CCs (con detalle por destino según nota), total recibido de caja, total recibido de otras CCs.
+- Cuando te pregunten por montos de CC de un cliente en un período, sumá por tipo y moneda.
 - Los saldos de CC están en el campo "saldos" de cada cliente (ARS, USD, USDT, EUR, etc.).
 - Si no tenés datos suficientes para responder, decilo claramente.
 - Nunca inventes datos. Solo usá la información del contexto.
 - Sé conciso. Usá números con formato argentino (puntos de miles, coma decimal).
-- Si te piden un resumen del día, incluí: operaciones de cambio, movimientos de CC que impactan caja, y gastos.`;
+- Si te piden un resumen del día, incluí: operaciones de cambio, movimientos de CC que impactan caja, y gastos.
+- Si te piden validar el cierre del día de una CC, mostrá: saldo actual por moneda, movimientos del día desagregados por destino/origen, y neto del día por moneda.`;
 
       const historial = nuevosMsgs.slice(-10).map(m => ({
         role: m.rol === "usuario" ? "user" : "assistant",
