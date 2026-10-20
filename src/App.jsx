@@ -9062,46 +9062,40 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     const XLSX = window.XLSX;
     const wb = XLSX.utils.book_new();
 
-    if (Array.isArray(datos[0])) {
-      // Array de arrays: múltiples hojas [{nombre, filas}]
-      datos.forEach(({ nombre, filas }) => {
-        const ws = XLSX.utils.aoa_to_sheet(filas);
-        // Ancho automático de columnas
-        const cols = filas[0]?.map((_, i) => ({
-          wch: Math.max(...filas.map(r => String(r[i] ?? "").length), 8)
-        }));
-        if (cols) ws["!cols"] = cols;
-        XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31));
-      });
-    } else {
-      // Array plano de objetos
-      const ws = XLSX.utils.json_to_sheet(datos);
-      XLSX.utils.book_append_sheet(wb, ws, "Datos");
-    }
+    // datos = [{nombre, filas}] donde filas = array de arrays
+    datos.forEach(({ nombre, filas }) => {
+      const ws = XLSX.utils.aoa_to_sheet(filas);
+      // Ancho automático de columnas
+      const cols = filas[0]?.map((_, i) => ({
+        wch: Math.max(...filas.map(r => String(r[i] ?? "").length), 10)
+      }));
+      if (cols) ws["!cols"] = cols;
+      XLSX.utils.book_append_sheet(wb, ws, (nombre || "Reporte").slice(0, 31));
+    });
     XLSX.writeFile(wb, nombreArchivo + ".xlsx");
   }
 
   // ── Extrae datos tabulares de la respuesta del agente ─────────────────────
-  function extraerTablaDeRespuesta(texto, contexto) {
-    // Busca tablas markdown en el texto
-    const filas = [];
+  function extraerTablaDeRespuesta(texto) {
     const lineas = texto.split("\n");
-    let enTabla = false;
-    let headers = [];
+    const resultado = [];
+    let headers = null;
 
     for (const linea of lineas) {
-      if (linea.includes("|") && linea.trim().startsWith("|")) {
-        if (linea.includes("---")) continue; // separador
-        const celdas = linea.split("|").map(c => c.trim()).filter(Boolean);
-        if (!enTabla) { headers = celdas; enTabla = true; }
-        else filas.push(celdas);
-      } else if (enTabla && !linea.includes("|")) {
-        enTabla = false;
+      const trim = linea.trim();
+      if (!trim.startsWith("|")) continue;
+      // Separador tipo |---|---|
+      if (trim.replace(/[|\-:\s]/g, "") === "") continue;
+      const celdas = trim.split("|").map(c => c.trim()).filter(c => c !== "");
+      if (!headers) {
+        headers = celdas;
+      } else {
+        resultado.push(celdas);
       }
     }
 
-    if (headers.length && filas.length) {
-      return [headers, ...filas];
+    if (headers && resultado.length > 0) {
+      return [headers, ...resultado];
     }
     return null;
   }
@@ -9252,7 +9246,7 @@ REGLAS:
                   const tabla = extraerTablaDeRespuesta(m.texto);
                   if (!tabla) return null;
                   return (
-                    <button onClick={()=>descargarExcel([{nombre:"Reporte", filas: tabla}], `STS_${hoy}`)}
+                    <button onClick={()=>descargarExcel([{nombre:"Reporte", filas: tabla}], `STS_reporte_${hoy}`)}
                       style={{
                         marginTop:5, padding:"4px 12px", borderRadius:8, border:"1px solid rgba(52,211,153,0.3)",
                         background:"rgba(52,211,153,0.08)", color:"#34d399", fontSize:10,
