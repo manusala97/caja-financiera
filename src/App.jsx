@@ -9129,11 +9129,14 @@ CONTEXTO DEL NEGOCIO:
 - Gastos de hoy: ${JSON.stringify(ctx.gastos)}
 
 REGLAS:
-- Tipos de movimiento CC: ingreso_transf / ingreso_dep = entradas; retiro_transf / retiro_efectivo = salidas.
-- Campo impacta_caja=true significa que el movimiento tocó la CAJA FÍSICA. impacta_caja=false significa movimiento interno entre CCs.
-- El campo "nota" suele indicar el origen o destino del movimiento (ej: "Transf a Tresor", "de Manuel Sala").
-- Cuando te pidan resumen de una CC, desagregá los egresos en: (1) a caja física y (2) a otras CCs usando la nota y impacta_caja.
-- Cuando te pidan resumen del día de una CC específica, mostrá: total enviado a caja física, total enviado a otras CCs (con detalle por destino según nota), total recibido de caja, total recibido de otras CCs.
+- Tipos de movimiento CC: ingreso_transf / ingreso_dep = entradas a la CC (el cliente recibió plata); retiro_transf / retiro_efectivo = salidas de la CC (el cliente envió plata).
+- LÓGICA CONTABLE DE LA CC: La CC refleja lo que STS le debe al cliente o el cliente le debe a STS. Un "ingreso" a la CC significa que el cliente recibió fondos (STS le debe más). Un "retiro" significa que el cliente entregó fondos (redujo su deuda con STS o STS cobró).
+- "Le transferí" en la nota = STS transfirió al cliente = INGRESO para la CC del cliente (STS le debe).
+- "Me transfirió" en la nota = el cliente transfirió a STS = RETIRO de la CC del cliente (el cliente pagó).
+- Campo impacta_caja=true significa que el movimiento tocó la CAJA FÍSICA de STS. impacta_caja=false significa movimiento interno entre CCs.
+- El campo "nota" indica el origen o destino (ej: "Transf → Manuel Sala", "de Tomás Dakkache").
+- Cuando te pidan resumen de una CC, desagregá: (1) ingresos por origen y (2) egresos por destino, usando nota e impacta_caja.
+- Cuando te pidan resumen del día de una CC específica, mostrá: total recibido (por origen), total enviado (por destino: caja física vs otras CCs), neto por moneda.
 - Cuando te pregunten por montos de CC de un cliente en un período, sumá por tipo y moneda.
 - Los saldos de CC están en el campo "saldos" de cada cliente (ARS, USD, USDT, EUR, etc.).
 - Si no tenés datos suficientes para responder, decilo claramente.
