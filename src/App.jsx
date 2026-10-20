@@ -8938,7 +8938,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
         {pant==="libro"&&<PantallaLibro ops={ops.map(o=>({...o,...(o.datos||{})}))} clientes={clientes} gastos={gastos} hoy={hoy}/>}
 
       </main>
-      <AgenteIA clientes={clientes} ops={ops} gastos={gastos} hoy={hoy} />
+      <AgenteIA clientes={clientes} ops={ops} gastos={gastos} hoy={hoy} saldoCC={saldoCC} />
     </div>
   );
 }
@@ -8947,7 +8947,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
 // ══════════════════════════════════════════════════════════════════════════════
 //  AGENTE IA — Middle Office Assistant
 // ══════════════════════════════════════════════════════════════════════════════
-function AgenteIA({ clientes, ops, gastos, hoy }) {
+function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
   const [abierto, setAbierto] = useState(false);
   const [mensajes, setMensajes] = useState([
     { rol:"asistente", texto:"Hola! Soy tu asistente de middle office. Podés preguntarme sobre movimientos, operaciones, saldos de CCs o pedirme un resumen del día." }
@@ -8966,7 +8966,7 @@ function AgenteIA({ clientes, ops, gastos, hoy }) {
 
     // Clientes con sus saldos CC
     const resumenClientes = clientes.map(c => {
-      const saldos = c.saldos || {};
+      const saldos = saldoCC ? saldoCC(c) : (c.saldos || {});
       const movHoy = (c.movimientos || []).filter(m => m.fecha === hoyDate);
       return {
         id: c.id,
