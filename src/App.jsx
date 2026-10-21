@@ -8960,25 +8960,102 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [mensajes, abierto]);
 
+  // ── Detecta rango de fechas en lenguaje natural ────────────────────────────
+  function detectarRangoFecha(pregunta) {
+    const hoyDate = hoy; // "YYYY-MM-DD"
+    const hoyObj = new Date(hoyDate + "T12:00:00");
+    const p = pregunta.toLowerCase();
+
+    // Helper: format Date → "YYYY-MM-DD"
+    const fmt_date = (d) => d.toISOString().slice(0, 10);
+
+    // "ayer"
+    if (p.includes("ayer")) {
+      const ayer = new Date(hoyObj); ayer.setDate(hoyObj.getDate() - 1);
+      return { desde: fmt_date(ayer), hasta: fmt_date(ayer), label: "ayer" };
+    }
+
+    // "hoy"
+    if (p.includes("hoy")) {
+      return { desde: hoyDate, hasta: hoyDate, label: "hoy" };
+    }
+
+    // "esta semana"
+    if (p.includes("esta semana")) {
+      const dow = hoyObj.getDay(); // 0=dom
+      const lunes = new Date(hoyObj); lunes.setDate(hoyObj.getDate() - ((dow + 6) % 7));
+      return { desde: fmt_date(lunes), hasta: hoyDate, label: "esta semana" };
+    }
+
+    // "semana pasada"
+    if (p.includes("semana pasada")) {
+      const dow = hoyObj.getDay();
+      const lunesEsta = new Date(hoyObj); lunesEsta.setDate(hoyObj.getDate() - ((dow + 6) % 7));
+      const lunes = new Date(lunesEsta); lunes.setDate(lunesEsta.getDate() - 7);
+      const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+      return { desde: fmt_date(lunes), hasta: fmt_date(domingo), label: "semana pasada" };
+    }
+
+    // "este mes"
+    if (p.includes("este mes")) {
+      const desde = `${hoyDate.slice(0,7)}-01`;
+      return { desde, hasta: hoyDate, label: "este mes" };
+    }
+
+    // Fecha con formato dd/mm o dd/mm/yyyy o "el día N"
+    // Primero intentar dd/mm/yyyy
+    const matchFull = p.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/);
+    if (matchFull) {
+      const dia = matchFull[1].padStart(2, "0");
+      const mes = matchFull[2].padStart(2, "0");
+      const año = matchFull[3] || hoyDate.slice(0, 4);
+      const fecha = `${año}-${mes}-${dia}`;
+      return { desde: fecha, hasta: fecha, label: `el ${dia}/${mes}/${año}` };
+    }
+
+    // "el N de mes" ej: "el 20 de octubre"
+    const meses = { enero:"01",febrero:"02",marzo:"03",abril:"04",mayo:"05",junio:"06",julio:"07",agosto:"08",septiembre:"09",octubre:"10",noviembre:"11",diciembre:"12" };
+    for (const [nombre, mesStr] of Object.entries(meses)) {
+      const re = new RegExp(`(\\d{1,2})\\s+de\\s+${nombre}(?:\\s+de\\s+(20\\d\\d))?`);
+      const m = p.match(re);
+      if (m) {
+        const dia = m[1].padStart(2, "0");
+        const año = m[2] || hoyDate.slice(0, 4);
+        const fecha = `${año}-${mesStr}-${dia}`;
+        return { desde: fecha, hasta: fecha, label: `el ${dia}/${mesStr}/${año}` };
+      }
+      // Solo mes → todo el mes
+      if (p.includes(nombre)) {
+        const matchAño = p.match(/20\d\d/);
+        const año = matchAño ? matchAño[0] : hoyDate.slice(0, 4);
+        return { desde: `${año}-${mesStr}-01`, hasta: `${año}-${mesStr}-31`, label: `${nombre} ${año}` };
+      }
+    }
+
+    // Si no detecta nada, devuelve hoy por default
+    return { desde: hoyDate, hasta: hoyDate, label: "hoy" };
+  }
+
   // ── Construye el contexto del negocio para Claude ──────────────────────────
   async function buildContexto(pregunta) {
     const hoyDate = hoy;
+    const rango = detectarRangoFecha(pregunta);
+    const preqLower = pregunta.toLowerCase();
 
     // Clientes con sus saldos CC
     const resumenClientes = clientes.map(c => {
       const saldos = saldoCC ? saldoCC(c) : (c.saldos || {});
-      const movHoy = (c.movimientos || []).filter(m => m.fecha === hoyDate);
       return {
         id: c.id,
         nombre: `${c.nombre || ""} ${c.apellido || ""}`.trim(),
         socio: c.socio,
-        saldos,
-        movHoy: movHoy.length
+        saldos
       };
     });
 
-    // Operaciones de hoy
-    const opsHoy = ops.filter(o => o.fecha === hoyDate).map(o => ({
+    // Operaciones del período detectado
+    const opsPeriodo = ops.filter(o => o.fecha >= rango.desde && o.fecha <= rango.hasta).map(o => ({
+      fecha: o.fecha,
       hora: o.hora,
       tipo: o.tipo,
       moneda: o.datos?.moneda,
@@ -8990,17 +9067,8 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       nota: o.datos?.nota
     }));
 
-    // Movimientos CC relevantes según pregunta — búsqueda por mes si se menciona
-    let movsCC = [];
-    const meses = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7, agosto:8, septiembre:9, octubre:10, noviembre:11, diciembre:12 };
-    const preqLower = pregunta.toLowerCase();
-    let mesNum = null;
-    let añoNum = null;
-    for (const [nombre, num] of Object.entries(meses)) {
-      if (preqLower.includes(nombre)) { mesNum = num; break; }
-    }
-    const matchAño = preqLower.match(/20\d\d/);
-    if (matchAño) añoNum = parseInt(matchAño[0]);
+    // Gastos del período
+    const gastosPeriodo = gastos.filter(g => g.fecha >= rango.desde && g.fecha <= rango.hasta);
 
     // Buscar cliente mencionado en la pregunta
     let clienteFiltro = null;
@@ -9012,39 +9080,35 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       }
     }
 
-    if (mesNum || preqLower.includes("hoy") || clienteFiltro) {
-      const query = SB.from("movimientos_cc").select("*");
-      if (mesNum) {
-        const año = añoNum || parseInt(hoyDate.slice(0,4));
-        const desde = `${año}-${String(mesNum).padStart(2,"0")}-01`;
-        const hasta = `${año}-${String(mesNum).padStart(2,"0")}-31`;
-        query.gte("fecha", desde).lte("fecha", hasta);
-      } else if (preqLower.includes("hoy")) {
-        query.eq("fecha", hoyDate);
-      }
-      if (clienteFiltro) query.eq("cliente_id", clienteFiltro.id);
-      query.order("fecha", { ascending: false }).limit(200);
-      const { data } = await query;
-      movsCC = (data || []).map(m => ({
-        fecha: m.fecha,
-        tipo: m.tipo,
-        moneda: m.moneda,
-        monto: m.monto,
-        nota: m.nota,
-        impacta_caja: m.impacta_caja,
-        cliente_id: m.cliente_id,
-        clienteNombre: clientes.find(c => c.id === m.cliente_id)
-          ? `${clientes.find(c=>c.id===m.cliente_id).nombre||""} ${clientes.find(c=>c.id===m.cliente_id).apellido||""}`.trim()
-          : m.cliente_id
-      }));
-    }
+    // Movimientos CC: siempre traer para el período detectado
+    const query = SB.from("movimientos_cc").select("*")
+      .gte("fecha", rango.desde)
+      .lte("fecha", rango.hasta);
+    if (clienteFiltro) query.eq("cliente_id", clienteFiltro.id);
+    query.order("fecha", { ascending: false }).limit(500);
+    const { data } = await query;
+    const movsCC = (data || []).map(m => ({
+      fecha: m.fecha,
+      tipo: m.tipo,
+      moneda: m.moneda,
+      monto: m.monto,
+      nota: m.nota,
+      impacta_caja: m.impacta_caja,
+      cliente_id: m.cliente_id,
+      clienteNombre: clientes.find(c => c.id === m.cliente_id)
+        ? `${clientes.find(c=>c.id===m.cliente_id).nombre||""} ${clientes.find(c=>c.id===m.cliente_id).apellido||""}`.trim()
+        : m.cliente_id
+    }));
 
     return {
       hoy: hoyDate,
+      periodoConsultado: rango.label,
+      rangoDesde: rango.desde,
+      rangoHasta: rango.hasta,
       clientes: resumenClientes,
-      operacionesHoy: opsHoy,
+      operaciones: opsPeriodo,
       movimientosCC: movsCC,
-      gastos: gastos.filter(g => g.fecha === hoyDate)
+      gastos: gastosPeriodo
     };
   }
 
@@ -9116,13 +9180,15 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
 Respondés en español, de forma directa y concisa.
 
 CONTEXTO DEL NEGOCIO:
-- Fecha hoy: ${ctx.hoy}
-- Clientes con CC: ${JSON.stringify(ctx.clientes.map(c=>({id:c.id,nombre:c.nombre,socio:c.socio,saldos:c.saldos})))}
-- Operaciones de hoy: ${JSON.stringify(ctx.operacionesHoy)}
-- Movimientos CC consultados: ${JSON.stringify(ctx.movimientosCC)}
-- Gastos de hoy: ${JSON.stringify(ctx.gastos)}
+- Fecha de hoy: ${ctx.hoy}
+- Período consultado: ${ctx.periodoConsultado} (${ctx.rangoDesde} → ${ctx.rangoHasta})
+- Clientes con CC (saldos ACTUALES): ${JSON.stringify(ctx.clientes.map(c=>({id:c.id,nombre:c.nombre,socio:c.socio,saldos:c.saldos})))}
+- Operaciones del período: ${JSON.stringify(ctx.operaciones)}
+- Movimientos CC del período: ${JSON.stringify(ctx.movimientosCC)}
+- Gastos del período: ${JSON.stringify(ctx.gastos)}
 
 REGLAS:
+- IMPORTANTE: Siempre respondé según el período consultado indicado arriba. Si el usuario preguntó por "ayer" o una fecha específica, usá esos datos, no los de hoy.
 - Tipos de movimiento CC: ingreso_transf / ingreso_dep = entradas a la CC (el cliente recibió plata); retiro_transf / retiro_efectivo = salidas de la CC (el cliente envió plata).
 - LÓGICA CONTABLE DE LA CC: La CC refleja lo que STS le debe al cliente o el cliente le debe a STS. Un "ingreso" a la CC significa que el cliente recibió fondos (STS le debe más). Un "retiro" significa que el cliente entregó fondos (redujo su deuda con STS o STS cobró).
 - "Le transferí" en la nota = STS transfirió al cliente = INGRESO para la CC del cliente (STS le debe).
@@ -9132,8 +9198,8 @@ REGLAS:
 - Cuando te pidan resumen de una CC, desagregá: (1) ingresos por origen y (2) egresos por destino, usando nota e impacta_caja.
 - Cuando te pidan resumen del día de una CC específica, mostrá: total recibido (por origen), total enviado (por destino: caja física vs otras CCs), neto por moneda.
 - Cuando te pregunten por montos de CC de un cliente en un período, sumá por tipo y moneda.
-- Los saldos de CC están en el campo "saldos" de cada cliente (ARS, USD, USDT, EUR, etc.).
-- Si no tenés datos suficientes para responder, decilo claramente.
+- Los saldos de CC están en el campo "saldos" de cada cliente (son saldos ACTUALES, no históricos).
+- Si no hay datos para el período consultado, decilo claramente indicando qué período buscaste.
 - Nunca inventes datos. Solo usá la información del contexto.
 - Sé conciso. Usá números con formato argentino (puntos de miles, coma decimal).
 - Si te piden un resumen del día, incluí: operaciones de cambio, movimientos de CC que impactan caja, y gastos.
