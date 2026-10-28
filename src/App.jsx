@@ -9134,19 +9134,37 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         if (ch.tm) porMes[mes].tms.push(Number(ch.tm));
       });
 
-      const resumenCheques = Object.entries(porMes).map(([mes, d]) => ({
-        mes,
-        cantidad: d.cantidad,
-        nominal_total: Math.round(d.nominal_total),
-        m_final_total: Math.round(d.m_final_total),
-        ganancia_total: Math.round(d.ganancia_total),
-        tm_promedio: d.tms.length ? (d.tms.reduce((a,b)=>a+b,0) / d.tms.length).toFixed(4) : null
-      }));
+      const resumenCheques = Object.entries(porMes).map(([mes, d]) => {
+        const nominal = Math.round(d.nominal_total);
+        const ganancia = Math.round(d.ganancia_total);
+        const tm_prom = d.tms.length ? d.tms.reduce((a,b)=>a+b,0) / d.tms.length : null;
+        // TEM = ganancia / nominal (en porcentaje)
+        const tem = nominal > 0 ? (ganancia / nominal * 100) : null;
+        // TEA = (1 + TEM/100)^12 - 1
+        const tea = tem !== null ? ((Math.pow(1 + tem/100, 12) - 1) * 100) : null;
+        return {
+          mes,
+          cantidad: d.cantidad,
+          nominal_total: nominal,
+          m_final_total: Math.round(d.m_final_total),
+          ganancia_total: ganancia,
+          tm_promedio: tm_prom !== null ? Number(tm_prom.toFixed(4)) : null,
+          tem_pct: tem !== null ? Number(tem.toFixed(2)) : null,
+          tea_pct: tea !== null ? Number(tea.toFixed(2)) : null
+        };
+      });
+
+      const totalNominal = Math.round((cheques||[]).reduce((s,c)=>s+Number(c.nominal||0),0));
+      const totalGanancia = Math.round((cheques||[]).reduce((s,c)=>s+Number(c.ganancia||0),0));
+      const temGlobal = totalNominal > 0 ? (totalGanancia / totalNominal * 100) : null;
+      const teaGlobal = temGlobal !== null ? ((Math.pow(1 + temGlobal/100, 12) - 1) * 100) : null;
 
       const totalCheques = {
         cantidad: (cheques || []).length,
-        nominal_total: Math.round((cheques||[]).reduce((s,c)=>s+Number(c.nominal||0),0)),
-        ganancia_total: Math.round((cheques||[]).reduce((s,c)=>s+Number(c.ganancia||0),0)),
+        nominal_total: totalNominal,
+        ganancia_total: totalGanancia,
+        tem_global_pct: temGlobal !== null ? Number(temGlobal.toFixed(2)) : null,
+        tea_global_pct: teaGlobal !== null ? Number(teaGlobal.toFixed(2)) : null,
         cobrados: (cheques||[]).filter(c=>c.cobrado).length,
         pendientes: (cheques||[]).filter(c=>!c.cobrado).length
       };
@@ -9407,7 +9425,7 @@ REGLAS CONTABLES DE CC:
 - nota = origen o destino del movimiento.
 
 FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
-- cheques: tabla con columnas mes | cantidad | nominal | ganancia | TM promedio + totales y observaciones.
+- cheques: tabla con columnas mes | cantidad | nominal (sin $ ni puntos, número puro) | ganancia (ídem) | TM% | TEM% | TEA% + fila de totales. Los montos en la tabla deben ser números puros sin símbolo $ ni separadores de miles para que sean procesables. Debajo de la tabla mostrá el resumen: "Facturación total: X | TEM global: Y% | TEA equivalente: Z%".
 - posicion: tabla cliente | ARS | USD | (otras monedas) ordenada por saldo. Destacá quién debe y quién tiene saldo a favor.
 - resumen_dia: sección por sección — (1) operaciones de cambio, (2) cheques, (3) movimientos caja, (4) PnL si disponible. Formato validable por el empleado.
 - compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
