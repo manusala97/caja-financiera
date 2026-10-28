@@ -9036,72 +9036,74 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     return { desde: hoyDate, hasta: hoyDate, label: "hoy" };
   }
 
+  // ── Clasificador de intención ──────────────────────────────────────────────
+  function clasificarIntencion(pregunta) {
+    const p = pregunta.toLowerCase();
+    if (/cheque|diferido|endoso|descont/.test(p)) return "cheques";
+    if (/posici[oó]n|saldo.*(cc|cuenta)|cu[aá]nto.*(debo|le debo|me deben)|foto.*pos|resumen.*socios/.test(p)) return "posicion";
+    if (/resumen.*(d[ií]a|hoy|ayer)|cierre.*d[ií]a|validar.*d[ií]a|qu[eé].*hicimos/.test(p)) return "resumen_dia";
+    if (/compra|venta|cambio|operaci[oó]n.*moneda|cu[aá]nto.*oper[eé]|volumen/.test(p)) return "compras_ventas";
+    if (/transferencia|transf|cc\s+de\s+\w|cu[aá]nto\s+(mueve|movi[oó])/.test(p)) return "cc_cliente";
+    if (/comisi[oó]n|fee|cuanto.*cobra|cuanto.*deja/.test(p)) return "comisiones";
+    return "general";
+  }
+
   // ── Construye el contexto del negocio para Claude ──────────────────────────
   async function buildContexto(pregunta) {
     const hoyDate = hoy;
     const rango = detectarRangoFecha(pregunta);
     const preqLower = pregunta.toLowerCase();
+    const intencion = clasificarIntencion(pregunta);
 
-    // Clientes con sus saldos CC
-    const resumenClientes = clientes.map(c => {
-      const saldos = saldoCC ? saldoCC(c) : (c.saldos || {});
-      return {
-        id: c.id,
-        nombre: `${c.nombre || ""} ${c.apellido || ""}`.trim(),
-        socio: c.socio,
-        saldos
-      };
-    });
+    // Helper: nombre completo de cliente
+    const nombreCliente = c => `${c.nombre || ""} ${c.apellido || ""}`.trim();
 
-    // Operaciones del período detectado
+    // Clientes con sus saldos CC actuales
+    const resumenClientes = clientes.map(c => ({
+      id: c.id,
+      nombre: nombreCliente(c),
+      socio: c.socio,
+      saldos: saldoCC ? saldoCC(c) : (c.saldos || {})
+    }));
+
+    // Buscar cliente mencionado en la pregunta
+    let clienteFiltro = null;
+    for (const c of clientes) {
+      const nom = nombreCliente(c).toLowerCase();
+      if (nom.split(" ").some(p => p.length > 3 && preqLower.includes(p))) {
+        clienteFiltro = c; break;
+      }
+    }
+
+    // Operaciones del período (de memoria, ya cargadas)
     const opsPeriodo = ops.filter(o => o.fecha >= rango.desde && o.fecha <= rango.hasta).map(o => ({
-      fecha: o.fecha,
-      hora: o.hora,
-      tipo: o.tipo,
-      moneda: o.datos?.moneda,
-      monto: o.datos?.monto,
-      moneda2: o.datos?.moneda2,
-      monto2: o.datos?.monto2,
-      cotizacion: o.datos?.cotizacion,
-      cliente: o.datos?.cliente,
-      nota: o.datos?.nota
+      fecha: o.fecha, hora: o.hora, tipo: o.tipo,
+      moneda: o.datos?.moneda, monto: o.datos?.monto,
+      moneda2: o.datos?.moneda2, monto2: o.datos?.monto2,
+      cotizacion: o.datos?.cotizacion, cliente: o.datos?.cliente, nota: o.datos?.nota
     }));
 
     // Gastos del período
     const gastosPeriodo = gastos.filter(g => g.fecha >= rango.desde && g.fecha <= rango.hasta);
 
-    // Buscar cliente mencionado en la pregunta
-    let clienteFiltro = null;
-    for (const c of clientes) {
-      const nombre = `${c.nombre || ""} ${c.apellido || ""}`.toLowerCase();
-      if (nombre.split(" ").some(p => p.length > 3 && preqLower.includes(p))) {
-        clienteFiltro = c;
-        break;
-      }
-    }
-
-    // Movimientos CC: siempre traer para el período detectado
-    const query = SB.from("movimientos_cc").select("*")
-      .gte("fecha", rango.desde)
-      .lte("fecha", rango.hasta);
-    if (clienteFiltro) query.eq("cliente_id", clienteFiltro.id);
-    query.order("fecha", { ascending: false }).limit(500);
-    const { data } = await query;
-    const movsCC = (data || []).map(m => ({
-      fecha: m.fecha,
-      tipo: m.tipo,
-      moneda: m.moneda,
-      monto: m.monto,
-      nota: m.nota,
-      impacta_caja: m.impacta_caja,
-      cliente_id: m.cliente_id,
+    // Movimientos CC base
+    const qCC = SB.from("movimientos_cc").select("*")
+      .gte("fecha", rango.desde).lte("fecha", rango.hasta);
+    if (clienteFiltro) qCC.eq("cliente_id", clienteFiltro.id);
+    qCC.order("fecha", { ascending: false }).limit(500);
+    const { data: datCC } = await qCC;
+    const movsCC = (datCC || []).map(m => ({
+      fecha: m.fecha, tipo: m.tipo, moneda: m.moneda, monto: m.monto,
+      nota: m.nota, impacta_caja: m.impacta_caja, cliente_id: m.cliente_id,
       clienteNombre: clientes.find(c => c.id === m.cliente_id)
-        ? `${clientes.find(c=>c.id===m.cliente_id).nombre||""} ${clientes.find(c=>c.id===m.cliente_id).apellido||""}`.trim()
+        ? nombreCliente(clientes.find(c => c.id === m.cliente_id))
         : m.cliente_id
     }));
 
-    return {
+    // Contexto base (siempre presente)
+    const ctx = {
       hoy: hoyDate,
+      intencion,
       periodoConsultado: rango.label,
       rangoDesde: rango.desde,
       rangoHasta: rango.hasta,
@@ -9110,6 +9112,181 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       movimientosCC: movsCC,
       gastos: gastosPeriodo
     };
+
+    // ── ANÁLISIS ESPECÍFICOS por intención ────────────────────────────────────
+
+    // 1. CHEQUES — análisis de diferidos
+    if (intencion === "cheques") {
+      const { data: cheques } = await SB.from("diferidos")
+        .select("*")
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+        .order("fecha", { ascending: true });
+
+      // Agrupar por mes
+      const porMes = {};
+      (cheques || []).forEach(ch => {
+        const mes = ch.fecha?.slice(0, 7) || "?";
+        if (!porMes[mes]) porMes[mes] = { cantidad: 0, nominal_total: 0, m_final_total: 0, ganancia_total: 0, tms: [] };
+        porMes[mes].cantidad++;
+        porMes[mes].nominal_total += Number(ch.nominal) || 0;
+        porMes[mes].m_final_total += Number(ch.m_final) || 0;
+        porMes[mes].ganancia_total += Number(ch.ganancia) || 0;
+        if (ch.tm) porMes[mes].tms.push(Number(ch.tm));
+      });
+
+      const resumenCheques = Object.entries(porMes).map(([mes, d]) => ({
+        mes,
+        cantidad: d.cantidad,
+        nominal_total: Math.round(d.nominal_total),
+        m_final_total: Math.round(d.m_final_total),
+        ganancia_total: Math.round(d.ganancia_total),
+        tm_promedio: d.tms.length ? (d.tms.reduce((a,b)=>a+b,0) / d.tms.length).toFixed(4) : null
+      }));
+
+      const totalCheques = {
+        cantidad: (cheques || []).length,
+        nominal_total: Math.round((cheques||[]).reduce((s,c)=>s+Number(c.nominal||0),0)),
+        ganancia_total: Math.round((cheques||[]).reduce((s,c)=>s+Number(c.ganancia||0),0)),
+        cobrados: (cheques||[]).filter(c=>c.cobrado).length,
+        pendientes: (cheques||[]).filter(c=>!c.cobrado).length
+      };
+
+      ctx.analisisCheques = { porMes: resumenCheques, totales: totalCheques, detalle: (cheques||[]).slice(0,50) };
+    }
+
+    // 2. POSICIÓN — saldos CC de todos los clientes para foto a socios
+    if (intencion === "posicion") {
+      const posicion = resumenClientes
+        .filter(c => c.saldos && Object.keys(c.saldos).length > 0)
+        .map(c => ({ nombre: c.nombre, socio: c.socio, saldos: c.saldos }))
+        .sort((a, b) => {
+          const usdA = Math.abs(a.saldos?.USD || 0);
+          const usdB = Math.abs(b.saldos?.USD || 0);
+          return usdB - usdA;
+        });
+      ctx.posicionDetallada = posicion;
+    }
+
+    // 3. RESUMEN DEL DÍA — para validación del empleado
+    if (intencion === "resumen_dia") {
+      // Cheques del día (diferidos con fecha_acr = hoy o fecha = rango)
+      const { data: chequesDia } = await SB.from("diferidos")
+        .select("id,fecha,cliente,nominal,m_final,ganancia,tm,dias,cobrado,tipo_cheq,fecha_acr,fecha_venc")
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta);
+
+      // PnL del día si existe
+      const { data: pnlDia } = await SB.from("pnl_diario")
+        .select("*")
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+        .limit(10);
+
+      // Agrupar ops del día por tipo y moneda
+      const opsPorTipo = {};
+      opsPeriodo.forEach(o => {
+        const k = `${o.tipo}|${o.moneda||""}`;
+        if (!opsPorTipo[k]) opsPorTipo[k] = { tipo: o.tipo, moneda: o.moneda, cantidad: 0, monto_total: 0 };
+        opsPorTipo[k].cantidad++;
+        opsPorTipo[k].monto_total += Number(o.monto) || 0;
+      });
+
+      // Movimientos CC que impactan caja
+      const movsCaja = movsCC.filter(m => m.impacta_caja);
+      const cajaPorMoneda = {};
+      movsCaja.forEach(m => {
+        const sign = (m.tipo === "ingreso_transf" || m.tipo === "ingreso_dep") ? 1 : -1;
+        cajaPorMoneda[m.moneda] = (cajaPorMoneda[m.moneda] || 0) + sign * Number(m.monto);
+      });
+
+      ctx.resumenDia = {
+        operacionesPorTipo: Object.values(opsPorTipo),
+        cajaPorMoneda,
+        chequesDia: chequesDia || [],
+        pnl: pnlDia || [],
+        movimientosCaja: movsCaja
+      };
+    }
+
+    // 4. COMPRAS Y VENTAS por moneda
+    if (intencion === "compras_ventas") {
+      const { data: opsDetalle } = await SB.from("operaciones")
+        .select("fecha,tipo,datos")
+        .in("tipo", ["compra","venta"])
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+        .order("fecha", { ascending: true });
+
+      // Agrupar por moneda + tipo
+      const porMoneda = {};
+      (opsDetalle || []).forEach(o => {
+        const mon = o.datos?.moneda || "?";
+        const k = `${o.tipo}|${mon}`;
+        if (!porMoneda[k]) porMoneda[k] = { tipo: o.tipo, moneda: mon, cantidad: 0, volumen: 0, cotizaciones: [] };
+        porMoneda[k].cantidad++;
+        porMoneda[k].volumen += Number(o.datos?.monto) || 0;
+        if (o.datos?.cotizacion) porMoneda[k].cotizaciones.push(Number(o.datos.cotizacion));
+      });
+
+      ctx.analisisComprasVentas = Object.values(porMoneda).map(g => ({
+        tipo: g.tipo,
+        moneda: g.moneda,
+        cantidad_ops: g.cantidad,
+        volumen_total: Math.round(g.volumen),
+        cotiz_promedio: g.cotizaciones.length
+          ? (g.cotizaciones.reduce((a,b)=>a+b,0)/g.cotizaciones.length).toFixed(2)
+          : null
+      }));
+    }
+
+    // 5. CC CLIENTE — detalle de transferencias de un cliente específico
+    if (intencion === "cc_cliente" && clienteFiltro) {
+      // Ya tenemos movsCC filtrado por cliente, agregar recaudadora
+      const { data: transfsCliente } = await SB.from("recaudadora_transferencias")
+        .select("*")
+        .eq("cliente_id", clienteFiltro.id)
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+        .order("fecha", { ascending: false });
+
+      ctx.ccCliente = {
+        cliente: { id: clienteFiltro.id, nombre: nombreCliente(clienteFiltro) },
+        movimientos: movsCC,
+        transferenciasRecaudadora: transfsCliente || []
+      };
+    }
+
+    // 6. COMISIONES — fee por tipo
+    if (intencion === "comisiones") {
+      const { data: pnlComis } = await SB.from("pnl_diario")
+        .select("fecha,fee_total,fee_cheqdia,fee_cheqdif,fee_transf,fee_canje,intermediacion")
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+        .order("fecha", { ascending: true });
+
+      const totComis = (pnlComis || []).reduce((acc, r) => {
+        acc.fee_total += Number(r.fee_total||0);
+        acc.fee_cheqdia += Number(r.fee_cheqdia||0);
+        acc.fee_cheqdif += Number(r.fee_cheqdif||0);
+        acc.fee_transf += Number(r.fee_transf||0);
+        acc.fee_canje += Number(r.fee_canje||0);
+        acc.intermediacion += Number(r.intermediacion||0);
+        return acc;
+      }, { fee_total:0, fee_cheqdia:0, fee_cheqdif:0, fee_transf:0, fee_canje:0, intermediacion:0 });
+
+      // Comisiones de recaudadora por cliente
+      let comisCliente = null;
+      if (clienteFiltro) {
+        const { data: rt } = await SB.from("recaudadora_transferencias")
+          .select("fecha,monto_enviado,ganancia,pct_comision")
+          .eq("cliente_id", clienteFiltro.id)
+          .gte("fecha", rango.desde).lte("fecha", rango.hasta);
+        comisCliente = {
+          cantidad: (rt||[]).length,
+          volumen: Math.round((rt||[]).reduce((s,r)=>s+Number(r.monto_enviado||0),0)),
+          ganancia: Math.round((rt||[]).reduce((s,r)=>s+Number(r.ganancia||0),0))
+        };
+      }
+
+      ctx.analisisComisiones = { porDia: pnlComis || [], totales: totComis, clienteDetalle: comisCliente };
+    }
+
+    return ctx;
   }
 
   // ── Genera Excel desde datos estructurados ────────────────────────────────
@@ -9176,34 +9353,67 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     try {
       const ctx = await buildContexto(texto);
 
-      const systemPrompt = `Sos el asistente de middle office de STS, una casa de cambio en Buenos Aires.
-Respondés en español, de forma directa y concisa.
+      const bloqueEspecifico = ctx.analisisCheques ? `
+ANÁLISIS DE CHEQUES (${ctx.periodoConsultado}):
+- Resumen por mes: ${JSON.stringify(ctx.analisisCheques.porMes)}
+- Totales: ${JSON.stringify(ctx.analisisCheques.totales)}
+- Detalle (hasta 50 ops): ${JSON.stringify(ctx.analisisCheques.detalle)}
+` : ctx.posicionDetallada ? `
+POSICIÓN ACTUAL DE CCs (para foto a socios):
+${JSON.stringify(ctx.posicionDetallada)}
+` : ctx.resumenDia ? `
+RESUMEN DEL DÍA (${ctx.periodoConsultado}):
+- Operaciones por tipo: ${JSON.stringify(ctx.resumenDia.operacionesPorTipo)}
+- Impacto caja por moneda: ${JSON.stringify(ctx.resumenDia.cajaPorMoneda)}
+- Cheques del día: ${JSON.stringify(ctx.resumenDia.chequesDia)}
+- PnL registrado: ${JSON.stringify(ctx.resumenDia.pnl)}
+- Movimientos que tocaron caja: ${JSON.stringify(ctx.resumenDia.movimientosCaja)}
+` : ctx.analisisComprasVentas ? `
+ANÁLISIS COMPRAS Y VENTAS (${ctx.periodoConsultado}):
+${JSON.stringify(ctx.analisisComprasVentas)}
+Operaciones detalladas: ${JSON.stringify(ctx.operaciones)}
+` : ctx.ccCliente ? `
+CC DE ${ctx.ccCliente.cliente.nombre} (${ctx.periodoConsultado}):
+- Movimientos: ${JSON.stringify(ctx.ccCliente.movimientos)}
+- Transferencias recaudadora: ${JSON.stringify(ctx.ccCliente.transferenciasRecaudadora)}
+` : ctx.analisisComisiones ? `
+ANÁLISIS DE COMISIONES (${ctx.periodoConsultado}):
+- Totales: ${JSON.stringify(ctx.analisisComisiones.totales)}
+- Por día: ${JSON.stringify(ctx.analisisComisiones.porDia)}
+${ctx.analisisComisiones.clienteDetalle ? `- Cliente específico: ${JSON.stringify(ctx.analisisComisiones.clienteDetalle)}` : ""}
+` : `
+OPERACIONES DEL PERÍODO: ${JSON.stringify(ctx.operaciones)}
+MOVIMIENTOS CC: ${JSON.stringify(ctx.movimientosCC)}
+GASTOS: ${JSON.stringify(ctx.gastos)}
+`;
 
-CONTEXTO DEL NEGOCIO:
-- Fecha de hoy: ${ctx.hoy}
-- Período consultado: ${ctx.periodoConsultado} (${ctx.rangoDesde} → ${ctx.rangoHasta})
-- Clientes con CC (saldos ACTUALES): ${JSON.stringify(ctx.clientes.map(c=>({id:c.id,nombre:c.nombre,socio:c.socio,saldos:c.saldos})))}
-- Operaciones del período: ${JSON.stringify(ctx.operaciones)}
-- Movimientos CC del período: ${JSON.stringify(ctx.movimientosCC)}
-- Gastos del período: ${JSON.stringify(ctx.gastos)}
+      const systemPrompt = `Sos el analista interno de STS, una casa de cambio en Buenos Aires. Respondés en español, directo y preciso. Sos el asistente de Manu (Manuel Salá), el dueño.
 
-REGLAS:
-- IMPORTANTE: Siempre respondé según el período consultado indicado arriba. Si el usuario preguntó por "ayer" o una fecha específica, usá esos datos, no los de hoy.
-- Tipos de movimiento CC: ingreso_transf / ingreso_dep = entradas a la CC (el cliente recibió plata); retiro_transf / retiro_efectivo = salidas de la CC (el cliente envió plata).
-- LÓGICA CONTABLE DE LA CC: La CC refleja lo que STS le debe al cliente o el cliente le debe a STS. Un "ingreso" a la CC significa que el cliente recibió fondos (STS le debe más). Un "retiro" significa que el cliente entregó fondos (redujo su deuda con STS o STS cobró).
-- "Le transferí" en la nota = STS transfirió al cliente = INGRESO para la CC del cliente (STS le debe).
-- "Me transfirió" en la nota = el cliente transfirió a STS = RETIRO de la CC del cliente (el cliente pagó).
-- Campo impacta_caja=true significa que el movimiento tocó la CAJA FÍSICA de STS. impacta_caja=false significa movimiento interno entre CCs.
-- El campo "nota" indica el origen o destino (ej: "Transf → Manuel Sala", "de Tomás Dakkache").
-- Cuando te pidan resumen de una CC, desagregá: (1) ingresos por origen y (2) egresos por destino, usando nota e impacta_caja.
-- Cuando te pidan resumen del día de una CC específica, mostrá: total recibido (por origen), total enviado (por destino: caja física vs otras CCs), neto por moneda.
-- Cuando te pregunten por montos de CC de un cliente en un período, sumá por tipo y moneda.
-- Los saldos de CC están en el campo "saldos" de cada cliente (son saldos ACTUALES, no históricos).
-- Si no hay datos para el período consultado, decilo claramente indicando qué período buscaste.
-- Nunca inventes datos. Solo usá la información del contexto.
-- Sé conciso. Usá números con formato argentino (puntos de miles, coma decimal).
-- Si te piden un resumen del día, incluí: operaciones de cambio, movimientos de CC que impactan caja, y gastos.
-- Si te piden validar el cierre del día de una CC, mostrá: saldo actual por moneda, movimientos del día desagregados por destino/origen, y neto del día por moneda.`;
+CONTEXTO BASE:
+- Hoy: ${ctx.hoy} | Período analizado: ${ctx.periodoConsultado} (${ctx.rangoDesde} → ${ctx.rangoHasta})
+- Intención detectada: ${ctx.intencion}
+- Clientes con CC (saldos actuales): ${JSON.stringify(ctx.clientes.map(c=>({id:c.id,nombre:c.nombre,socio:c.socio,saldos:c.saldos})))}
+${bloqueEspecifico}
+REGLAS GENERALES:
+- Nunca inventes datos. Solo usá lo que está en el contexto.
+- Números en formato argentino: puntos de miles, coma decimal (ej: $1.234.567,89).
+- Respondé siempre según el período consultado, no asumas que es hoy.
+- Si no hay datos para el período, decilo claramente.
+
+REGLAS CONTABLES DE CC:
+- ingreso_transf / ingreso_dep = el cliente recibió fondos (STS le debe más al cliente).
+- retiro_transf / retiro_efectivo = el cliente entregó fondos (cliente pagó a STS o retiró).
+- impacta_caja=true = tocó la caja física de STS. impacta_caja=false = movimiento entre CCs.
+- nota = origen o destino del movimiento.
+
+FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
+- cheques: tabla con columnas mes | cantidad | nominal | ganancia | TM promedio + totales y observaciones.
+- posicion: tabla cliente | ARS | USD | (otras monedas) ordenada por saldo. Destacá quién debe y quién tiene saldo a favor.
+- resumen_dia: sección por sección — (1) operaciones de cambio, (2) cheques, (3) movimientos caja, (4) PnL si disponible. Formato validable por el empleado.
+- compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
+- cc_cliente: detalle cronológico de movimientos con subtotales por moneda. Mostrá adónde fueron y de dónde vinieron.
+- comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
+- general: respondé libremente con los datos disponibles.`;
 
       const historial = nuevosMsgs.slice(-10).map(m => ({
         role: m.rol === "usuario" ? "user" : "assistant",
