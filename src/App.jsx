@@ -9433,7 +9433,7 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
 - comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
 - general: respondé libremente con los datos disponibles.`;
 
-      const historial = nuevosMsgs.slice(-10).map(m => ({
+      const historial = nuevosMsgs.slice(-6).map(m => ({
         role: m.rol === "usuario" ? "user" : "assistant",
         content: m.texto
       }));
@@ -9442,11 +9442,18 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "anthropic-beta": "prompt-caching-2024-07-31"
         },
         body: JSON.stringify({
-          model: "claude-opus-4-5",
-          max_tokens: 1024,
-          system: systemPrompt,
+          model: "claude-sonnet-4-5",
+          max_tokens: 2048,
+          system: [
+            {
+              type: "text",
+              text: systemPrompt,
+              cache_control: { type: "ephemeral" }
+            }
+          ],
           messages: historial
         })
       });
