@@ -9368,6 +9368,34 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         g.fecha >= rango.desde && g.fecha <= rango.hasta
       );
 
+      // Cheques cobrados en el período (la operacion cobro_dif los registra con fecha)
+      // Modo "caja": nota no incluye "→ CC" → impactó caja física
+      // Modo "cc": nota incluye "→ CC" → acreditó en CC del cliente (retiro_transf en movimientos_cc)
+      const chequesCobradosPeriodo = (opsRec || [])
+        .filter(o => o.tipo === "cobro_dif")
+        .map(o => ({
+          fecha: o.fecha, hora: o.hora,
+          cliente: o.datos?.cliente,
+          monto: o.datos?.monto,
+          nota: o.datos?.nota,
+          destino: (o.datos?.nota || "").includes("→ CC") ? "cc" : "caja"
+        }));
+
+      // Variación por CC cliente: qué movimientos CC de cada cliente explican el cambio
+      // Agrupamos los movsRecCC por cliente para que el LLM pueda explicar quién cambió qué
+      const varCCPorCliente = {};
+      (movsRecCC || []).forEach(mv => {
+        const cNombre = clientes.find(c => c.id === mv.cliente_id)
+          ? nombreCliente(clientes.find(c => c.id === mv.cliente_id))
+          : `cliente_id=${mv.cliente_id}`;
+        if (!varCCPorCliente[cNombre]) varCCPorCliente[cNombre] = [];
+        varCCPorCliente[cNombre].push({
+          fecha: mv.fecha, hora: mv.hora, tipo: mv.tipo,
+          moneda: mv.moneda, monto: mv.monto,
+          nota: mv.nota, impacta_caja: mv.impacta_caja
+        });
+      });
+
       // Agrupar operaciones por tipo
       const opsPorTipoRec = {};
       (opsRec || []).forEach(o => {
@@ -9448,10 +9476,13 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         posiblesDuplicados,
         movimientosInternos: movsSoloInternos,
         gastosDelPeriodo: gastosRec,
+        chequesCobrados: chequesCobradosPeriodo,
+        varCCPorCliente,
         resumenOps: {
           totalOperaciones: (opsRec || []).length,
           totalMovCC: (movsRecCC || []).length,
-          totalGastos: gastosRec.length
+          totalGastos: gastosRec.length,
+          chequesCobrados: chequesCobradosPeriodo.length
         }
       };
     }
@@ -9608,17 +9639,20 @@ RECONCILIACIÓN DE CAJA (caja física + CCs — sin cierre formal):
 - Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc}
   · Caja física: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosFisicos)}
   · CCs neto (positivo = nos deben, negativo = debemos): ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosCC)}
-  · TOTAL combinado por moneda: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosTotal)}
+  · TOTAL combinado: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosTotal)}
 - Snapshot POSTERIOR (${ctx.reconciliacion.snapDespues.fecha}): total USD ${ctx.reconciliacion.snapDespues.total_usd} | TC ${ctx.reconciliacion.snapDespues.tc}
   · Caja física: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosFisicos)}
   · CCs neto: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosCC)}
-  · TOTAL combinado por moneda: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosTotal)}
+  · TOTAL combinado: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosTotal)}
 - DIFERENCIA TOTAL: ${ctx.reconciliacion.deltaUSD >= 0 ? "+" : ""}${ctx.reconciliacion.deltaUSD} USD
-- Por moneda: ${JSON.stringify(ctx.reconciliacion.diferenciaPorMoneda)}
-- TC utilizado para conversión: ${ctx.reconciliacion.tcUsado}
-- Operaciones del período (${ctx.reconciliacion.resumenOps.totalOperaciones} ops): ${JSON.stringify(ctx.reconciliacion.operacionesDetalle)}
+- Por moneda (con desglose físico vs CC): ${JSON.stringify(ctx.reconciliacion.diferenciaPorMoneda)}
+- TC utilizado: ${ctx.reconciliacion.tcUsado}
+- Operaciones del período (${ctx.reconciliacion.resumenOps.totalOperaciones} ops, ${ctx.reconciliacion.resumenOps.chequesCobrados} cobros_dif): ${JSON.stringify(ctx.reconciliacion.operacionesDetalle)}
 - Resumen por tipo de op: ${JSON.stringify(ctx.reconciliacion.operacionesPorTipo)}
-- Movimientos CC solo internos (no impactan caja física): ${JSON.stringify(ctx.reconciliacion.movimientosInternos)}
+- Cheques cobrados en el período (${ctx.reconciliacion.resumenOps.chequesCobrados} cheques): ${JSON.stringify(ctx.reconciliacion.chequesCobrados)}
+  NOTA: destino "caja" = entró ARS físico; destino "cc" = acreditó en CC del cliente como retiro_transf (sube saldo positivo CC).
+- Variación de CCs por cliente en el período: ${JSON.stringify(ctx.reconciliacion.varCCPorCliente)}
+- Movimientos CC internos (no impactan caja física, solo mueven entre CCs): ${JSON.stringify(ctx.reconciliacion.movimientosInternos)}
 - Gastos del período: ${JSON.stringify(ctx.reconciliacion.gastosDelPeriodo)}
 ${ctx.reconciliacion.posiblesDuplicados.length > 0 ? `⚠️ POSIBLES DUPLICADOS DETECTADOS: ${JSON.stringify(ctx.reconciliacion.posiblesDuplicados)}` : "- Sin duplicados detectados automáticamente."}
 ` : ctx.analisisCheques ? `
@@ -9681,10 +9715,12 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
 - reconciliacion_caja: estructurá la respuesta así:
   1. **Resumen ejecutivo**: "Entre [fecha1] y [fecha2] la caja total (física + CCs) pasó de USD X a USD Y (delta: +/-Z USD)."
   2. **Por componente**: mostrá por separado caja física vs CCs neto para cada snapshot. Formato: "Caja física: USD X | CCs neto: USD Y | Total: USD Z"
-  3. **Por moneda**: tabla moneda | físico anterior | CC anterior | total anterior | físico actual | CC actual | total actual | delta. Para ARS convertí a USD al TC.
-  4. **Explicación por movimientos**: listá cronológicamente todas las operaciones y movimientos que explican la variación. Para cada uno indicá si sube o baja la caja y cuánto en USD.
-  5. **Balance explicado**: sumá los movimientos y compará con el delta real. Si cuadra, confirmalo. Si hay gap residual, señalalo como posible error no registrado.
-  6. **⚠️ Alertas**: si detectaste posibles duplicados o movimientos sospechosos, mencionálos explícitamente con hora y monto. Redactá de forma que el empleado pueda validar o refutar cada punto.
+  3. **Por moneda**: tabla moneda | físico ant. | CC ant. | total ant. | físico act. | CC act. | total act. | delta. Para ARS convertí a USD al TC.
+  4. **Cheques cobrados**: si hubo cobros_dif en el período, listálos. Indicá si fueron a caja (ARS físico entró) o a CC del cliente (sube saldo CC, no entra a caja física). Esto es clave para explicar variaciones de CC.
+  5. **Variación de CCs por cliente**: para cada cliente cuya CC cambió en el período, explicá qué movimientos generaron el cambio (tipo, monto, nota). Si fue un cobro de cheque acreditado, decilo explícitamente.
+  6. **Explicación por movimientos**: listá cronológicamente el resto de operaciones que explican la variación de caja física.
+  7. **Balance explicado**: sumá todos los movimientos y compará con el delta real. Si cuadra, confirmalo. Si hay gap residual, señalalo.
+  8. **⚠️ Alertas**: duplicados o movimientos sospechosos con hora y monto. Redactá para que el empleado pueda validar o refutar.
 - compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
 - cc_cliente: detalle cronológico de movimientos con subtotales por moneda. Mostrá adónde fueron y de dónde vinieron.
 - comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
