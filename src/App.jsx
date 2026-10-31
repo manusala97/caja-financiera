@@ -9288,7 +9288,37 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       // TC: usar cotizaciones del estado de la app (ya en memoria), o fallback 1160
       const tcRec = Number(cotizaciones?.tc || cotizaciones?.USD || 1160);
 
-      // Calcular total USD de cada snapshot
+      // ── Saldos CC por moneda hasta cada fecha ──────────────────────────────
+      // Los clientes ya tienen sus movimientos cargados en memoria (c.movimientos).
+      // Acumulamos saldo de CCs hasta fechaSnapAntes y fechaSnapDespues para
+      // sumarlos al saldo físico de caja (igual que hace saldoCCHasta en otras pantallas).
+      const calcSaldoCCHasta = (fechaLimite) => {
+        const totCC = { ARS: 0, USD: 0, USDT: 0, EUR: 0, BRL: 0, GBP: 0, CLP: 0 };
+        clientes.forEach(c => {
+          (c.movimientos || []).forEach(mv => {
+            if (!mv || !mv.moneda || !mv.monto) return;
+            if ((mv.fecha || "") > fechaLimite) return; // solo hasta la fecha
+            const mon = String(mv.moneda).trim().toUpperCase();
+            if (totCC[mon] === undefined) return;
+            const ing = mv.tipo === "ingreso_transf" || mv.tipo === "ingreso_dep";
+            // saldoCC positivo = cliente nos debe (activo); negativo = nosotros debemos (pasivo)
+            // Para el total de la caja, el saldo positivo (nos deben) no es caja física pero
+            // en la vista total se suma como activo neto de CCs
+            totCC[mon] += ing ? -Number(mv.monto) : Number(mv.monto);
+          });
+        });
+        return totCC;
+      };
+
+      const ccAntes   = calcSaldoCCHasta(fechaSnapAntes);
+      const ccDespues = calcSaldoCCHasta(fechaSnapDespues);
+
+      // Saldos combinados: caja física + CCs
+      const monedasRec = ["ARS","USD","USDT","EUR","BRL","GBP","CLP"];
+      const saldosTotAntes   = Object.fromEntries(monedasRec.map(m => [m, Number(saldosAntes[m]  || 0) + Number(ccAntes[m]  || 0)]));
+      const saldosTotDespues = Object.fromEntries(monedasRec.map(m => [m, Number(saldosDespues[m] || 0) + Number(ccDespues[m] || 0)]));
+
+      // Calcular total USD de cada snapshot (caja física + CCs)
       const calcTotalUSD = (saldos) => {
         if (!saldos || !Object.keys(saldos).length) return 0;
         const ars   = Number(saldos.ARS  || 0) / tcRec;
@@ -9301,17 +9331,20 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         return ars + usd + usdt + eur + brl + gbp + clp;
       };
 
-      const totalUsdAntes   = calcTotalUSD(saldosAntes);
-      const totalUsdDespues = calcTotalUSD(saldosDespues);
+      const totalUsdAntes   = calcTotalUSD(saldosTotAntes);
+      const totalUsdDespues = calcTotalUSD(saldosTotDespues);
       const deltaUSD        = totalUsdDespues - totalUsdAntes;
 
-      // Diferencia por moneda
-      const monedasRec = ["ARS","USD","USDT","EUR","BRL","GBP","CLP"];
+      // Diferencia por moneda (caja física + CCs)
       const diferenciaPorMoneda = monedasRec.map(m => {
-        const antes   = Number(saldosAntes[m]   || 0);
-        const despues = Number(saldosDespues[m] || 0);
+        const fisicoAntes   = Number(saldosAntes[m]   || 0);
+        const fisicoDespues = Number(saldosDespues[m] || 0);
+        const ccA = Number(ccAntes[m]   || 0);
+        const ccD = Number(ccDespues[m] || 0);
+        const antes   = fisicoAntes   + ccA;
+        const despues = fisicoDespues + ccD;
         const delta   = despues - antes;
-        return { moneda: m, antes, despues, delta };
+        return { moneda: m, antes, despues, delta, fisicoAntes, fisicoDespues, ccAntes: ccA, ccDespues: ccD };
       }).filter(d => d.antes !== 0 || d.despues !== 0 || d.delta !== 0);
 
       // Operaciones del período
@@ -9385,16 +9418,20 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         // porque la fuente es dias.caja_ini, no cierres
         snapAntes: {
           fecha: fechaSnapAntes,
-          fuente: "dias.caja_ini (apertura del día)",
+          fuente: "dias.caja_ini (caja física) + CCs acumulados hasta esa fecha",
           total_usd: Math.round(totalUsdAntes * 100) / 100,
-          saldos: saldosAntes,
+          saldosFisicos: saldosAntes,
+          saldosCC: ccAntes,
+          saldosTotal: saldosTotAntes,
           tc: tcRec
         },
         snapDespues: {
           fecha: fechaSnapDespues,
-          fuente: "dias.caja_ini (apertura del día siguiente)",
+          fuente: "dias.caja_ini (caja física) + CCs acumulados hasta esa fecha",
           total_usd: Math.round(totalUsdDespues * 100) / 100,
-          saldos: saldosDespues,
+          saldosFisicos: saldosDespues,
+          saldosCC: ccDespues,
+          saldosTotal: saldosTotDespues,
           tc: tcRec
         },
         deltaUSD: Math.round(deltaUSD * 100) / 100,
@@ -9567,9 +9604,15 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       const ctx = await buildContexto(texto);
 
       const bloqueEspecifico = ctx.reconciliacion ? `
-RECONCILIACIÓN DE CAJA (basada en aperturas de día — dias.caja_ini):
-- Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha} — ${ctx.reconciliacion.snapAntes.fuente}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldos)}
-- Snapshot POSTERIOR (${ctx.reconciliacion.snapDespues.fecha} — ${ctx.reconciliacion.snapDespues.fuente}): total USD ${ctx.reconciliacion.snapDespues.total_usd} | TC ${ctx.reconciliacion.snapDespues.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldos)}
+RECONCILIACIÓN DE CAJA (caja física + CCs — sin cierre formal):
+- Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc}
+  · Caja física: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosFisicos)}
+  · CCs neto (positivo = nos deben, negativo = debemos): ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosCC)}
+  · TOTAL combinado por moneda: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosTotal)}
+- Snapshot POSTERIOR (${ctx.reconciliacion.snapDespues.fecha}): total USD ${ctx.reconciliacion.snapDespues.total_usd} | TC ${ctx.reconciliacion.snapDespues.tc}
+  · Caja física: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosFisicos)}
+  · CCs neto: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosCC)}
+  · TOTAL combinado por moneda: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldosTotal)}
 - DIFERENCIA TOTAL: ${ctx.reconciliacion.deltaUSD >= 0 ? "+" : ""}${ctx.reconciliacion.deltaUSD} USD
 - Por moneda: ${JSON.stringify(ctx.reconciliacion.diferenciaPorMoneda)}
 - TC utilizado para conversión: ${ctx.reconciliacion.tcUsado}
@@ -9636,11 +9679,12 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
 - posicion: tabla cliente | ARS | USD | (otras monedas) ordenada por saldo. Destacá quién debe y quién tiene saldo a favor.
 - resumen_dia: sección por sección — (1) operaciones de cambio, (2) cheques, (3) movimientos caja, (4) PnL si disponible. Formato validable por el empleado.
 - reconciliacion_caja: estructurá la respuesta así:
-  1. **Resumen ejecutivo**: "Entre [fecha1] y [fecha2] la caja pasó de USD X a USD Y (delta: +/-Z USD)."
-  2. **Por moneda**: tabla moneda | saldo anterior | saldo actual | diferencia. Para ARS convertila a USD al TC para mostrar el impacto.
-  3. **Explicación por movimientos**: listá cronológicamente todas las operaciones y movimientos que explican la variación. Para cada uno indicá si sube o baja la caja y cuánto en USD.
-  4. **Balance explicado**: sumá los movimientos y compará con el delta real. Si cuadra, confirmalo. Si hay gap residual, señalalo como posible error no registrado.
-  5. **⚠️ Alertas**: si detectaste posibles duplicados o movimientos sospechosos, mencionálos explícitamente con hora y monto. Redactá de forma que el empleado pueda validar o refutar cada punto.
+  1. **Resumen ejecutivo**: "Entre [fecha1] y [fecha2] la caja total (física + CCs) pasó de USD X a USD Y (delta: +/-Z USD)."
+  2. **Por componente**: mostrá por separado caja física vs CCs neto para cada snapshot. Formato: "Caja física: USD X | CCs neto: USD Y | Total: USD Z"
+  3. **Por moneda**: tabla moneda | físico anterior | CC anterior | total anterior | físico actual | CC actual | total actual | delta. Para ARS convertí a USD al TC.
+  4. **Explicación por movimientos**: listá cronológicamente todas las operaciones y movimientos que explican la variación. Para cada uno indicá si sube o baja la caja y cuánto en USD.
+  5. **Balance explicado**: sumá los movimientos y compará con el delta real. Si cuadra, confirmalo. Si hay gap residual, señalalo como posible error no registrado.
+  6. **⚠️ Alertas**: si detectaste posibles duplicados o movimientos sospechosos, mencionálos explícitamente con hora y monto. Redactá de forma que el empleado pueda validar o refutar cada punto.
 - compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
 - cc_cliente: detalle cronológico de movimientos con subtotales por moneda. Mostrá adónde fueron y de dónde vinieron.
 - comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
