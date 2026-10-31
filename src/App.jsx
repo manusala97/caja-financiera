@@ -9712,15 +9712,19 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
 - cheques: tabla con columnas mes | cantidad | nominal (sin $ ni puntos, número puro) | ganancia (ídem) | TM% | TEM% | TEA% + fila de totales. Los montos en la tabla deben ser números puros sin símbolo $ ni separadores de miles para que sean procesables. Debajo de la tabla mostrá el resumen: "Facturación total: X | TEM global: Y% | TEA equivalente: Z%".
 - posicion: tabla cliente | ARS | USD | (otras monedas) ordenada por saldo. Destacá quién debe y quién tiene saldo a favor.
 - resumen_dia: sección por sección — (1) operaciones de cambio, (2) cheques, (3) movimientos caja, (4) PnL si disponible. Formato validable por el empleado.
-- reconciliacion_caja: estructurá la respuesta así:
-  1. **Resumen ejecutivo**: "Entre [fecha1] y [fecha2] la caja total (física + CCs) pasó de USD X a USD Y (delta: +/-Z USD)."
-  2. **Por componente**: mostrá por separado caja física vs CCs neto para cada snapshot. Formato: "Caja física: USD X | CCs neto: USD Y | Total: USD Z"
-  3. **Por moneda**: tabla moneda | físico ant. | CC ant. | total ant. | físico act. | CC act. | total act. | delta. Para ARS convertí a USD al TC.
-  4. **Cheques cobrados**: si hubo cobros_dif en el período, listálos. Indicá si fueron a caja (ARS físico entró) o a CC del cliente (sube saldo CC, no entra a caja física). Esto es clave para explicar variaciones de CC.
-  5. **Variación de CCs por cliente**: para cada cliente cuya CC cambió en el período, explicá qué movimientos generaron el cambio (tipo, monto, nota). Si fue un cobro de cheque acreditado, decilo explícitamente.
-  6. **Explicación por movimientos**: listá cronológicamente el resto de operaciones que explican la variación de caja física.
-  7. **Balance explicado**: sumá todos los movimientos y compará con el delta real. Si cuadra, confirmalo. Si hay gap residual, señalalo.
-  8. **⚠️ Alertas**: duplicados o movimientos sospechosos con hora y monto. Redactá para que el empleado pueda validar o refutar.
+- reconciliacion_caja: REGLAS CRÍTICAS antes de responder:
+  * Usá SOLO los datos que te dieron. Nunca digas "posibles causas" ni "necesito verificar" ni hagas preguntas al final — el análisis debe ser completo con lo que tenés.
+  * Si hay un gap que no cierra con los datos, señalalo como "Gap sin explicar: $X — puede ser un movimiento no registrado", pero no pidás más info.
+  * Nunca uses "¿Querés que profundice?" ni similares — la respuesta es siempre completa.
+  Estructura obligatoria:
+  1. **Resumen**: "Entre [fecha1] y [fecha2] la caja total (física + CCs) pasó de USD X a USD Y (Δ +/-Z USD)."
+  2. **Por componente**: Caja física anterior/actual y CCs neto anterior/actual, en USD.
+  3. **Por moneda** (tabla): moneda | físico ant. | CC ant. | total ant. | físico act. | CC act. | total act. | Δ. Para ARS dividí por TC para mostrar el impacto en USD.
+  4. **Detalle operación por operación** (cronológico): para CADA operación del período indicá — hora | tipo | cliente | moneda | monto | impacto en USD (+ o -) | destino (caja/CC). No agrupes, listá todas.
+  5. **Cheques cobrados**: para cada cobro_dif indicá si fue a caja (ARS entró físico) o a CC (acreditó como retiro_transf en CC del cliente).
+  6. **Variación de CCs por cliente**: para cada cliente con movimientos en el período, listá sus movimientos y el neto resultante. Si el cambio en CC viene de un cheque cobrado, decilo.
+  7. **Balance**: sumá el impacto de todas las operaciones y compará con el delta real. Si cuadra: "✅ Cierra". Si no: "⚠️ Gap sin explicar: [monto y moneda] — posible movimiento no registrado".
+  8. **Alertas**: duplicados o sospechosos con hora y monto exacto.
 - compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
 - cc_cliente: detalle cronológico de movimientos con subtotales por moneda. Mostrá adónde fueron y de dónde vinieron.
 - comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
