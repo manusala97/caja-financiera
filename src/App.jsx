@@ -9042,6 +9042,7 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     if (/cheque|diferido|endoso|descont/.test(p)) return "cheques";
     if (/posici[oó]n|saldo.*(cc|cuenta)|cu[aá]nto.*(debo|le debo|me deben)|foto.*pos|resumen.*socios/.test(p)) return "posicion";
     if (/resumen.*(d[ií]a|hoy|ayer)|cierre.*d[ií]a|validar.*d[ií]a|qu[eé].*hicimos/.test(p)) return "resumen_dia";
+    if (/reconcil|cuadr[ao]|diferencia.*(caja|saldo|total)|perdi[óo]|falt[ao]|sobr[ao]|no.*(cierra|cuadra|bate)|por.*(qu[eé]|donde).*(cambi[oó]|baj[oó]|subi[oó]|vari[oó])|movimiento.*(entre|de)\s*(ayer|jueves|lunes|martes|mi[eé]rcoles|viernes|s[aá]bado|domingo)/.test(p)) return "reconciliacion_caja";
     if (/compra|venta|cambio|operaci[oó]n.*moneda|cu[aá]nto.*oper[eé]|volumen/.test(p)) return "compras_ventas";
     if (/transferencia|transf|cc\s+de\s+\w|cu[aá]nto\s+(mueve|movi[oó])/.test(p)) return "cc_cliente";
     if (/comisi[oó]n|fee|cuanto.*cobra|cuanto.*deja/.test(p)) return "comisiones";
@@ -9224,6 +9225,148 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       };
     }
 
+    // RECONCILIACIÓN DE CAJA — compara dos cierres y explica la diferencia
+    if (intencion === "reconciliacion_caja") {
+      // Traer los dos últimos cierres del rango (o los más recientes con dato)
+      const { data: cierresRec } = await SB.from("cierres")
+        .select("fecha,saldos_finales,saldos_iniciales,total_usd,cotizaciones,ops_resumen")
+        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+        .order("fecha", { ascending: true });
+
+      // Si hay menos de 2, intentar extender hacia atrás para tomar el cierre anterior al rango
+      let cierresUsados = cierresRec || [];
+      if (cierresUsados.length < 2) {
+        const { data: cierreAnterior } = await SB.from("cierres")
+          .select("fecha,saldos_finales,saldos_iniciales,total_usd,cotizaciones,ops_resumen")
+          .lt("fecha", rango.desde)
+          .order("fecha", { ascending: false })
+          .limit(1);
+        if (cierreAnterior?.length) cierresUsados = [...cierreAnterior, ...cierresUsados];
+      }
+
+      const cierreAntes = cierresUsados[0];
+      const cierreDespues = cierresUsados[cierresUsados.length - 1];
+
+      // Diferencia total USD
+      const totalUsdAntes   = cierreAntes?.total_usd || 0;
+      const totalUsdDespues = cierreDespues?.total_usd || 0;
+      const deltaUSD        = totalUsdDespues - totalUsdAntes;
+
+      // Diferencia por moneda (saldos_finales es jsonb con { ARS, USD, USDT, ... })
+      const monedasRec = ["ARS","USD","USDT","EUR","BRL","GBP","CLP"];
+      const diferenciaPorMoneda = monedasRec.map(m => {
+        const antes   = Number(cierreAntes?.saldos_finales?.[m]  || 0);
+        const despues = Number(cierreDespues?.saldos_finales?.[m] || 0);
+        const delta   = despues - antes;
+        return { moneda: m, antes, despues, delta };
+      }).filter(d => d.antes !== 0 || d.despues !== 0 || d.delta !== 0);
+
+      // TC usado (para convertir ARS a USD en el análisis)
+      const tcRec = Number(cierreDespues?.cotizaciones?.tc || cierreAntes?.cotizaciones?.tc || 1160);
+
+      // Todas las operaciones del período para explicar la diferencia
+      const { data: opsRec } = await SB.from("operaciones")
+        .select("fecha,hora,tipo,datos")
+        .gte("fecha", cierreAntes?.fecha || rango.desde)
+        .lte("fecha", cierreDespues?.fecha || rango.hasta)
+        .order("fecha", { ascending: true })
+        .order("hora", { ascending: true });
+
+      // Movimientos CC que impactan caja (transferencias entre cuentas)
+      const { data: movsRecCC } = await SB.from("movimientos_cc")
+        .select("fecha,hora,tipo,moneda,monto,nota,impacta_caja,cliente_id")
+        .gte("fecha", cierreAntes?.fecha || rango.desde)
+        .lte("fecha", cierreDespues?.fecha || rango.hasta)
+        .order("fecha", { ascending: true })
+        .order("hora", { ascending: true });
+
+      // Gastos del período
+      const gastosRec = gastos.filter(g =>
+        g.fecha >= (cierreAntes?.fecha || rango.desde) &&
+        g.fecha <= (cierreDespues?.fecha || rango.hasta)
+      );
+
+      // Agrupar operaciones por tipo para detectar duplicados potenciales
+      const opsPorTipoRec = {};
+      (opsRec || []).forEach(o => {
+        const k = `${o.tipo}|${o.datos?.moneda || ""}`;
+        if (!opsPorTipoRec[k]) opsPorTipoRec[k] = { tipo: o.tipo, moneda: o.datos?.moneda, count: 0, monto_total: 0, ops: [] };
+        opsPorTipoRec[k].count++;
+        opsPorTipoRec[k].monto_total += Number(o.datos?.monto || 0);
+        opsPorTipoRec[k].ops.push({
+          fecha: o.fecha, hora: o.hora,
+          monto: o.datos?.monto, cotizacion: o.datos?.cotizacion,
+          cliente: o.datos?.cliente, nota: o.datos?.nota
+        });
+      });
+
+      // Detectar posibles duplicados: ops del mismo tipo/moneda/monto en el mismo día con <5min de diferencia
+      const posiblesDuplicados = [];
+      (opsRec || []).forEach((o, i) => {
+        (opsRec || []).slice(i + 1).forEach(o2 => {
+          if (o.tipo === o2.tipo &&
+              o.datos?.moneda === o2.datos?.moneda &&
+              Math.abs(Number(o.datos?.monto) - Number(o2.datos?.monto)) < 1 &&
+              o.fecha === o2.fecha) {
+            // Mismo tipo, moneda, monto y fecha → posible duplicado
+            const h1 = (o.hora  || "").replace(":","").slice(0,4);
+            const h2 = (o2.hora || "").replace(":","").slice(0,4);
+            if (Math.abs(Number(h1) - Number(h2)) < 10) {
+              posiblesDuplicados.push({
+                tipo: o.tipo, moneda: o.datos?.moneda,
+                monto: o.datos?.monto,
+                op1: { hora: o.hora,  cliente: o.datos?.cliente, nota: o.datos?.nota },
+                op2: { hora: o2.hora, cliente: o2.datos?.cliente, nota: o2.datos?.nota }
+              });
+            }
+          }
+        });
+      });
+
+      // Movimientos CC que son solo internos (impacta_caja = false) — transferencias entre CCs
+      const movsSoloInternos = (movsRecCC || []).filter(m => m.impacta_caja === false).map(m => ({
+        fecha: m.fecha, hora: m.hora, tipo: m.tipo, moneda: m.moneda, monto: m.monto,
+        nota: m.nota,
+        clienteNombre: clientes.find(c => c.id === m.cliente_id)
+          ? nombreCliente(clientes.find(c => c.id === m.cliente_id))
+          : m.cliente_id
+      }));
+
+      ctx.reconciliacion = {
+        cierreAntes: {
+          fecha: cierreAntes?.fecha,
+          total_usd: totalUsdAntes,
+          saldos: cierreAntes?.saldos_finales,
+          tc: cierreAntes?.cotizaciones?.tc
+        },
+        cierreDespues: {
+          fecha: cierreDespues?.fecha,
+          total_usd: totalUsdDespues,
+          saldos: cierreDespues?.saldos_finales,
+          tc: cierreDespues?.cotizaciones?.tc
+        },
+        deltaUSD,
+        tcUsado: tcRec,
+        diferenciaPorMoneda,
+        operacionesDetalle: (opsRec || []).map(o => ({
+          fecha: o.fecha, hora: o.hora, tipo: o.tipo,
+          moneda: o.datos?.moneda, monto: o.datos?.monto,
+          moneda2: o.datos?.moneda2, monto2: o.datos?.monto2,
+          cotizacion: o.datos?.cotizacion,
+          cliente: o.datos?.cliente, nota: o.datos?.nota
+        })),
+        operacionesPorTipo: Object.values(opsPorTipoRec),
+        posiblesDuplicados,
+        movimientosInternos: movsSoloInternos,
+        gastosDelPeriodo: gastosRec,
+        resumenOps: {
+          totalOperaciones: (opsRec || []).length,
+          totalMovCC: (movsRecCC || []).length,
+          totalGastos: gastosRec.length
+        }
+      };
+    }
+
     // 4. COMPRAS Y VENTAS por moneda
     if (intencion === "compras_ventas") {
       const { data: opsDetalle } = await SB.from("operaciones")
@@ -9371,7 +9514,19 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
     try {
       const ctx = await buildContexto(texto);
 
-      const bloqueEspecifico = ctx.analisisCheques ? `
+      const bloqueEspecifico = ctx.reconciliacion ? `
+RECONCILIACIÓN DE CAJA:
+- Cierre ANTERIOR (${ctx.reconciliacion.cierreAntes.fecha}): total USD ${ctx.reconciliacion.cierreAntes.total_usd} | TC ${ctx.reconciliacion.cierreAntes.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.cierreAntes.saldos)}
+- Cierre POSTERIOR (${ctx.reconciliacion.cierreDespues.fecha}): total USD ${ctx.reconciliacion.cierreDespues.total_usd} | TC ${ctx.reconciliacion.cierreDespues.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.cierreDespues.saldos)}
+- DIFERENCIA TOTAL: ${ctx.reconciliacion.deltaUSD >= 0 ? "+" : ""}${ctx.reconciliacion.deltaUSD} USD
+- Por moneda: ${JSON.stringify(ctx.reconciliacion.diferenciaPorMoneda)}
+- TC utilizado para conversión: ${ctx.reconciliacion.tcUsado}
+- Operaciones del período (${ctx.reconciliacion.resumenOps.totalOperaciones} ops): ${JSON.stringify(ctx.reconciliacion.operacionesDetalle)}
+- Resumen por tipo de op: ${JSON.stringify(ctx.reconciliacion.operacionesPorTipo)}
+- Movimientos CC solo internos (no impactan caja física): ${JSON.stringify(ctx.reconciliacion.movimientosInternos)}
+- Gastos del período: ${JSON.stringify(ctx.reconciliacion.gastosDelPeriodo)}
+${ctx.reconciliacion.posiblesDuplicados.length > 0 ? `⚠️ POSIBLES DUPLICADOS DETECTADOS: ${JSON.stringify(ctx.reconciliacion.posiblesDuplicados)}` : "- Sin duplicados detectados automáticamente."}
+` : ctx.analisisCheques ? `
 ANÁLISIS DE CHEQUES (${ctx.periodoConsultado}):
 - Resumen por mes: ${JSON.stringify(ctx.analisisCheques.porMes)}
 - Totales: ${JSON.stringify(ctx.analisisCheques.totales)}
@@ -9428,6 +9583,12 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
 - cheques: tabla con columnas mes | cantidad | nominal (sin $ ni puntos, número puro) | ganancia (ídem) | TM% | TEM% | TEA% + fila de totales. Los montos en la tabla deben ser números puros sin símbolo $ ni separadores de miles para que sean procesables. Debajo de la tabla mostrá el resumen: "Facturación total: X | TEM global: Y% | TEA equivalente: Z%".
 - posicion: tabla cliente | ARS | USD | (otras monedas) ordenada por saldo. Destacá quién debe y quién tiene saldo a favor.
 - resumen_dia: sección por sección — (1) operaciones de cambio, (2) cheques, (3) movimientos caja, (4) PnL si disponible. Formato validable por el empleado.
+- reconciliacion_caja: estructurá la respuesta así:
+  1. **Resumen ejecutivo**: "Entre [fecha1] y [fecha2] la caja pasó de USD X a USD Y (delta: +/-Z USD)."
+  2. **Por moneda**: tabla moneda | saldo anterior | saldo actual | diferencia. Para ARS convertila a USD al TC para mostrar el impacto.
+  3. **Explicación por movimientos**: listá cronológicamente todas las operaciones y movimientos que explican la variación. Para cada uno indicá si sube o baja la caja y cuánto en USD.
+  4. **Balance explicado**: sumá los movimientos y compará con el delta real. Si cuadra, confirmalo. Si hay gap residual, señalalo como posible error no registrado.
+  5. **⚠️ Alertas**: si detectaste posibles duplicados o movimientos sospechosos, mencionálos explícitamente con hora y monto. Redactá de forma que el empleado pueda validar o refutar cada punto.
 - compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
 - cc_cliente: detalle cronológico de movimientos con subtotales por moneda. Mostrá adónde fueron y de dónde vinieron.
 - comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
