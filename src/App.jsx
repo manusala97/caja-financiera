@@ -9225,68 +9225,117 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       };
     }
 
-    // RECONCILIACIÓN DE CAJA — compara dos cierres y explica la diferencia
+    // RECONCILIACIÓN DE CAJA — compara snapshots de apertura de días (dias.caja_ini)
+    // NO usa la tabla cierres porque el usuario puede no cerrar el día formalmente.
+    // dias.caja_ini._saldos_finales = saldos físicos al abrir ese día
+    //   → saldo "al cierre del día X" = dias[X+1].caja_ini (lo que había al abrir el día siguiente)
     if (intencion === "reconciliacion_caja") {
-      // Traer los dos últimos cierres del rango (o los más recientes con dato)
-      const { data: cierresRec } = await SB.from("cierres")
-        .select("fecha,saldos_finales,saldos_iniciales,total_usd,cotizaciones,ops_resumen")
-        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
-        .order("fecha", { ascending: true });
+      // Necesitamos el día DESPUÉS del rango para capturar el snapshot "fin del último día"
+      const fechaDespuesRango = (() => {
+        const d = new Date(rango.hasta);
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().slice(0, 10);
+      })();
 
-      // Si hay menos de 2, intentar extender hacia atrás para tomar el cierre anterior al rango
-      let cierresUsados = cierresRec || [];
-      if (cierresUsados.length < 2) {
-        const { data: cierreAnterior } = await SB.from("cierres")
-          .select("fecha,saldos_finales,saldos_iniciales,total_usd,cotizaciones,ops_resumen")
-          .lt("fecha", rango.desde)
-          .order("fecha", { ascending: false })
-          .limit(1);
-        if (cierreAnterior?.length) cierresUsados = [...cierreAnterior, ...cierresUsados];
+      // Traer registros de dias desde un día antes del rango hasta un día después
+      // para cubrir el snapshot de apertura del día anterior y del día siguiente
+      const fechaAntesRango = (() => {
+        const d = new Date(rango.desde);
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().slice(0, 10);
+      })();
+
+      const { data: diasRec } = await SB.from("dias")
+        .select("id,caja_ini,abierta")
+        .gte("id", fechaAntesRango)
+        .lte("id", fechaDespuesRango)
+        .order("id", { ascending: true });
+
+      // Función auxiliar: dado un array de días, encontrar el snapshot más cercano
+      // "saldo al cierre del día fechaX" = caja_ini del día siguiente disponible
+      const snapPorFecha = {};
+      (diasRec || []).forEach(d => {
+        snapPorFecha[d.id] = d.caja_ini?._saldos_finales || d.caja_ini || null;
+      });
+
+      // Día "anterior" al rango = el día en rango.desde o el anterior si no hay
+      // Día "posterior" = rango.hasta+1 (snapshot al abrir el día siguiente = fin del rango.hasta)
+      // Si no hay snapshot del día siguiente, usamos el del mismo día (apertura = saldo de ayer)
+      let fechaSnapAntes   = rango.desde;
+      let fechaSnapDespues = fechaDespuesRango;
+
+      // Si no hay snapshot exacto, buscar el más cercano disponible
+      const diasDisponibles = Object.keys(snapPorFecha).sort();
+      if (!snapPorFecha[fechaSnapAntes] && diasDisponibles.length) {
+        // Tomar el primer día disponible en o antes del rango.desde
+        const candidatos = diasDisponibles.filter(f => f <= rango.desde);
+        if (candidatos.length) fechaSnapAntes = candidatos[candidatos.length - 1];
+      }
+      if (!snapPorFecha[fechaSnapDespues] && diasDisponibles.length) {
+        // Tomar el primer día disponible después del rango.hasta
+        const candidatos = diasDisponibles.filter(f => f > rango.hasta);
+        if (candidatos.length) fechaSnapDespues = candidatos[0];
+        else {
+          // Si no hay día siguiente abierto, usar el último del rango
+          const candidatosFin = diasDisponibles.filter(f => f >= rango.desde && f <= rango.hasta);
+          if (candidatosFin.length) fechaSnapDespues = candidatosFin[candidatosFin.length - 1];
+        }
       }
 
-      const cierreAntes = cierresUsados[0];
-      const cierreDespues = cierresUsados[cierresUsados.length - 1];
+      const saldosAntes   = snapPorFecha[fechaSnapAntes]   || {};
+      const saldosDespues = snapPorFecha[fechaSnapDespues] || {};
 
-      // Diferencia total USD
-      const totalUsdAntes   = cierreAntes?.total_usd || 0;
-      const totalUsdDespues = cierreDespues?.total_usd || 0;
+      // TC: usar cotizaciones del estado de la app (ya en memoria), o fallback 1160
+      const tcRec = Number(cotizaciones?.tc || cotizaciones?.USD || 1160);
+
+      // Calcular total USD de cada snapshot
+      const calcTotalUSD = (saldos) => {
+        if (!saldos || !Object.keys(saldos).length) return 0;
+        const ars   = Number(saldos.ARS  || 0) / tcRec;
+        const usd   = Number(saldos.USD  || 0);
+        const usdt  = Number(saldos.USDT || 0);
+        const eur   = Number(saldos.EUR  || 0) * Number(cotizaciones?.EUR || 1.1);
+        const brl   = Number(saldos.BRL  || 0) / Number(cotizaciones?.BRL || 6.0);
+        const gbp   = Number(saldos.GBP  || 0) * Number(cotizaciones?.GBP || 1.25);
+        const clp   = Number(saldos.CLP  || 0) / Number(cotizaciones?.CLP || 900);
+        return ars + usd + usdt + eur + brl + gbp + clp;
+      };
+
+      const totalUsdAntes   = calcTotalUSD(saldosAntes);
+      const totalUsdDespues = calcTotalUSD(saldosDespues);
       const deltaUSD        = totalUsdDespues - totalUsdAntes;
 
-      // Diferencia por moneda (saldos_finales es jsonb con { ARS, USD, USDT, ... })
+      // Diferencia por moneda
       const monedasRec = ["ARS","USD","USDT","EUR","BRL","GBP","CLP"];
       const diferenciaPorMoneda = monedasRec.map(m => {
-        const antes   = Number(cierreAntes?.saldos_finales?.[m]  || 0);
-        const despues = Number(cierreDespues?.saldos_finales?.[m] || 0);
+        const antes   = Number(saldosAntes[m]   || 0);
+        const despues = Number(saldosDespues[m] || 0);
         const delta   = despues - antes;
         return { moneda: m, antes, despues, delta };
       }).filter(d => d.antes !== 0 || d.despues !== 0 || d.delta !== 0);
 
-      // TC usado (para convertir ARS a USD en el análisis)
-      const tcRec = Number(cierreDespues?.cotizaciones?.tc || cierreAntes?.cotizaciones?.tc || 1160);
-
-      // Todas las operaciones del período para explicar la diferencia
+      // Operaciones del período
       const { data: opsRec } = await SB.from("operaciones")
         .select("fecha,hora,tipo,datos")
-        .gte("fecha", cierreAntes?.fecha || rango.desde)
-        .lte("fecha", cierreDespues?.fecha || rango.hasta)
+        .gte("fecha", rango.desde)
+        .lte("fecha", rango.hasta)
         .order("fecha", { ascending: true })
         .order("hora", { ascending: true });
 
-      // Movimientos CC que impactan caja (transferencias entre cuentas)
+      // Movimientos CC del período
       const { data: movsRecCC } = await SB.from("movimientos_cc")
         .select("fecha,hora,tipo,moneda,monto,nota,impacta_caja,cliente_id")
-        .gte("fecha", cierreAntes?.fecha || rango.desde)
-        .lte("fecha", cierreDespues?.fecha || rango.hasta)
+        .gte("fecha", rango.desde)
+        .lte("fecha", rango.hasta)
         .order("fecha", { ascending: true })
         .order("hora", { ascending: true });
 
       // Gastos del período
       const gastosRec = gastos.filter(g =>
-        g.fecha >= (cierreAntes?.fecha || rango.desde) &&
-        g.fecha <= (cierreDespues?.fecha || rango.hasta)
+        g.fecha >= rango.desde && g.fecha <= rango.hasta
       );
 
-      // Agrupar operaciones por tipo para detectar duplicados potenciales
+      // Agrupar operaciones por tipo
       const opsPorTipoRec = {};
       (opsRec || []).forEach(o => {
         const k = `${o.tipo}|${o.datos?.moneda || ""}`;
@@ -9300,7 +9349,7 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         });
       });
 
-      // Detectar posibles duplicados: ops del mismo tipo/moneda/monto en el mismo día con <5min de diferencia
+      // Detectar posibles duplicados: mismo tipo/moneda/monto mismo día con <10min de diferencia
       const posiblesDuplicados = [];
       (opsRec || []).forEach((o, i) => {
         (opsRec || []).slice(i + 1).forEach(o2 => {
@@ -9308,7 +9357,6 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
               o.datos?.moneda === o2.datos?.moneda &&
               Math.abs(Number(o.datos?.monto) - Number(o2.datos?.monto)) < 1 &&
               o.fecha === o2.fecha) {
-            // Mismo tipo, moneda, monto y fecha → posible duplicado
             const h1 = (o.hora  || "").replace(":","").slice(0,4);
             const h2 = (o2.hora || "").replace(":","").slice(0,4);
             if (Math.abs(Number(h1) - Number(h2)) < 10) {
@@ -9323,7 +9371,7 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         });
       });
 
-      // Movimientos CC que son solo internos (impacta_caja = false) — transferencias entre CCs
+      // Movimientos CC solo internos (no impactan caja física)
       const movsSoloInternos = (movsRecCC || []).filter(m => m.impacta_caja === false).map(m => ({
         fecha: m.fecha, hora: m.hora, tipo: m.tipo, moneda: m.moneda, monto: m.monto,
         nota: m.nota,
@@ -9333,19 +9381,23 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       }));
 
       ctx.reconciliacion = {
-        cierreAntes: {
-          fecha: cierreAntes?.fecha,
-          total_usd: totalUsdAntes,
-          saldos: cierreAntes?.saldos_finales,
-          tc: cierreAntes?.cotizaciones?.tc
+        // Renombrado de cierreAntes/Despues → snapAntes/snapDespues
+        // porque la fuente es dias.caja_ini, no cierres
+        snapAntes: {
+          fecha: fechaSnapAntes,
+          fuente: "dias.caja_ini (apertura del día)",
+          total_usd: Math.round(totalUsdAntes * 100) / 100,
+          saldos: saldosAntes,
+          tc: tcRec
         },
-        cierreDespues: {
-          fecha: cierreDespues?.fecha,
-          total_usd: totalUsdDespues,
-          saldos: cierreDespues?.saldos_finales,
-          tc: cierreDespues?.cotizaciones?.tc
+        snapDespues: {
+          fecha: fechaSnapDespues,
+          fuente: "dias.caja_ini (apertura del día siguiente)",
+          total_usd: Math.round(totalUsdDespues * 100) / 100,
+          saldos: saldosDespues,
+          tc: tcRec
         },
-        deltaUSD,
+        deltaUSD: Math.round(deltaUSD * 100) / 100,
         tcUsado: tcRec,
         diferenciaPorMoneda,
         operacionesDetalle: (opsRec || []).map(o => ({
@@ -9515,9 +9567,9 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       const ctx = await buildContexto(texto);
 
       const bloqueEspecifico = ctx.reconciliacion ? `
-RECONCILIACIÓN DE CAJA:
-- Cierre ANTERIOR (${ctx.reconciliacion.cierreAntes.fecha}): total USD ${ctx.reconciliacion.cierreAntes.total_usd} | TC ${ctx.reconciliacion.cierreAntes.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.cierreAntes.saldos)}
-- Cierre POSTERIOR (${ctx.reconciliacion.cierreDespues.fecha}): total USD ${ctx.reconciliacion.cierreDespues.total_usd} | TC ${ctx.reconciliacion.cierreDespues.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.cierreDespues.saldos)}
+RECONCILIACIÓN DE CAJA (basada en aperturas de día — dias.caja_ini):
+- Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha} — ${ctx.reconciliacion.snapAntes.fuente}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldos)}
+- Snapshot POSTERIOR (${ctx.reconciliacion.snapDespues.fecha} — ${ctx.reconciliacion.snapDespues.fuente}): total USD ${ctx.reconciliacion.snapDespues.total_usd} | TC ${ctx.reconciliacion.snapDespues.tc} | saldos: ${JSON.stringify(ctx.reconciliacion.snapDespues.saldos)}
 - DIFERENCIA TOTAL: ${ctx.reconciliacion.deltaUSD >= 0 ? "+" : ""}${ctx.reconciliacion.deltaUSD} USD
 - Por moneda: ${JSON.stringify(ctx.reconciliacion.diferenciaPorMoneda)}
 - TC utilizado para conversión: ${ctx.reconciliacion.tcUsado}
