@@ -9002,6 +9002,36 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       return { desde, hasta: hoyDate, label: "este mes" };
     }
 
+    // Días de semana relativos: "entre jueves y viernes", "del martes al miércoles", "jueves y viernes"
+    // También: "jueves" solo, "el viernes", etc.
+    const diasSemana = {
+      lunes: 1, martes: 2, "miércoles": 3, miercoles: 3,
+      jueves: 4, viernes: 5, "sábado": 6, sabado: 6, domingo: 0
+    };
+    // Detectar menciones de días en la pregunta
+    const diasMencionados = [];
+    for (const [nombre, num] of Object.entries(diasSemana)) {
+      if (p.includes(nombre)) diasMencionados.push({ nombre, num });
+    }
+    if (diasMencionados.length >= 1) {
+      // Calcular la fecha más reciente de cada día mencionado (hacia atrás desde hoy)
+      const fechasDias = diasMencionados.map(d => {
+        const dow = hoyObj.getDay(); // 0=dom
+        let diff = (dow - d.num + 7) % 7;
+        if (diff === 0) diff = 7; // si es hoy, tomamos la semana pasada para el análisis
+        const fecha = new Date(hoyObj);
+        fecha.setDate(hoyObj.getDate() - diff);
+        return { nombre: d.nombre, fecha: fmt_date(fecha) };
+      });
+      fechasDias.sort((a, b) => a.fecha.localeCompare(b.fecha));
+      const desde = fechasDias[0].fecha;
+      const hasta = fechasDias[fechasDias.length - 1].fecha;
+      const label = fechasDias.length === 1
+        ? `el ${fechasDias[0].nombre}`
+        : `${fechasDias[0].nombre} a ${fechasDias[fechasDias.length-1].nombre}`;
+      return { desde, hasta, label };
+    }
+
     // Fecha con formato dd/mm o dd/mm/yyyy o "el día N"
     // Primero intentar dd/mm/yyyy
     const matchFull = p.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/);
@@ -9347,25 +9377,28 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         return { moneda: m, antes, despues, delta, fisicoAntes, fisicoDespues, ccAntes: ccA, ccDespues: ccD };
       }).filter(d => d.antes !== 0 || d.despues !== 0 || d.delta !== 0);
 
-      // Operaciones del período
+      // Operaciones del período completo (desde snap anterior hasta snap posterior inclusive)
+      // Esto asegura que se ven las ops del jueves Y del viernes cuando se pregunta "entre jueves y viernes"
+      const opDesde = fechaSnapAntes;
+      const opHasta = fechaSnapDespues <= rango.hasta ? rango.hasta : fechaSnapDespues;
       const { data: opsRec } = await SB.from("operaciones")
         .select("fecha,hora,tipo,datos")
-        .gte("fecha", rango.desde)
-        .lte("fecha", rango.hasta)
+        .gte("fecha", opDesde)
+        .lte("fecha", opHasta)
         .order("fecha", { ascending: true })
         .order("hora", { ascending: true });
 
-      // Movimientos CC del período
+      // Movimientos CC del mismo período completo
       const { data: movsRecCC } = await SB.from("movimientos_cc")
         .select("fecha,hora,tipo,moneda,monto,nota,impacta_caja,cliente_id")
-        .gte("fecha", rango.desde)
-        .lte("fecha", rango.hasta)
+        .gte("fecha", opDesde)
+        .lte("fecha", opHasta)
         .order("fecha", { ascending: true })
         .order("hora", { ascending: true });
 
-      // Gastos del período
+      // Gastos del período completo
       const gastosRec = gastos.filter(g =>
-        g.fecha >= rango.desde && g.fecha <= rango.hasta
+        g.fecha >= opDesde && g.fecha <= opHasta
       );
 
       // Cheques cobrados en el período (la operacion cobro_dif los registra con fecha)
