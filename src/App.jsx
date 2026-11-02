@@ -9669,6 +9669,7 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
 
       const bloqueEspecifico = ctx.reconciliacion ? `
 RECONCILIACIÓN DE CAJA (caja física + CCs — sin cierre formal):
+⚠️ INSTRUCCIÓN CRÍTICA: Si el mensaje del usuario contiene una lista de movimientos anotados (clientes con montos + o -), DEBÉS hacer el cruce completo: (1) saldo paso a paso con lo que SÍ está en el sistema, (2) cruce de cada ítem manual contra el sistema, (3) qué falta registrar. Ver reglas reconciliacion_caja.
 - Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc}
   · Caja física: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosFisicos)}
   · CCs neto (positivo = nos deben, negativo = debemos): ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosCC)}
@@ -9747,17 +9748,32 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
 - resumen_dia: sección por sección — (1) operaciones de cambio, (2) cheques, (3) movimientos caja, (4) PnL si disponible. Formato validable por el empleado.
 - reconciliacion_caja: REGLAS CRÍTICAS antes de responder:
   * Usá SOLO los datos que te dieron. Nunca digas "posibles causas" ni "necesito verificar" ni hagas preguntas al final — el análisis debe ser completo con lo que tenés.
-  * Si hay un gap que no cierra con los datos, señalalo como "Gap sin explicar: $X — puede ser un movimiento no registrado", pero no pidás más info.
+  * Si hay un gap que no cierra con los datos, señalalo como "⚠️ Gap sin explicar: $X — movimiento no registrado en el sistema", pero no pidás más info.
   * Nunca uses "¿Querés que profundice?" ni similares — la respuesta es siempre completa.
-  Estructura obligatoria:
-  1. **Resumen**: "Entre [fecha1] y [fecha2] la caja total (física + CCs) pasó de USD X a USD Y (Δ +/-Z USD)."
-  2. **Por componente**: Caja física anterior/actual y CCs neto anterior/actual, en USD.
-  3. **Por moneda** (tabla): moneda | físico ant. | CC ant. | total ant. | físico act. | CC act. | total act. | Δ. Para ARS dividí por TC para mostrar el impacto en USD.
-  4. **Detalle operación por operación** (cronológico): para CADA operación del período indicá — hora | tipo | cliente | moneda | monto | impacto en USD (+ o -) | destino (caja/CC). No agrupes, listá todas.
-  5. **Cheques cobrados**: para cada cobro_dif indicá si fue a caja (ARS entró físico) o a CC (acreditó como retiro_transf en CC del cliente).
-  6. **Variación de CCs por cliente**: para cada cliente con movimientos en el período, listá sus movimientos y el neto resultante. Si el cambio en CC viene de un cheque cobrado, decilo.
-  7. **Balance**: sumá el impacto de todas las operaciones y compará con el delta real. Si cuadra: "✅ Cierra". Si no: "⚠️ Gap sin explicar: [monto y moneda] — posible movimiento no registrado".
-  8. **Alertas**: duplicados o sospechosos con hora y monto exacto.
+  * VALIDACIÓN DE LISTA MANUAL: Si el mensaje del usuario incluye una lista de movimientos que anotó a mano (con clientes, montos y signos + o -), hacé SIEMPRE este análisis:
+    A) SALDO PASO A PASO CON LO QUE HAY EN EL SISTEMA:
+       Arrancá desde snapAntes.saldosFisicos (caja apertura del período).
+       Aplicá SOLO las operaciones que están en operacionesDetalle del sistema.
+       Mostrá la acumulación cronológica: apertura + op1 + op2 + ... = cierre según sistema.
+       El cierre según sistema debe coincidir (o no) con snapDespues.saldosFisicos.
+    B) CRUCE MANUAL VS SISTEMA — para cada ítem que anotó el usuario:
+       Buscá si existe en operacionesDetalle por cliente + monto + tipo aproximado.
+       Estado: ✅ REGISTRADA (con hora y tipo en sistema) | ❌ NO ESTÁ EN SISTEMA (falta registrar).
+    C) OPERACIONES DEL SISTEMA QUE EL USUARIO NO ANOTÓ:
+       Todo lo que está en operacionesDetalle pero NO aparece en la lista manual del usuario.
+       Estas son operaciones que sí se registraron pero el usuario no las tenía en su hoja.
+    D) EXPLICACIÓN DEL RESULTADO REAL:
+       Mostrá: Apertura + Σ ops registradas = [resultado sistema].
+       Comparar con lo que el usuario esperaba. La diferencia = ops anotadas pero no registradas.
+  Estructura obligatoria (siempre esta, con o sin lista manual):
+  1. **Resumen ejecutivo**: una línea con apertura → cierre esperado → cierre real según sistema → gap.
+  2. **Saldo paso a paso (sistema)**: apertura → cada op registrada con su impacto → cierre según sistema. Solo ARS físico si el usuario preguntó por caja física.
+  3. **Cruce manual vs sistema** (solo si el usuario mandó lista): tabla con columna "Anotado" | "En sistema" | "Estado".
+  4. **Ops del sistema no anotadas**: lo que el sistema tiene y el usuario no anotó.
+  5. **Lo que falta registrar**: las ops anotadas que NO están en el sistema — con tipo sugerido para cada una.
+  6. **Cheques cobrados**: para cada cobro_dif indicá si fue a caja (ARS entró físico) o a CC.
+  7. **CCs**: variación por cliente si es relevante para explicar el gap.
+  8. **Cierre**: ✅ cierra o ⚠️ Gap de $X — ops no registradas que lo explican.
 - compras_ventas: tabla tipo | moneda | cantidad de ops | volumen | cotización promedio. Calculá spread si hay compra y venta de la misma moneda.
 - cc_cliente: detalle cronológico de movimientos con subtotales por moneda. Mostrá adónde fueron y de dónde vinieron.
 - comisiones: desglosá fee_cheqdia, fee_cheqdif, fee_transf, fee_canje, intermediación. Total en ARS.
