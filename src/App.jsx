@@ -3590,6 +3590,7 @@ function AppInterna({ usuario }) {
     ]
   });
   const [liquidaciones, setLiquidaciones] = useState([]);
+  const [fondoReserva, setFondoReserva] = useState({total_ingresos:0,total_retiros:0,total_ingresado_usd:0,total_retirado_usd:0,saldo_disponible_usd:0});
   const [inversiones, setInversiones] = useState([]); // [{id, clienteId, clienteNombre, monto, tasa, fechaInicio, bloqueoDias, nota, activa}]
   const [nuevaInv, setNuevaInv] = useState({clienteId:"",clienteBuscar:"",monto:"",tasa:"8",bloqueoDias:"30",nota:""});
   const [exportCC, setExportCC] = useState({desde:"",hasta:"",mostrando:false}); // "todas" | "ops" | "ajustes"
@@ -3725,6 +3726,9 @@ function AppInterna({ usuario }) {
         // Gastos
         const {data:gastosData} = await SB.from("gastos").select("*").order("fecha",{ascending:false});
         if (gastosData) setGastos(gastosData);
+        // Fondo de reserva (vista en DB)
+        const {data:frData} = await SB.from("fondo_reserva_saldo").select("*").single();
+        if (frData) setFondoReserva(frData);
         // Socios
         const {data:sociosData} = await SB.from("socios").select("*").order("nombre");
         if (sociosData) setSocios(sociosData);
@@ -7546,9 +7550,7 @@ const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+t
                   return (
                   <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
                     {(()=>{
-                const totalFR=liquidaciones.reduce((s,l)=>s+(l.reserva||0),0);
-                const totalRet=gastos.filter(g=>g.categoria==="Fondo de Reserva"&&g.moneda==="USD").reduce((s,g)=>s+Number(g.monto||0),0);
-                const fondoDisp=Math.max(0,totalFR-totalRet);
+                const {total_ingresado_usd:totalFR, total_retirado_usd:totalRet, saldo_disponible_usd:fondoDisp} = fondoReserva;
                 return totalFR>0?(
                   <Card sx={{flex:"1 1 160px",border:"1px solid #6366f133",textAlign:"center"}}>
                     <div style={{fontSize:9,color:"#94a3b8",letterSpacing:2,marginBottom:4}}>FONDO DE RESERVA</div>
@@ -7907,6 +7909,9 @@ const patrimonioTot=Object.fromEntries(MONEDAS.map(m=>[m.id, (saldos[m.id]||0)+t
                     setClientes(p=>p.map(x=>x.id!==cId?x:{...x,movimientos:[...x.movimientos,mv]}));
                   } else if(formGasto.categoria==="Fondo de Reserva"){
                     // Fondo de reserva: NO sale de caja física, es solo contable
+                    // Refrescar saldo del fondo desde la vista (el trigger ya insertó el retiro)
+                    const {data:frUpd}=await SB.from("fondo_reserva_saldo").select("*").single();
+                    if(frUpd) setFondoReserva(frUpd);
                     notify("Retiro del Fondo de Reserva registrado — no impacta caja");
                   } else {
                     // Sale de caja fisica
@@ -8558,10 +8563,8 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
               {socios.length>0&&ultimoCierre?.total_usd&&(()=>{
                 const patrimonioFinal=parse(liquidacion.patrimonioManual)||ultimoCierre.total_usd;
                 const inversionTotal=total;
-                // Calcular fondo de reserva automáticamente desde liquidaciones pasadas y gastos
-                const totalFondoIngresado=liquidaciones.reduce((s,l)=>s+(l.reserva||0),0);
-                const totalFondoRetirado=gastos.filter(g=>g.categoria==="Fondo de Reserva"&&g.moneda==="USD").reduce((s,g)=>s+Number(g.monto||0),0);
-                const reservaAcumAnterior=Math.max(0,totalFondoIngresado-totalFondoRetirado);
+                // Fondo de reserva desde vista DB
+                const reservaAcumAnterior=Math.max(0,fondoReserva.saldo_disponible_usd);
                 // Ganancia real = patrimonio final - inversión - reservas acumuladas de meses anteriores
                 const gananciaBruta=patrimonioFinal-inversionTotal-reservaAcumAnterior;
                 const empleadosCalc=(liquidacion.empleados||[]).map(emp=>{
@@ -8604,10 +8607,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
                               onChange={e=>setLiquidacion(l=>({...l,patrimonioManual:e.target.value}))}/>
                           </div>
                           {(()=>{
-                            // Calcular fondo de reserva automáticamente
-                            const totalIngresado=liquidaciones.reduce((s,l)=>s+(l.reserva||0),0);
-                            const totalRetirado=gastos.filter(g=>g.categoria==="Fondo de Reserva"&&g.moneda==="USD").reduce((s,g)=>s+Number(g.monto||0),0);
-                            const fondoDisponible=totalIngresado-totalRetirado;
+                            const {total_ingresado_usd:totalIngresado, total_retirado_usd:totalRetirado, saldo_disponible_usd:fondoDisponible} = fondoReserva;
                             return (
                               <div style={{marginBottom:10,background:"rgba(99,102,241,0.05)",border:"1px solid #6366f122",borderRadius:8,padding:"10px 12px"}}>
                                 <div style={{fontSize:9,letterSpacing:2,color:"#6366f1",marginBottom:8,fontWeight:700}}>FONDO DE RESERVA</div>
