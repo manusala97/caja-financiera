@@ -9671,15 +9671,25 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
 RECONCILIACIÓN DE CAJA (caja física + CCs — sin cierre formal):
 ⚠️ INSTRUCCIÓN CRÍTICA: Si el mensaje del usuario contiene una lista de movimientos anotados (clientes con montos + o -), DEBÉS hacer el cruce completo: (1) saldo paso a paso con lo que SÍ está en el sistema, (2) cruce de cada ítem manual contra el sistema, (3) qué falta registrar. Ver reglas reconciliacion_caja.
 SEMÁNTICA DE LA LISTA MANUAL DEL USUARIO:
-- Un signo POSITIVO (+) en la lista del usuario = entró plata a la caja física (ej: "Tresor +15M" = retiré de bóveda/caja fuerte y entró a caja operativa; "Mariana +700K" = Mariana pagó en efectivo a STS).
-- Un signo NEGATIVO (-) en la lista del usuario = salió plata de la caja física (ej: "Alturria -5M" = le entregué $5M en efectivo a Alturria; "Gino -3M" = Gino retiró $3M en efectivo).
-- "Tresor", "bóveda", "caja fuerte" = movimiento interno: trasladé billetes de la caja fuerte a la caja operativa o viceversa. NO es un cliente, es una cuenta interna. NO aparece en operaciones de CC ni de cambio.
-- Los movimientos de clientes (retiros/ingresos en efectivo) SÍ aparecen en varCCPorCliente como retiro_efectivo (cliente retiró, salió de caja) o ingreso_dep/ingreso_transf (cliente depositó, entró a caja).
-FUENTES PARA EL CRUCE:
-- operacionesDetalle = compras y ventas de divisas (impactan caja cuando intercambian ARS)
-- varCCPorCliente = movimientos de cuentas corrientes (retiro_efectivo, ingreso_dep, etc.) — AQUÍ están los retiros e ingresos de clientes en efectivo
-- chequesCobrados = cobros de cheques diferidos (pueden ir a caja o a CC)
-- movimientosInternos = transferencias entre CCs (NO impactan caja física)
+- Un signo POSITIVO (+) en la lista del usuario = entró plata a la caja física.
+- Un signo NEGATIVO (-) en la lista del usuario = salió plata de la caja física.
+- "Tresor", "bóveda", "caja fuerte" = movimiento interno de billetes. NO es un cliente. Buscar en movimientosInternos; si no está, FALTA REGISTRAR como ajuste.
+- Los movimientos de clientes en efectivo están en varCCPorCliente: retiro_efectivo con impacta_caja=true = salió de caja (STS le dio efectivo al cliente); ingreso_dep con impacta_caja=true = entró a caja (cliente le dio efectivo a STS).
+DIRECCIÓN CORRECTA DE OPERACIONES DE CAMBIO (MUY IMPORTANTE):
+- STS compra USD al cliente = el cliente le entrega USD a STS y STS le entrega ARS → SALE ARS de caja → negativo en lista manual (ej: "Gino -3M" = le dimos $3M en ARS a Gino).
+- STS vende USD al cliente = STS le entrega USD al cliente y recibe ARS → ENTRA ARS a caja → positivo en lista manual.
+- Una "venta USD" en operacionesDetalle = STS vendió USD = recibió ARS = + en caja.
+- Una "compra USD" en operacionesDetalle = STS compró USD = entregó ARS = - en caja.
+- NO invertir estos signos. Si el usuario anotó "Justo -$466K" y el sistema tiene "venta USD Justo +$466K", son CONTRADICTORIOS — uno de los dos está mal. Señalarlo como ⚠️ CONTRADICCIÓN y preguntar cuál es correcto en lugar de decir "signo invertido" como si fuera error del usuario.
+FUENTES PARA EL CRUCE (buscar en la fuente correcta según tipo):
+- Retiro/ingreso en efectivo de cliente → varCCPorCliente[cliente] con impacta_caja=true
+- Compra/venta de divisas → operacionesDetalle
+- Cheques → chequesCobrados (campo "cliente" tiene el nombre; "destino" dice si fue a caja o a CC del cliente)
+- Movimiento interno bóveda → movimientosInternos
+CHEQUES Y CCs (importante para Ramiro y cobros diferidos):
+- Un cheque cobrado con destino="caja" → el monto entró a caja física (+ en caja).
+- Un cheque cobrado con destino="cc" → NO entró a caja física; generó un retiro_transf en la CC del cliente (aparece en varCCPorCliente[cliente]). Para ligar ambos: el retiro_transf en CC tiene nota que dice "Cobro diferido → CC [cliente]".
+- Siempre mostrá el nombre del cliente del cheque (campo "cliente" en chequesCobrados) y linkealo con su entrada en varCCPorCliente.
 - Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc}
   · Caja física: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosFisicos)}
   · CCs neto (positivo = nos deben, negativo = debemos): ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosCC)}
