@@ -9670,6 +9670,16 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
       const bloqueEspecifico = ctx.reconciliacion ? `
 RECONCILIACIÓN DE CAJA (caja física + CCs — sin cierre formal):
 ⚠️ INSTRUCCIÓN CRÍTICA: Si el mensaje del usuario contiene una lista de movimientos anotados (clientes con montos + o -), DEBÉS hacer el cruce completo: (1) saldo paso a paso con lo que SÍ está en el sistema, (2) cruce de cada ítem manual contra el sistema, (3) qué falta registrar. Ver reglas reconciliacion_caja.
+SEMÁNTICA DE LA LISTA MANUAL DEL USUARIO:
+- Un signo POSITIVO (+) en la lista del usuario = entró plata a la caja física (ej: "Tresor +15M" = retiré de bóveda/caja fuerte y entró a caja operativa; "Mariana +700K" = Mariana pagó en efectivo a STS).
+- Un signo NEGATIVO (-) en la lista del usuario = salió plata de la caja física (ej: "Alturria -5M" = le entregué $5M en efectivo a Alturria; "Gino -3M" = Gino retiró $3M en efectivo).
+- "Tresor", "bóveda", "caja fuerte" = movimiento interno: trasladé billetes de la caja fuerte a la caja operativa o viceversa. NO es un cliente, es una cuenta interna. NO aparece en operaciones de CC ni de cambio.
+- Los movimientos de clientes (retiros/ingresos en efectivo) SÍ aparecen en varCCPorCliente como retiro_efectivo (cliente retiró, salió de caja) o ingreso_dep/ingreso_transf (cliente depositó, entró a caja).
+FUENTES PARA EL CRUCE:
+- operacionesDetalle = compras y ventas de divisas (impactan caja cuando intercambian ARS)
+- varCCPorCliente = movimientos de cuentas corrientes (retiro_efectivo, ingreso_dep, etc.) — AQUÍ están los retiros e ingresos de clientes en efectivo
+- chequesCobrados = cobros de cheques diferidos (pueden ir a caja o a CC)
+- movimientosInternos = transferencias entre CCs (NO impactan caja física)
 - Snapshot ANTERIOR (${ctx.reconciliacion.snapAntes.fecha}): total USD ${ctx.reconciliacion.snapAntes.total_usd} | TC ${ctx.reconciliacion.snapAntes.tc}
   · Caja física: ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosFisicos)}
   · CCs neto (positivo = nos deben, negativo = debemos): ${JSON.stringify(ctx.reconciliacion.snapAntes.saldosCC)}
@@ -9757,10 +9767,14 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
        Mostrá la acumulación cronológica: apertura + op1 + op2 + ... = cierre según sistema.
        El cierre según sistema debe coincidir (o no) con snapDespues.saldosFisicos.
     B) CRUCE MANUAL VS SISTEMA — para cada ítem que anotó el usuario:
-       Buscá si existe en operacionesDetalle por cliente + monto + tipo aproximado.
-       Estado: ✅ REGISTRADA (con hora y tipo en sistema) | ❌ NO ESTÁ EN SISTEMA (falta registrar).
+       Según el tipo de movimiento, buscá en la fuente correcta:
+       - Si menciona Tresor/bóveda/caja fuerte: es movimiento interno, buscá en movimientosInternos. Si no está, FALTA REGISTRAR como ajuste de caja interno.
+       - Si menciona un cliente con signo positivo (le entregó a STS): buscá en varCCPorCliente[cliente] un ingreso_dep o ingreso_transf con ese monto.
+       - Si menciona un cliente con signo negativo (STS le entregó): buscá en varCCPorCliente[cliente] un retiro_efectivo o retiro_transf con ese monto.
+       - Si menciona un cheque: buscá en chequesCobrados.
+       Estado: ✅ REGISTRADA en [fuente] (con hora y tipo) | ❌ NO ESTÁ EN SISTEMA (falta registrar).
     C) OPERACIONES DEL SISTEMA QUE EL USUARIO NO ANOTÓ:
-       Todo lo que está en operacionesDetalle pero NO aparece en la lista manual del usuario.
+       Incluye TODO lo que está en operacionesDetalle Y en varCCPorCliente (que impacta_caja=true) pero NO aparece en la lista manual del usuario.
        Estas son operaciones que sí se registraron pero el usuario no las tenía en su hoja.
     D) EXPLICACIÓN DEL RESULTADO REAL:
        Mostrá: Apertura + Σ ops registradas = [resultado sistema].
