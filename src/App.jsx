@@ -9474,12 +9474,45 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
           : m.cliente_id
       }));
 
+      // ── Separar movimientos CC en dos grupos bien definidos ──────────────────
+      // impactaCaja = movimientos que SÍ tocaron la caja física (retiro_efectivo, ingreso_dep con impacta_caja=true)
+      // soloCC      = movimientos entre CCs que NO tocan caja física (transferencias internas)
+      const movsImpactanCajaPorCliente = {};
+      const movsSoloCCPorCliente = {};
+      (movsRecCC || []).forEach(mv => {
+        const c = clientes.find(c => c.id === mv.cliente_id);
+        const cNombre = c ? nombreCliente(c) : `cliente_id=${mv.cliente_id}`;
+        const entry = { fecha: mv.fecha, hora: mv.hora, tipo: mv.tipo, moneda: mv.moneda, monto: mv.monto, nota: mv.nota };
+        if (mv.impacta_caja === true || mv.impacta_caja === 1) {
+          if (!movsImpactanCajaPorCliente[cNombre]) movsImpactanCajaPorCliente[cNombre] = [];
+          movsImpactanCajaPorCliente[cNombre].push(entry);
+        } else {
+          if (!movsSoloCCPorCliente[cNombre]) movsSoloCCPorCliente[cNombre] = [];
+          movsSoloCCPorCliente[cNombre].push(entry);
+        }
+      });
+
+      // ── Separar operaciones: cambio (compra/venta/swap) vs cobros diferidos vs ajustes ──
+      const opsCambio = (opsRec || []).filter(o => ["compra","venta","swap"].includes(o.tipo)).map(o => ({
+        fecha: o.fecha, hora: o.hora, tipo: o.tipo,
+        cliente: o.datos?.cliente,
+        moneda: o.datos?.moneda, monto: o.datos?.monto,
+        moneda2: o.datos?.moneda2, monto2: o.datos?.monto2,
+        cotizacion: o.datos?.cotizacion,
+        // impactoARS: compra = STS entregó ARS (negativo en caja), venta = STS recibió ARS (positivo)
+        impactoARS_caja: o.tipo === "compra" ? -(Number(o.datos?.monto2 || 0)) :
+                         o.tipo === "venta"  ?  (Number(o.datos?.monto2 || 0)) : 0,
+        nota: o.datos?.nota
+      }));
+      const opsAjustes = (opsRec || []).filter(o => o.tipo === "ajuste").map(o => ({
+        fecha: o.fecha, hora: o.hora, tipo: o.tipo,
+        cliente: o.datos?.cliente, moneda: o.datos?.moneda, monto: o.datos?.monto, nota: o.datos?.nota
+      }));
+
       ctx.reconciliacion = {
-        // Renombrado de cierreAntes/Despues → snapAntes/snapDespues
-        // porque la fuente es dias.caja_ini, no cierres
         snapAntes: {
           fecha: fechaSnapAntes,
-          fuente: "dias.caja_ini (caja física) + CCs acumulados hasta esa fecha",
+          fuente: "dias.caja_ini (caja física)",
           total_usd: Math.round(totalUsdAntes * 100) / 100,
           saldosFisicos: saldosAntes,
           saldosCC: ccAntes,
@@ -9488,7 +9521,7 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         },
         snapDespues: {
           fecha: fechaSnapDespues,
-          fuente: "dias.caja_ini (caja física) + CCs acumulados hasta esa fecha",
+          fuente: "dias.caja_ini (caja física)",
           total_usd: Math.round(totalUsdDespues * 100) / 100,
           saldosFisicos: saldosDespues,
           saldosCC: ccDespues,
@@ -9498,22 +9531,22 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         deltaUSD: Math.round(deltaUSD * 100) / 100,
         tcUsado: tcRec,
         diferenciaPorMoneda,
-        operacionesDetalle: (opsRec || []).map(o => ({
-          fecha: o.fecha, hora: o.hora, tipo: o.tipo,
-          moneda: o.datos?.moneda, monto: o.datos?.monto,
-          moneda2: o.datos?.moneda2, monto2: o.datos?.monto2,
-          cotizacion: o.datos?.cotizacion,
-          cliente: o.datos?.cliente, nota: o.datos?.nota
-        })),
-        operacionesPorTipo: Object.values(opsPorTipoRec),
-        posiblesDuplicados,
-        movimientosInternos: movsSoloInternos,
-        gastosDelPeriodo: gastosRec,
+        // Operaciones de cambio (compra/venta) — con impacto en caja ARS calculado
+        opsCambio,
+        // Cobros de cheques diferidos — con cliente y destino (caja o CC)
         chequesCobrados: chequesCobradosPeriodo,
-        varCCPorCliente,
+        // Ajustes manuales
+        opsAjustes,
+        // Movimientos CC que SÍ impactaron caja física (efectivo), por cliente
+        movsEfectivoPorCliente: movsImpactanCajaPorCliente,
+        // Movimientos CC que NO impactaron caja (solo entre CCs), por cliente
+        movsSoloCCPorCliente,
+        posiblesDuplicados,
+        gastosDelPeriodo: gastosRec,
         resumenOps: {
-          totalOperaciones: (opsRec || []).length,
-          totalMovCC: (movsRecCC || []).length,
+          totalOpsCambio: opsCambio.length,
+          totalMovEfectivo: Object.values(movsImpactanCajaPorCliente).flat().length,
+          totalMovSoloCC: Object.values(movsSoloCCPorCliente).flat().length,
           totalGastos: gastosRec.length,
           chequesCobrados: chequesCobradosPeriodo.length
         }
@@ -9682,10 +9715,11 @@ DIRECCIÓN CORRECTA DE OPERACIONES DE CAMBIO (MUY IMPORTANTE):
 - Una "compra USD" en operacionesDetalle = STS compró USD = entregó ARS = - en caja.
 - NO invertir estos signos. Si el usuario anotó "Justo -$466K" y el sistema tiene "venta USD Justo +$466K", son CONTRADICTORIOS — uno de los dos está mal. Señalarlo como ⚠️ CONTRADICCIÓN y preguntar cuál es correcto en lugar de decir "signo invertido" como si fuera error del usuario.
 FUENTES PARA EL CRUCE (buscar en la fuente correcta según tipo):
-- Retiro/ingreso en efectivo de cliente → varCCPorCliente[cliente] con impacta_caja=true
-- Compra/venta de divisas → operacionesDetalle
-- Cheques → chequesCobrados (campo "cliente" tiene el nombre; "destino" dice si fue a caja o a CC del cliente)
-- Movimiento interno bóveda → movimientosInternos
+- Retiro/ingreso en efectivo de cliente → movsEfectivoPorCliente[cliente] (ya filtrado impacta_caja=true)
+- Compra/venta de divisas → opsCambio (ya tiene impactoARS_caja calculado)
+- Cheques → chequesCobrados (campo "cliente"; "destino" dice si fue a caja o a CC)
+- Movimiento interno bóveda/Tresor → opsAjustes; si no está, FALTA REGISTRAR
+- Movimientos entre CCs (sin efectivo) → movsSoloCCPorCliente (estos NO cuentan para caja física)
 CHEQUES Y CCs (importante para Ramiro y cobros diferidos):
 - Un cheque cobrado con destino="caja" → el monto entró a caja física (+ en caja).
 - Un cheque cobrado con destino="cc" → NO entró a caja física; generó un retiro_transf en la CC del cliente (aparece en varCCPorCliente[cliente]). Para ligar ambos: el retiro_transf en CC tiene nota que dice "Cobro diferido → CC [cliente]".
@@ -9701,14 +9735,21 @@ CHEQUES Y CCs (importante para Ramiro y cobros diferidos):
 - DIFERENCIA TOTAL: ${ctx.reconciliacion.deltaUSD >= 0 ? "+" : ""}${ctx.reconciliacion.deltaUSD} USD
 - Por moneda (con desglose físico vs CC): ${JSON.stringify(ctx.reconciliacion.diferenciaPorMoneda)}
 - TC utilizado: ${ctx.reconciliacion.tcUsado}
-- Operaciones del período (${ctx.reconciliacion.resumenOps.totalOperaciones} ops, ${ctx.reconciliacion.resumenOps.chequesCobrados} cobros_dif): ${JSON.stringify(ctx.reconciliacion.operacionesDetalle)}
-- Resumen por tipo de op: ${JSON.stringify(ctx.reconciliacion.operacionesPorTipo)}
-- Cheques cobrados en el período (${ctx.reconciliacion.resumenOps.chequesCobrados} cheques): ${JSON.stringify(ctx.reconciliacion.chequesCobrados)}
-  NOTA: destino "caja" = entró ARS físico; destino "cc" = acreditó en CC del cliente como retiro_transf (sube saldo positivo CC).
-- Variación de CCs por cliente en el período: ${JSON.stringify(ctx.reconciliacion.varCCPorCliente)}
-- Movimientos CC internos (no impactan caja física, solo mueven entre CCs): ${JSON.stringify(ctx.reconciliacion.movimientosInternos)}
-- Gastos del período: ${JSON.stringify(ctx.reconciliacion.gastosDelPeriodo)}
-${ctx.reconciliacion.posiblesDuplicados.length > 0 ? `⚠️ POSIBLES DUPLICADOS DETECTADOS: ${JSON.stringify(ctx.reconciliacion.posiblesDuplicados)}` : "- Sin duplicados detectados automáticamente."}
+OPERACIONES DE CAMBIO (compra/venta/swap) — ${ctx.reconciliacion.resumenOps.totalOpsCambio} ops:
+  IMPORTANTE: "compra" = STS compró divisa, ENTREGÓ ARS al cliente → SALE ARS de caja (impactoARS_caja negativo).
+              "venta"  = STS vendió divisa, RECIBIÓ ARS del cliente → ENTRA ARS a caja (impactoARS_caja positivo).
+  ${JSON.stringify(ctx.reconciliacion.opsCambio)}
+CHEQUES COBRADOS — ${ctx.reconciliacion.resumenOps.chequesCobrados} cheques:
+  destino "caja" = ARS entró a caja física. destino "cc" = NO entró a caja, acreditó en CC del cliente (retiro_transf).
+  ${JSON.stringify(ctx.reconciliacion.chequesCobrados)}
+MOVIMIENTOS DE EFECTIVO POR CLIENTE (impacta_caja=true) — ${ctx.reconciliacion.resumenOps.totalMovEfectivo} movimientos:
+  Estos SÍ tocaron la caja física. retiro_efectivo = STS entregó efectivo al cliente (sale de caja). ingreso_dep = cliente entregó efectivo a STS (entra a caja).
+  ${JSON.stringify(ctx.reconciliacion.movsEfectivoPorCliente)}
+MOVIMIENTOS SOLO EN CCs (impacta_caja=false) — ${ctx.reconciliacion.resumenOps.totalMovSoloCC} movimientos (NO tocan caja física):
+  ${JSON.stringify(ctx.reconciliacion.movsSoloCCPorCliente)}
+AJUSTES MANUALES: ${JSON.stringify(ctx.reconciliacion.opsAjustes)}
+GASTOS DEL PERÍODO: ${JSON.stringify(ctx.reconciliacion.gastosDelPeriodo)}
+${ctx.reconciliacion.posiblesDuplicados.length > 0 ? `⚠️ POSIBLES DUPLICADOS: ${JSON.stringify(ctx.reconciliacion.posiblesDuplicados)}` : ""}
 ` : ctx.analisisCheques ? `
 ANÁLISIS DE CHEQUES (${ctx.periodoConsultado}):
 - Resumen por mes: ${JSON.stringify(ctx.analisisCheques.porMes)}
@@ -9771,11 +9812,15 @@ FORMATO DE RESPUESTA SEGÚN INTENCIÓN:
   * Si hay un gap que no cierra con los datos, señalalo como "⚠️ Gap sin explicar: $X — movimiento no registrado en el sistema", pero no pidás más info.
   * Nunca uses "¿Querés que profundice?" ni similares — la respuesta es siempre completa.
   * VALIDACIÓN DE LISTA MANUAL: Si el mensaje del usuario incluye una lista de movimientos que anotó a mano (con clientes, montos y signos + o -), hacé SIEMPRE este análisis:
-    A) SALDO PASO A PASO CON LO QUE HAY EN EL SISTEMA:
-       Arrancá desde snapAntes.saldosFisicos (caja apertura del período).
-       Aplicá SOLO las operaciones que están en operacionesDetalle del sistema.
-       Mostrá la acumulación cronológica: apertura + op1 + op2 + ... = cierre según sistema.
-       El cierre según sistema debe coincidir (o no) con snapDespues.saldosFisicos.
+    A) SALDO PASO A PASO CON LO QUE HAY EN EL SISTEMA (solo ARS físico):
+       Arrancá desde snapAntes.saldosFisicos.ARS (apertura ARS físico del día).
+       Aplicá en orden cronológico SOLO los movimientos que tocan caja física:
+         - opsCambio: usar impactoARS_caja (ya calculado, negativo=sale, positivo=entra)
+         - movsEfectivoPorCliente: retiro_efectivo → resta de caja; ingreso_dep → suma a caja
+         - chequesCobrados con destino="caja" → suma a caja (entró efectivo)
+         - opsAjustes → suma o resta según monto
+       NO incluir movsSoloCCPorCliente ni cheques con destino="cc" (no tocan caja).
+       El resultado final debe coincidir con snapDespues.saldosFisicos.ARS.
     B) CRUCE MANUAL VS SISTEMA — para cada ítem que anotó el usuario:
        Según el tipo de movimiento, buscá en la fuente correcta:
        - Si menciona Tresor/bóveda/caja fuerte: es movimiento interno, buscá en movimientosInternos. Si no está, FALTA REGISTRAR como ajuste de caja interno.
