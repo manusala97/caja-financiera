@@ -5479,14 +5479,14 @@ function AppInterna({ usuario }) {
                                             ⏳ Pendiente (sin asignar)
                                           </div>
                                           {filtrados.map(cl=>(
-                                            <div key={cl.id} onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
+                                            <div key={cl.id} onClick={()=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id),impactaCaja:false}));setBuscarDesglose(b=>({...b,[d.id]:""}));}}
                                               style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#e2e8f0",borderBottom:"1px solid #1a1a1a"}}>
                                               {cl.nombre} {cl.apellido}
                                             </div>
                                           ))}
                                           {filtrados.length===0&&busq.trim()&&<div style={{padding:"7px 10px",fontSize:11,color:"#94a3b8"}}>Sin resultados para "{busq.trim()}"</div>}
                                           {busq.trim()&&(
-                                            <div onClick={()=>setNuevoClienteCC({visible:true,nombre:busq.trim(),socio:"Manuel Sala",onCreado:cl=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id)}));setBuscarDesglose(b=>({...b,[d.id]:""}));}})}
+                                            <div onClick={()=>setNuevoClienteCC({visible:true,nombre:busq.trim(),socio:"Manuel Sala",onCreado:cl=>{setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,tipo:String(cl.id),impactaCaja:false}));setBuscarDesglose(b=>({...b,[d.id]:""}));}})}
                                               style={{padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#4ade80",fontWeight:700,display:"flex",alignItems:"center",gap:4,background:"rgba(74,222,128,0.05)"}}>
                                               <span style={{fontSize:13}}>＋</span> Crear "{busq.trim()}" como nuevo cliente
                                             </div>
