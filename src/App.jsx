@@ -4256,7 +4256,8 @@ function AppInterna({ usuario }) {
             }
           }
         }
-      } else {
+      } else if(form.baseImpactaCaja!=="no"){
+        // Solo impactar caja en moneda2 si NO es pendiente CC
         tipo==="compra"?ns[form.moneda2]-=m2:ns[form.moneda2]+=m2;
       }
       // Calcular impactoReal2: cuanto impacto la caja en moneda2
