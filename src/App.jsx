@@ -9148,10 +9148,17 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
 
     // 1. CHEQUES — análisis de diferidos
     if (intencion === "cheques") {
-      const { data: cheques } = await SB.from("diferidos")
-        .select("*")
-        .gte("fecha", rango.desde).lte("fecha", rango.hasta)
-        .order("fecha", { ascending: true });
+      // Si la pregunta menciona "disponibles", "cobrar", "vencidos" → traer todos los pendientes sin filtro de fecha de ingreso
+      const esPreguntaDisponibles = /dispon|cobrar|vencido|pendiente|tengo/.test(preqLower);
+      let chequesQuery = SB.from("diferidos").select("*");
+      if (esPreguntaDisponibles) {
+        // Traer TODOS los no cobrados con vencimiento hasta hoy
+        chequesQuery = chequesQuery.eq("cobrado", false).lte("fecha_venc", hoyDate);
+      } else {
+        // Análisis histórico: filtrar por fecha de ingreso en el rango
+        chequesQuery = chequesQuery.gte("fecha", rango.desde).lte("fecha", rango.hasta);
+      }
+      const { data: cheques } = await chequesQuery.order("fecha_venc", { ascending: true });
 
       // Agrupar por mes
       const porMes = {};
@@ -9200,7 +9207,7 @@ function AgenteIA({ clientes, ops, gastos, hoy, saldoCC }) {
         pendientes: (cheques||[]).filter(c=>!c.cobrado).length
       };
 
-      ctx.analisisCheques = { porMes: resumenCheques, totales: totalCheques, detalle: (cheques||[]).slice(0,50) };
+      ctx.analisisCheques = { esPreguntaDisponibles, porMes: resumenCheques, totales: totalCheques, detalle: (cheques||[]).slice(0,50) };
     }
 
     // 2. POSICIÓN — saldos CC de todos los clientes para foto a socios
@@ -9751,10 +9758,13 @@ AJUSTES MANUALES: ${JSON.stringify(ctx.reconciliacion.opsAjustes)}
 GASTOS DEL PERÍODO: ${JSON.stringify(ctx.reconciliacion.gastosDelPeriodo)}
 ${ctx.reconciliacion.posiblesDuplicados.length > 0 ? `⚠️ POSIBLES DUPLICADOS: ${JSON.stringify(ctx.reconciliacion.posiblesDuplicados)}` : ""}
 ` : ctx.analisisCheques ? `
-ANÁLISIS DE CHEQUES (${ctx.periodoConsultado}):
-- Resumen por mes: ${JSON.stringify(ctx.analisisCheques.porMes)}
+ANÁLISIS DE CHEQUES (${ctx.analisisCheques.esPreguntaDisponibles ? "DISPONIBLES PARA COBRAR HOY" : ctx.periodoConsultado}):
+${ctx.analisisCheques.esPreguntaDisponibles ?
+  `Estos cheques ya vencieron o vencen hoy y AÚN NO FUERON COBRADOS (cobrado=false, fecha_venc <= hoy).` :
+  `Cheques ingresados en el período ${ctx.periodoConsultado}.`}
+- Resumen por mes de vencimiento: ${JSON.stringify(ctx.analisisCheques.porMes)}
 - Totales: ${JSON.stringify(ctx.analisisCheques.totales)}
-- Detalle (hasta 50 ops): ${JSON.stringify(ctx.analisisCheques.detalle)}
+- Detalle: ${JSON.stringify(ctx.analisisCheques.detalle)}
 ` : ctx.posicionDetallada ? `
 POSICIÓN ACTUAL DE CCs (para foto a socios):
 ${JSON.stringify(ctx.posicionDetallada)}
