@@ -5586,14 +5586,16 @@ function AppInterna({ usuario }) {
                                         CC: {salMon>0?"me debe":"le debo"} {MONEDAS.find(m=>m.id===monBase)?.simbolo}{fmt(Math.abs(salMon))}
                                       </div>
                                     )}
-                                    {/* Toggle retira billetes / compensacion */}
+                                    {/* Toggle retira billetes / compensacion — Retira oculto en modo Pendiente CC */}
                                     <div style={{display:"flex",borderRadius:5,overflow:"hidden",border:"1px solid #1f2937"}}>
-                                      <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:true}))}
-                                        style={{padding:"3px 7px",background:d.impactaCaja?"#4ade8022":"transparent",color:d.impactaCaja?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
-                                        💵 Retira
-                                      </button>
+                                      {form.baseImpactaCaja!=="no"&&(
+                                        <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:true}))}
+                                          style={{padding:"3px 7px",background:d.impactaCaja?"#4ade8022":"transparent",color:d.impactaCaja?"#4ade80":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",borderRight:"1px solid #1f2937",whiteSpace:"nowrap"}}>
+                                          💵 Retira
+                                        </button>
+                                      )}
                                       <button onClick={()=>setDesglose(p=>p.map(x=>x.id!==d.id?x:{...x,impactaCaja:false}))}
-                                        style={{padding:"3px 7px",background:!d.impactaCaja?"#6366f122":"transparent",color:!d.impactaCaja?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",whiteSpace:"nowrap"}}>
+                                        style={{padding:"3px 7px",background:(!d.impactaCaja||form.baseImpactaCaja==="no")?"#6366f122":"transparent",color:(!d.impactaCaja||form.baseImpactaCaja==="no")?"#a5b4fc":"#475569",border:"none",fontFamily:"inherit",fontSize:9,cursor:"pointer",whiteSpace:"nowrap"}}>
                                         ⇄ Comp.
                                       </button>
                                     </div>
