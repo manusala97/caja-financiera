@@ -4284,6 +4284,16 @@ function AppInterna({ usuario }) {
         const mvPend2={id:Date.now()+998,hora:horaPend2,fecha:hoy,tipo:tipoPend2,moneda:form.moneda,monto:montoPend2,nota:notaPend2};
         await SB.from("movimientos_cc").insert({cliente_id:cPendId2,hora:horaPend2,fecha:hoy,tipo:tipoPend2,moneda:form.moneda,monto:montoPend2,nota:notaPend2});
         setClientes(p=>p.map(cl=>cl.id!==cPendId2?cl:{...cl,movimientos:[...cl.movimientos,mvPend2]}));
+        // También registrar el movimiento en moneda2 (ARS) en la CC del mismo cliente
+        // compra: nosotros le debemos los ARS → ingreso_transf ARS (HABER = le debemos)
+        // venta: cliente nos debe los ARS → retiro_transf ARS (DEBE = nos debe)
+        if(m2>0){
+          const tipoPend2ARS=tipo==="compra"?"ingreso_transf":"retiro_transf";
+          const notaPend2ARS=(tipo==="compra"?"Pago":"Cobro")+" "+(tipo==="compra"?"compra":"venta")+" "+fmt(montoPend2)+" "+form.moneda+" — "+fmt(m2)+" "+form.moneda2+" pendiente";
+          const mvPend2ARS={id:Date.now()+997,hora:horaPend2,fecha:hoy,tipo:tipoPend2ARS,moneda:form.moneda2,monto:m2,nota:notaPend2ARS};
+          await SB.from("movimientos_cc").insert({cliente_id:cPendId2,hora:horaPend2,fecha:hoy,tipo:tipoPend2ARS,moneda:form.moneda2,monto:m2,nota:notaPend2ARS});
+          setClientes(p=>p.map(cl=>cl.id!==cPendId2?cl:{...cl,movimientos:[...cl.movimientos,mvPend2ARS]}));
+        }
       }
       // Procesar USD pendiente de entrega (desglose)
       if(usdPendiente.activo&&usdPendiente.clienteId&&(parse(usdPendiente.monto)||parse(form.monto))){
