@@ -1195,50 +1195,100 @@ function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos, SB}) 
       })}
 
       {/* ── CUENTAS CORRIENTES ── */}
-      <div style={{fontSize:10,letterSpacing:2,color:"#a5b4fc",fontWeight:700,marginBottom:12,marginTop:28}}>👤 CUENTAS CORRIENTES</div>
-      {filasCC.length===0&&movsCC.length===0?(
-        <div style={{color:"#374151",fontSize:12,marginBottom:16,fontStyle:"italic"}}>Sin movimientos en cuentas corrientes hoy</div>
-      ):(
-        <div style={{background:"#0a0f19",border:"1px solid #6366f122",borderRadius:10,overflow:"hidden",marginBottom:16}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-            <thead>
-              <tr style={{borderBottom:"1px solid #1f2937"}}>
-                {["Hora","Tipo","Descripción","Cliente / CC","Moneda","Monto"].map(h=>(
-                  <th key={h} style={{padding:"7px 10px",textAlign:h==="Monto"?"right":"left",color:"#4b5563",fontSize:9,fontWeight:700,letterSpacing:1}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filasCC.map((f,i)=>(
-                <tr key={"op_"+i} style={{borderBottom:"1px solid #0d1117"}}>
-                  <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{f.hora||"—"}</td>
-                  <td style={{padding:"7px 10px"}}><Chip tipo={f.tipo}/></td>
-                  <td style={{padding:"7px 10px",color:"#cbd5e1"}}>{f.label}</td>
-                  <td style={{padding:"7px 10px",color:"#a5b4fc",fontSize:10}}>{f.destino||"—"}</td>
-                  <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{f.moneda}</td>
-                  <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:f.entrada?"#4ade80":"#f87171"}}>{f.entrada?"+":"-"}{fmt(f.monto)}</td>
-                </tr>
-              ))}
-              {movsCC.filter(mv=>{
-                // No duplicar los que ya están en filasCC (vinculados a ops)
-                return !filasCC.some(f=>Math.abs(f.monto-parse(mv.monto))<1&&f.hora===mv.hora);
-              }).map((mv,i)=>{
-                const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
-                return (
-                  <tr key={"cc_"+i} style={{borderBottom:"1px solid #0d1117",background:"rgba(99,102,241,0.03)"}}>
-                    <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{mv.hora||"—"}</td>
-                    <td style={{padding:"7px 10px"}}><Chip tipo={ing?"Cobro CC":"Pago CC"}/></td>
-                    <td style={{padding:"7px 10px",color:"#cbd5e1"}}>{mv.nota||"—"}</td>
-                    <td style={{padding:"7px 10px",color:"#a5b4fc",fontSize:10}}>{mv.clienteNombre}</td>
-                    <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{mv.moneda}</td>
-                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:ing?"#4ade80":"#f87171"}}>{ing?"+":"-"}{fmt(parse(mv.monto))}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {(()=>{
+        // Agrupar movsCC: emparejar ingreso_transf + retiro_transf con el mismo operacion_id
+        const movsCCFiltrados = movsCC.filter(mv=>!filasCC.some(f=>Math.abs(f.monto-parse(mv.monto))<1&&f.hora===mv.hora));
+        // Separar transferencias agrupables de los movimientos individuales
+        const transfsAgrupables = movsCCFiltrados.filter(mv=>(mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf")&&mv.operacion_id);
+        const movsIndividuales = movsCCFiltrados.filter(mv=>!((mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf")&&mv.operacion_id));
+        // Agrupar por operacion_id
+        const gruposMap = {};
+        transfsAgrupables.forEach(mv=>{
+          const key = mv.operacion_id;
+          if(!gruposMap[key]) gruposMap[key]=[];
+          gruposMap[key].push(mv);
+        });
+        // Construir filas de transferencias CC
+        const filasTransfCC = Object.values(gruposMap).map(grupo=>{
+          const origen = grupo.find(mv=>mv.tipo==="ingreso_transf"); // el que sale (Desde)
+          const destino = grupo.find(mv=>mv.tipo==="retiro_transf"); // el que entra (Hacia)
+          const ref = origen||destino;
+          return {
+            hora: ref?.hora||"—",
+            moneda: ref?.moneda||"—",
+            desde: origen?.clienteNombre||origen?.cliente?.nombre||"—",
+            salida: origen ? parse(origen.monto) : 0,
+            hacia: destino?.clienteNombre||destino?.cliente?.nombre||"—",
+            entrada: destino ? parse(destino.monto) : 0,
+            nota: ref?.nota||"—",
+            tipo:"transf_cc",
+          };
+        }).sort((a,b)=>a.hora.localeCompare(b.hora));
+        const hayFilas = filasCC.length>0||movsCC.length>0;
+        return (
+          <>
+            <div style={{fontSize:10,letterSpacing:2,color:"#a5b4fc",fontWeight:700,marginBottom:12,marginTop:28}}>👤 CUENTAS CORRIENTES</div>
+            {!hayFilas?(
+              <div style={{color:"#374151",fontSize:12,marginBottom:16,fontStyle:"italic"}}>Sin movimientos en cuentas corrientes hoy</div>
+            ):(
+              <div style={{background:"#0a0f19",border:"1px solid #6366f122",borderRadius:10,overflow:"hidden",marginBottom:16}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead>
+                    <tr style={{borderBottom:"1px solid #1f2937"}}>
+                      {["Hora","Tipo","Desde","Salida","Hacia","Entrada","Moneda"].map(h=>(
+                        <th key={h} style={{padding:"7px 10px",textAlign:["Salida","Entrada"].includes(h)?"right":"left",color:"#4b5563",fontSize:9,fontWeight:700,letterSpacing:1}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Filas de operaciones (comisiones, depósitos vinculados a op) */}
+                    {filasCC.map((f,i)=>(
+                      <tr key={"op_"+i} style={{borderBottom:"1px solid #0d1117"}}>
+                        <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{f.hora||"—"}</td>
+                        <td style={{padding:"7px 10px"}}><Chip tipo={f.tipo}/></td>
+                        <td style={{padding:"7px 10px",color:"#cbd5e1",fontSize:10}}>{f.entrada?"—":f.destino||f.label}</td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#f87171"}}>{!f.entrada?fmt(f.monto):""}</td>
+                        <td style={{padding:"7px 10px",color:"#a5b4fc",fontSize:10}}>{f.entrada?f.destino||f.label:"—"}</td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#4ade80"}}>{f.entrada?fmt(f.monto):""}</td>
+                        <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{f.moneda}</td>
+                      </tr>
+                    ))}
+                    {/* Transferencias CC agrupadas como fila única */}
+                    {filasTransfCC.map((f,i)=>(
+                      <tr key={"tcc_"+i} style={{borderBottom:"1px solid #0d1117",background:"rgba(99,102,241,0.04)"}}>
+                        <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{f.hora}</td>
+                        <td style={{padding:"7px 10px"}}>
+                          <span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:"rgba(165,180,252,0.12)",color:"#a5b4fc",fontWeight:700,whiteSpace:"nowrap"}}>Transf. CC</span>
+                        </td>
+                        <td style={{padding:"7px 10px",color:"#e2e8f0",fontSize:11,fontWeight:600}}>{f.desde}</td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#f87171"}}>{f.salida?`-${fmt(f.salida)}`:""}</td>
+                        <td style={{padding:"7px 10px",color:"#e2e8f0",fontSize:11,fontWeight:600}}>{f.hacia}</td>
+                        <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#4ade80"}}>{f.entrada?`+${fmt(f.entrada)}`:""}</td>
+                        <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{f.moneda}</td>
+                      </tr>
+                    ))}
+                    {/* Movimientos CC individuales (sin operacion_id o depósitos/retiros simples) */}
+                    {movsIndividuales.map((mv,i)=>{
+                      const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+                      return (
+                        <tr key={"cc_"+i} style={{borderBottom:"1px solid #0d1117",background:"rgba(99,102,241,0.02)"}}>
+                          <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{mv.hora||"—"}</td>
+                          <td style={{padding:"7px 10px"}}><Chip tipo={ing?"Cobro CC":"Pago CC"}/></td>
+                          <td style={{padding:"7px 10px",color:"#cbd5e1"}}>{!ing?mv.clienteNombre:"—"}</td>
+                          <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#f87171"}}>{!ing?fmt(parse(mv.monto)):""}</td>
+                          <td style={{padding:"7px 10px",color:"#a5b4fc",fontSize:10}}>{ing?mv.clienteNombre:"—"}</td>
+                          <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#4ade80"}}>{ing?fmt(parse(mv.monto)):""}</td>
+                          <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{mv.moneda}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* ── PIE DE VALIDACIÓN ── */}
       {totalMovs>0&&(
@@ -4681,11 +4731,13 @@ function AppInterna({ usuario }) {
       const opIdTransf=opIns?.id||null;
       if(opIns) setOps(p=>[...p,{...opData,id:opIns.id,fecha:hoy}]);
       // CC Origen: HABER por el neto (le debemos el neto)
+      let mvOrigenId = null;
       if(form.ccOrigenId){
         const cOrId=Number(form.ccOrigenId);
         const notaOr="Transf. → "+nombresDestino+" - neto "+fmt(netoOrigen)+" "+tMon+(pctOrigen?" (com "+pctOrigen+"%)":"");
-        const mvOr={id:Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr};
-        await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr,operacion_id:opIdTransf});
+        const {data:mvOrIns}=await SB.from("movimientos_cc").insert({cliente_id:cOrId,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr,operacion_id:opIdTransf}).select().single();
+        mvOrigenId=mvOrIns?.id||null;
+        const mvOr={id:mvOrigenId||Date.now()+1,hora,fecha:hoy,tipo:"ingreso_transf",moneda:tMon,monto:netoOrigen,nota:notaOr};
         setClientes(p=>p.map(cl=>cl.id!==cOrId?cl:{...cl,movimientos:[...cl.movimientos,mvOr]}));
       }
       // CC Destinos: DEBE por monto + comision de cada uno
@@ -4695,9 +4747,11 @@ function AppInterna({ usuario }) {
         const mDest=parse(d.monto), pDest=parse(d.pct)||0, comDest=mDest*(pDest/100), totalDest=mDest+comDest;
         const clDest=clientes.find(x=>x.id===cDId);
         const notaDest=(d.nota||("Transf. de "+nombreOrigen+" - "+fmt(mDest)+" "+tMon+(pDest?" (com "+pDest+"%)":"")));
-        const mvDest={id:Date.now()+(i+2),hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest};
-        await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest,operacion_id:opIdTransf});
+        const {data:mvDestIns}=await SB.from("movimientos_cc").insert({cliente_id:cDId,hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest,operacion_id:opIdTransf,op_vinculada_id:mvOrigenId}).select().single();
+        const mvDest={id:mvDestIns?.id||Date.now()+(i+2),hora,fecha:hoy,tipo:"retiro_transf",moneda:tMon,monto:totalDest,nota:notaDest,op_vinculada_id:mvOrigenId};
         setClientes(p=>p.map(cl=>cl.id!==cDId?cl:{...cl,movimientos:[...cl.movimientos,mvDest]}));
+        // Actualizar el origen con referencia cruzada
+        if(mvOrigenId&&mvDestIns?.id) await SB.from("movimientos_cc").update({op_vinculada_id:mvDestIns.id}).eq("id",mvOrigenId);
       }
       setF("tn",""); setF("tpctOrigen",""); setF("ccOrigenId",""); setF("ccOrigenBuscar","");
       setTDestinos([{id:1,clienteId:"",buscar:"",monto:"",pct:"",nota:""}]);
@@ -6824,13 +6878,17 @@ function AppInterna({ usuario }) {
                         const nota="Transf. → "+(clDest?.nombre||"")+(pctO?" (com "+pctO+"%)":"");
                         const notaDest="Transf. ← "+c.nombre+(pctD?" (com "+pctD+"%)":"");
                         // CC origen: ingreso_transf por el neto que recibe
-                        const mv1={id:Date.now(),hora,fecha:fechaMov,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota};
-                        await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:fechaMov,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota});
+                        const {data:mv1Ins}=await SB.from("movimientos_cc").insert({cliente_id:c.id,hora,fecha:fechaMov,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota}).select().single();
+                        const mv1Id=mv1Ins?.id||null;
+                        const mv1={id:mv1Id||Date.now(),hora,fecha:fechaMov,tipo:"ingreso_transf",moneda:transCC.moneda,monto:montoOrigen,nota};
                         setClientes(p=>p.map(cl=>cl.id!==c.id?cl:{...cl,movimientos:[...cl.movimientos,mv1]}));
                         // CC destino: retiro_transf por el total + su comisión
-                        const mv2={id:Date.now()+1,hora,fecha:fechaMov,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest};
-                        await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:fechaMov,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest});
+                        const {data:mv2Ins}=await SB.from("movimientos_cc").insert({cliente_id:cDestId,hora,fecha:fechaMov,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest,op_vinculada_id:mv1Id}).select().single();
+                        const mv2Id=mv2Ins?.id||null;
+                        const mv2={id:mv2Id||Date.now()+1,hora,fecha:fechaMov,tipo:"retiro_transf",moneda:transCC.moneda,monto:montoDestino,nota:notaDest,op_vinculada_id:mv1Id};
                         setClientes(p=>p.map(cl=>cl.id!==cDestId?cl:{...cl,movimientos:[...cl.movimientos,mv2]}));
+                        // Actualizar origen con referencia cruzada al destino
+                        if(mv1Id&&mv2Id) await SB.from("movimientos_cc").update({op_vinculada_id:mv2Id}).eq("id",mv1Id);
                         // Registrar comisión en operaciones si hay comisión
                         const gananciaTransf = comO + comD;
                         if(gananciaTransf > 0){
