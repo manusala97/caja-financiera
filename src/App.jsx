@@ -788,331 +788,268 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
   );
 }
 
-function PanelValidacion({ops, clientes, gastos, hoy}) {
+function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos}) {
   const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
   const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
-  const fmtMonto = (m,mon) => (m>=0?"+":"-")+mon+" "+fmt(Math.abs(Math.round(m)));
+  const COLOR = {"Compra":"#38bdf8","Venta":"#4ade80","Cheque al día":"#c084fc","Cheque diferido":"#a78bfa","Gasto":"#f87171","Ajuste":"#94a3b8","Transferencia":"#f97316","Cobro CC":"#34d399","Pago CC":"#f97316"};
 
-  // Construir resumen narrativo de cada operación del día
   const opsHoy = ops.filter(o=>o.fecha===hoy).sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
 
-  const lineasCaja = [];   // impactan caja física
-  const lineasCC = [];     // impactan cuentas corrientes
+  // ── Construir filas para CAJA FÍSICA por moneda ──────────────────────────
+  // Estructura: {moneda, hora, tipo, label, cliente, entrada, monto}
+  const filasCaja = [];
+  const filasCC = [];
 
   opsHoy.forEach(op => {
-    const t = op.tipo;
     const d = op.datos || op;
-    const moneda = d.moneda||"";
-    const moneda2 = d.moneda2||"";
-    const monto = parse(d.monto);
-    const monto2 = parse(d.monto2);
-    const cotiz = parse(d.cotizacion);
-    const hora = d.hora||op.hora||"--:--";
+    const t = op.tipo;
+    const mon1 = d.moneda||"";
+    const mon2 = d.moneda2||"";
+    const m1 = parse(d.monto);
+    const m2 = parse(d.monto2);
+    const hora = d.hora||op.hora||"";
+    const cli = d.cliente||"";
     const baseCC = d.baseImpactaCaja==="no";
-    const tipoLabel = t==="compra"?"Compra":t==="venta"?"Venta":t==="cheque_dia"?"Cheque al día":t==="cheque_dif"?"Cheque diferido":t==="ajuste"?"Ajuste":t==="transferencia"?"Transferencia":t;
+    const desgl = d.desglose||[];
+    const impactoReal2 = d.impactoReal2 !== undefined ? parse(d.impactoReal2) : m2;
 
     if(t==="compra"||t==="venta") {
-      const esCompra = t==="compra";
-      // Moneda base (USD)
+      const esC = t==="compra";
+      const tLabel = esC?"Compra":"Venta";
+      const resumen = `${fmt(m1)} ${mon1} @ $${fmt(parse(d.cotizacion))}`;
+
+      // Moneda base (ej: USD)
       if(baseCC) {
-        // buscar nombre cliente CC
-        const ccId = d.usdPendienteClienteId || d.pendienteClienteId || "";
-        const ccNombre = ccId ? (()=>{ const cl=clientes.find(c=>String(c.id)===String(ccId)); return cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC cliente"; })() : "CC cliente";
-        lineasCC.push({hora, tipo:tipoLabel, desc:`${esCompra?"+":"-"}${monto} ${moneda} pendiente entrega`, destino:ccNombre, moneda, monto: esCompra?monto:-monto});
+        // Buscar nombre del cliente CC por usdPendiente
+        const pendNombre = (()=>{
+          const mv = clientes.flatMap(cl=>cl.movimientos).find(mv=>mv.fecha===hoy&&mv.hora===hora&&(mv.tipo==="retiro_transf"||mv.tipo==="ingreso_transf")&&mv.moneda===mon1&&parse(mv.monto)===m1);
+          if(!mv) return "CC pendiente";
+          const cl = clientes.find(c=>c.movimientos.some(x=>x===mv));
+          return cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC pendiente";
+        })();
+        filasCC.push({hora, tipo:tLabel, moneda:mon1, monto:m1, entrada:esC, label:resumen, destino:pendNombre, tag:"pendiente"});
       } else {
-        lineasCaja.push({hora, tipo:tipoLabel, desc:`${esCompra?"+":"-"}${monto} ${moneda}`, destino:"Caja física", moneda, monto: esCompra?monto:-monto});
+        filasCaja.push({hora, tipo:tLabel, moneda:mon1, monto:m1, entrada:esC, label:resumen, cliente:cli});
       }
-      // Moneda2 (ARS)
-      const desglose = d.desglose||[];
-      if(desglose.length>0) {
-        desglose.forEach(linea=>{
+
+      // Moneda secundaria (ej: ARS)
+      if(desgl.length>0) {
+        desgl.forEach(linea=>{
           const dm=parse(linea.monto); if(!dm) return;
           if(linea.tipo==="efectivo") {
-            lineasCaja.push({hora, tipo:tipoLabel, desc:`${esCompra?"-":"+"}${fmt(dm)} ${moneda2} efectivo`, destino:"Caja física", moneda:moneda2, monto:esCompra?-dm:dm});
+            filasCaja.push({hora, tipo:tLabel, moneda:mon2, monto:dm, entrada:!esC, label:resumen+" — efectivo", cliente:cli});
           } else if(linea.tipo!=="op_simultanea"&&linea.tipo!=="pendiente") {
-            const cId=Number(linea.tipo);
-            const cl=clientes.find(c=>c.id===cId);
-            const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC cliente";
-            lineasCC.push({hora, tipo:tipoLabel, desc:`${esCompra?"-":"+"}${fmt(dm)} ${moneda2} vía CC`, destino:nombre, moneda:moneda2, monto:esCompra?-dm:dm});
+            const cl=clientes.find(c=>c.id===Number(linea.tipo));
+            const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC";
+            filasCC.push({hora, tipo:tLabel, moneda:mon2, monto:dm, entrada:!esC, label:resumen, destino:nombre, tag:"desglose"});
           }
         });
       } else if(!baseCC) {
-        lineasCaja.push({hora, tipo:tipoLabel, desc:`${esCompra?"-":"+"}${fmt(monto2)} ${moneda2}`, destino:"Caja física", moneda:moneda2, monto:esCompra?-monto2:monto2});
+        if(impactoReal2>0) filasCaja.push({hora, tipo:tLabel, moneda:mon2, monto:impactoReal2, entrada:!esC, label:resumen, cliente:cli});
+        const ccParte = m2 - impactoReal2;
+        if(ccParte>0) {
+          const ccsVinc = clientes.flatMap(cl=>cl.movimientos
+            .filter(mv=>mv.fecha===hoy&&mv.hora===hora&&mv.nota&&mv.nota.includes("Op. vinculada"))
+            .map(()=>`${cl.nombre} ${cl.apellido||""}`.trim())
+          ).filter((v,i,a)=>a.indexOf(v)===i);
+          filasCC.push({hora, tipo:tLabel, moneda:mon2, monto:ccParte, entrada:!esC, label:resumen, destino:ccsVinc.join(", ")||"CC", tag:"desglose"});
+        }
       }
     } else if(t==="cheque_dia") {
-      lineasCaja.push({hora, tipo:"Cheque al día", desc:`+${fmt(parse(d.ccom))} ARS comisión`, destino:"Caja física", moneda:"ARS", monto:parse(d.ccom)});
+      filasCaja.push({hora, tipo:"Cheque al día", moneda:"ARS", monto:parse(d.ccom), entrada:true, label:`Nominal $${fmt(parse(d.cn))}`, cliente:cli});
     } else if(t==="cheque_dif") {
+      const mf=parse(d.montoFinal||d.monto);
       if(!d.pagoCheqDif||d.pagoCheqDif==="caja") {
-        lineasCaja.push({hora, tipo:"Cheque diferido", desc:`-${fmt(parse(d.montoFinal||d.monto))} ARS`, destino:"Caja física", moneda:"ARS", monto:-parse(d.montoFinal||d.monto)});
+        filasCaja.push({hora, tipo:"Cheque diferido", moneda:"ARS", monto:mf, entrada:false, label:`Acredita ${d.dfa||""}`, cliente:cli});
       } else {
-        const cId=Number(d.pagoCheqDif);
-        const cl=clientes.find(c=>c.id===cId);
-        const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC cliente";
-        lineasCC.push({hora, tipo:"Cheque diferido", desc:`-${fmt(parse(d.montoFinal||d.monto))} ARS`, destino:nombre, moneda:"ARS", monto:-parse(d.montoFinal||d.monto)});
+        const cl=clientes.find(c=>c.id===Number(d.pagoCheqDif));
+        filasCC.push({hora, tipo:"Cheque diferido", moneda:"ARS", monto:mf, entrada:false, label:`Acredita ${d.dfa||""}`, destino:cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC", tag:"pago"});
       }
     } else if(t==="ajuste") {
-      lineasCaja.push({hora, tipo:"Ajuste", desc:`${parse(d.delta)>=0?"+":""}${fmt(parse(d.delta))} ${d.moneda||"ARS"}`, destino:"Caja física", moneda:d.moneda||"ARS", monto:parse(d.delta)});
+      const delta=parse(d.delta);
+      filasCaja.push({hora, tipo:"Ajuste", moneda:d.moneda||"ARS", monto:Math.abs(delta), entrada:delta>=0, label:d.nota||"Ajuste manual", cliente:""});
+    } else if(t==="transferencia") {
+      filasCaja.push({hora, tipo:"Transferencia", moneda:"ARS", monto:parse(d.tcom||d.monto), entrada:true, label:`Comisión transferencia`, cliente:cli});
     }
   });
 
   // Gastos
   (gastos||[]).filter(g=>g.fecha===hoy).forEach(g=>{
+    const monto=parse(g.monto), mon=g.moneda||"ARS";
     if(g.categoria==="Fondo de Reserva") {
-      lineasCC.push({hora:"", tipo:"Gasto", desc:`-${fmt(parse(g.monto))} ${g.moneda||"USD"} Fondo de Reserva`, destino:"Fondo de Reserva", moneda:g.moneda||"USD", monto:-parse(g.monto)});
+      filasCC.push({hora:"", tipo:"Gasto", moneda:mon, monto, entrada:false, label:`Fondo de Reserva — ${g.nota||""}`, destino:"Fondo de Reserva", tag:"fondo"});
     } else {
-      lineasCaja.push({hora:"", tipo:"Gasto", desc:`-${fmt(parse(g.monto))} ${g.moneda||"ARS"} — ${g.categoria}`, destino:"Caja física", moneda:g.moneda||"ARS", monto:-parse(g.monto)});
+      filasCaja.push({hora:"", tipo:"Gasto", moneda:mon, monto, entrada:false, label:g.categoria+(g.nota?` — ${g.nota}`:""), cliente:""});
     }
   });
 
-  const colorTipo = {"Compra":"#38bdf8","Venta":"#4ade80","Cheque al día":"#c084fc","Cheque diferido":"#a78bfa","Gasto":"#f87171","Ajuste":"#94a3b8","Transferencia":"#f97316"};
+  // Movimientos CC del día desde clientes (transferencias entre CC)
+  const movsCC = clientes.flatMap(cl=>
+    (cl.movimientos||[])
+      .filter(mv=>mv.fecha===hoy&&(mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf"||mv.tipo==="ingreso_dep"||mv.tipo==="retiro_efectivo"))
+      .map(mv=>({...mv, clienteNombre:`${cl.nombre} ${cl.apellido||""}`.trim()}))
+  ).sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
 
-  const FilaValidacion = ({f}) => (
-    <div style={{display:"grid",gridTemplateColumns:"50px 90px 1fr 120px",gap:0,borderBottom:"1px solid #0d1117",alignItems:"center"}}>
-      <div style={{padding:"8px 6px",fontSize:10,color:"#6b7280",fontFamily:"monospace"}}>{f.hora}</div>
-      <div style={{padding:"8px 6px"}}>
-        <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:`${colorTipo[f.tipo]||"#94a3b8"}18`,color:colorTipo[f.tipo]||"#94a3b8",fontWeight:700}}>{f.tipo}</span>
-      </div>
-      <div style={{padding:"8px 6px",fontSize:11,color:"#cbd5e1"}}>{f.desc}</div>
-      <div style={{padding:"8px 6px",fontSize:11,fontWeight:700,fontFamily:"monospace",textAlign:"right",color:f.monto>=0?"#4ade80":"#f87171"}}>
-        {f.monto>=0?"▲":"▼"} {f.moneda} {fmt(Math.abs(Math.round(f.monto)))}
-      </div>
-    </div>
+  // ── Extracto por moneda (caja física con saldo corriente) ─────────────────
+  const monedas = ["USD","ARS","USDT","EUR","BRL","GBP"];
+  const extracto = monedas.map(mon=>{
+    const ini = parse(cajaIni?.[mon]||0);
+    const fin = parse(saldos?.[mon]||0);
+    const filas = filasCaja.filter(f=>f.moneda===mon).sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+    if(!ini && !fin && filas.length===0) return null;
+    let saldo = ini;
+    const filasConSaldo = filas.map(f=>{ saldo+=f.entrada?f.monto:-f.monto; return {...f,saldo}; });
+    return {mon, ini, fin, filas:filasConSaldo};
+  }).filter(Boolean);
+
+  const Chip = ({tipo}) => (
+    <span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:`${COLOR[tipo]||"#94a3b8"}18`,color:COLOR[tipo]||"#94a3b8",fontWeight:700,whiteSpace:"nowrap"}}>{tipo}</span>
   );
 
-  const totalOps = lineasCaja.length + lineasCC.length;
+  const totalMovs = filasCaja.length + filasCC.length;
 
   return (
-    <div style={{marginTop:32,background:"#080d14",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden"}}>
-      {/* Header */}
-      <div style={{padding:"14px 16px",borderBottom:"1px solid #1f2937",display:"flex",alignItems:"center",gap:12}}>
-        <div style={{fontSize:18}}>📋</div>
-        <div>
-          <div style={{fontSize:10,letterSpacing:3,color:"#f59e0b",fontWeight:700}}>VALIDACIÓN DEL DÍA</div>
-          <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>Revisá que cada operación haya impactado donde corresponde · {totalOps} movimiento{totalOps!==1?"s":""}</div>
-        </div>
+    <div style={{padding:"16px 16px 40px",maxWidth:1100,margin:"0 auto"}}>
+      {/* ── HEADER ── */}
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",fontWeight:700,marginBottom:4}}>MOVIMIENTOS DEL DÍA</div>
+        <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>{fechaLarga}</div>
+        <div style={{fontSize:11,color:"#6b7280"}}>{opsHoy.length} operación{opsHoy.length!==1?"es":""} · {totalMovs} movimiento{totalMovs!==1?"s":""}</div>
       </div>
 
-      {/* Sección Caja Física */}
-      <div style={{padding:"12px 16px 0"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <div style={{fontSize:13}}>💵</div>
-          <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",fontWeight:700}}>IMPACTÓ CAJA FÍSICA</div>
-          <div style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>{lineasCaja.length} movimiento{lineasCaja.length!==1?"s":""}</div>
-        </div>
-        {lineasCaja.length===0?(
-          <div style={{fontSize:11,color:"#374151",padding:"10px 0",fontStyle:"italic"}}>Ninguna operación impactó caja física</div>
-        ):(
-          <div style={{background:"#0a0f19",borderRadius:8,overflow:"hidden",marginBottom:16}}>
-            <div style={{display:"grid",gridTemplateColumns:"50px 90px 1fr 120px",borderBottom:"1px solid #1f2937"}}>
-              {["Hora","Tipo","Descripción","Monto"].map(h=>(
-                <div key={h} style={{padding:"6px 6px",fontSize:9,color:"#374151",fontWeight:700,letterSpacing:1}}>{h}</div>
-              ))}
-            </div>
-            {lineasCaja.map((f,i)=><FilaValidacion key={i} f={f}/>)}
-          </div>
-        )}
-      </div>
-
-      {/* Sección Cuentas Corrientes */}
-      <div style={{padding:"0 16px 16px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <div style={{fontSize:13}}>👤</div>
-          <div style={{fontSize:10,letterSpacing:2,color:"#a5b4fc",fontWeight:700}}>IMPACTÓ CUENTAS CORRIENTES</div>
-          <div style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>{lineasCC.length} movimiento{lineasCC.length!==1?"s":""}</div>
-        </div>
-        {lineasCC.length===0?(
-          <div style={{fontSize:11,color:"#374151",padding:"10px 0",fontStyle:"italic"}}>Ninguna operación impactó cuentas corrientes</div>
-        ):(
-          <div style={{background:"#0a0f19",borderRadius:8,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"50px 90px 1fr 120px",borderBottom:"1px solid #1f2937"}}>
-              {["Hora","Tipo","Descripción","Monto"].map(h=>(
-                <div key={h} style={{padding:"6px 6px",fontSize:9,color:"#374151",fontWeight:700,letterSpacing:1}}>{h}</div>
-              ))}
-            </div>
-            {lineasCC.map((f,i)=><FilaValidacion key={i} f={f} showDestino/>)}
-          </div>
-        )}
-        {lineasCC.length>0&&(
-          <div style={{marginTop:8,fontSize:10,color:"#374151",fontStyle:"italic"}}>
-            * Los movimientos en CC no afectan el saldo de caja física
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PantallaLibro({ops, clientes, gastos, hoy}) {
-  const [monedaLibro, setMonedaLibro] = useState("ARS");
-  const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
-  const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
-
-  // Construir movimientos de caja del día actual
-  const movimientos = [];
-
-  // 1. Operaciones del día que impactan caja
-  ops.filter(o=>o.fecha===hoy).forEach(op => {
-    const t = op.tipo;
-    const d = op.datos || op;
-    const moneda = d.moneda || "";
-    const moneda2 = d.moneda2 || "";
-    const monto = parse(d.monto);
-    const cotiz = parse(d.cotizacion);
-    const cliente = d.cliente || d.nota || "";
-    const hora = d.hora || op.hora || "";
-    const impactaCaja = d.baseImpactaCaja !== "no"; // default: sí impacta
-
-    if(t === "compra") {
-      if(!impactaCaja) return; // pagada por transferencia, no toca caja
-      if(moneda2 === "ARS") {
-        movimientos.push({hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:"ARS",monto:-(monto*cotiz)});
-        movimientos.push({hora,tipo:"COMPRA",concepto:`Compra ${moneda}`,nombre:cliente,moneda:moneda,monto:monto});
-      }
-    } else if(t === "venta") {
-      if(!impactaCaja) return; // cobrada por transferencia, no toca caja
-      if(moneda2 === "ARS" && moneda !== "ARS") {
-        movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:moneda,monto:-monto});
-        movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda}`,nombre:cliente,moneda:"ARS",monto:monto*cotiz});
-      }
-      // Desglose: solo las líneas que impactan caja
-      (d.desglose||[]).forEach(linea => {
-        if(linea.tipo==="efectivo"||linea.impactaCaja) {
-          const lMonto = parse(linea.monto);
-          movimientos.push({hora,tipo:"VENTA",concepto:`Venta ${moneda} — efectivo`,nombre:cliente,moneda:moneda2||"ARS",monto:lMonto});
-        }
-      });
-    } else if(t === "cheque_dia") {
-      // Cheque al día: la comisión entra a caja
-      movimientos.push({hora,tipo:"CHEQUE DÍA",concepto:`Nominal $${fmt(parse(d.cn||0))}`,nombre:cliente,moneda:"ARS",monto:parse(d.ccom||0)});
-    } else if(t === "cheque_dif") {
-      // Solo si el pago fue de caja física (no CC)
-      if(!d.pagoCheqDif || d.pagoCheqDif==="caja") {
-        movimientos.push({hora,tipo:"CHEQUE DIF",concepto:`Acredita ${d.dfa||""}`,nombre:cliente,moneda:"ARS",monto:-parse(d.montoFinal||d.monto||0)});
-      }
-    } else if(t === "ajuste") {
-      movimientos.push({hora,tipo:"AJUSTE",concepto:d.nota||"Ajuste",nombre:"",moneda:d.moneda||"ARS",monto:parse(d.delta||0)});
-    }
-    // Transferencias: NO impactan caja física, van a CC
-  });
-
-  // 1b. Movimientos CC que tienen impacta_caja = true
-  clientes.forEach(cl => {
-    (cl.movimientos||[]).filter(mv=>mv.fecha===hoy&&(mv.impacta_caja||mv.impactaCaja)).forEach(mv => {
-      const ing = mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
-      // ing=true → cliente nos debe → entra a nuestra caja
-      // ing=false → le debemos al cliente → sale de nuestra caja
-      movimientos.push({
-        hora:mv.hora||"",
-        tipo: ing ? "CAJA ← CC" : "CC → CAJA",
-        concepto: mv.nota || (ing?"Ingreso en caja":"Salida de caja"),
-        nombre:`${cl.nombre} ${cl.apellido||""}`.trim(),
-        moneda:mv.moneda||"ARS",
-        monto: ing ? parse(mv.monto) : -parse(mv.monto)
-      });
-    });
-  });
-
-  // 2. Gastos del día
-  (gastos||[]).filter(g=>g.fecha===hoy).forEach(g => {
-    if(g.categoria==="Fondo de Reserva") return; // no impacta caja
-    movimientos.push({hora:"",tipo:"GASTO",concepto:g.categoria+(g.nota?` — ${g.nota}`:""),nombre:"",moneda:g.moneda||"ARS",monto:-parse(g.monto)});
-  });
-
-  // Filtrar por moneda y ordenar por hora
-  const filtrados = movimientos
-    .filter(m => m.moneda === monedaLibro)
-    .sort((a,b) => (a.hora||"").localeCompare(b.hora||""));
-
-  // Saldo acumulado
-  let saldo = 0;
-  const conSaldo = filtrados.map(m => { saldo += m.monto; return {...m, saldoAcum:saldo}; });
-
-  const MONEDAS_LIBRO = ["ARS","USD","USDT","EUR","BRL","GBP"];
-  const colorTipo = {"COMPRA":"#38bdf8","VENTA":"#4ade80","CHEQUE DÍA":"#c084fc","CHEQUE DIF":"#a78bfa","GASTO":"#f87171","AJUSTE":"#94a3b8","CC → CAJA":"#f97316","CAJA ← CC":"#34d399"};
-  const totalEntradas = conSaldo.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
-  const totalSalidas = conSaldo.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
-
-  return (
-    <div style={{padding:"16px 16px 40px",maxWidth:1000,margin:"0 auto"}}>
-      <div style={{fontSize:10,letterSpacing:3,color:"#34d399",marginBottom:4,fontWeight:700}}>LIBRO DE CAJA</div>
-      <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Movimientos del día — {hoy}</div>
-      <div style={{fontSize:11,color:"#6b7280",marginBottom:16}}>Todo lo que impactó la caja física hoy</div>
-
-      {/* Selector moneda */}
-      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-        {MONEDAS_LIBRO.map(m=>(
-          <button key={m} onClick={()=>setMonedaLibro(m)}
-            style={{padding:"6px 14px",borderRadius:6,border:"1px solid "+(monedaLibro===m?"#34d399":"#1f2937"),
-              background:monedaLibro===m?"rgba(52,211,153,0.1)":"transparent",
-              color:monedaLibro===m?"#34d399":"#6b7280",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-            {m}
-          </button>
-        ))}
-      </div>
-
-      {/* Resumen */}
-      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
-        {[
-          {l:"ENTRADAS",v:totalEntradas,c:"#4ade80"},
-          {l:"SALIDAS",v:Math.abs(totalSalidas),c:"#f87171"},
-          {l:"SALDO NETO",v:totalEntradas+totalSalidas,c:"#34d399"},
-          {l:"MOVIMIENTOS",v:conSaldo.length,c:"#94a3b8",isCount:true},
-        ].map(({l,v,c,isCount})=>(
-          <div key={l} style={{flex:"1 1 140px",background:"#0f1623",border:`1px solid ${c}22`,borderRadius:10,padding:"12px 14px"}}>
-            <div style={{fontSize:9,color:"#6b7280",letterSpacing:1,marginBottom:4}}>{l}</div>
-            <div style={{fontSize:16,fontWeight:700,color:c,fontFamily:"monospace"}}>
-              {isCount?v:fmt(Math.round(v))+" "+monedaLibro}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Tabla */}
-      {conSaldo.length===0?(
-        <div style={{textAlign:"center",color:"#374151",padding:40,fontSize:13,background:"#0f1623",borderRadius:12,border:"1px solid #1f2937"}}>
-          Sin movimientos en {monedaLibro} hoy
-        </div>
-      ):(
-        <div style={{background:"#0f1623",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"70px 120px 1fr 130px 60px 130px"}}>
-            {["Hora","Tipo","Concepto / Cliente","Monto","","Saldo"].map(h=>(
-              <div key={h} style={{padding:"8px 10px",fontSize:9,color:"#6b7280",fontWeight:700,letterSpacing:1,borderBottom:"1px solid #1f2937",background:"#080d14"}}>{h}</div>
-            ))}
-            {conSaldo.map((m,i)=>(
-              <Fragment key={i}>
-                <div style={{padding:"10px",fontSize:11,color:"#6b7280",borderBottom:"1px solid #0a0a0a"}}>{m.hora}</div>
-                <div style={{padding:"10px",borderBottom:"1px solid #0a0a0a"}}>
-                  <span style={{fontSize:9,padding:"2px 7px",borderRadius:4,background:`${colorTipo[m.tipo]||"#94a3b8"}18`,color:colorTipo[m.tipo]||"#94a3b8",fontWeight:700}}>
-                    {m.tipo}
-                  </span>
-                </div>
-                <div style={{padding:"10px",fontSize:12,color:"#e2e8f0",borderBottom:"1px solid #0a0a0a"}}>
-                  {m.concepto}
-                  {m.nombre&&<span style={{color:"#9ca3af",marginLeft:6,fontSize:11}}>· {m.nombre}</span>}
-                </div>
-                <div style={{padding:"10px",fontFamily:"monospace",fontSize:13,fontWeight:700,
-                  color:m.monto>=0?"#4ade80":"#f87171",textAlign:"right",borderBottom:"1px solid #0a0a0a"}}>
-                  {m.monto>=0?"+":"-"}{fmt(Math.round(Math.abs(m.monto)))}
-                </div>
-                <div style={{padding:"10px",fontSize:10,color:"#6b7280",textAlign:"center",borderBottom:"1px solid #0a0a0a"}}>
-                  {m.monto>=0?"↑":"↓"}
-                </div>
-                <div style={{padding:"10px",fontFamily:"monospace",fontSize:12,
-                  color:m.saldoAcum>=0?"#94a3b8":"#f87171",textAlign:"right",borderBottom:"1px solid #0a0a0a"}}>
-                  {fmt(Math.round(m.saldoAcum))}
-                </div>
-              </Fragment>
-            ))}
+      {/* ── SALDOS INICIALES ── */}
+      {cajaIni&&Object.values(cajaIni).some(v=>parse(v)>0)&&(
+        <div style={{marginBottom:20,background:"#0a0f19",border:"1px solid #1f2937",borderRadius:10,padding:"12px 16px"}}>
+          <div style={{fontSize:9,letterSpacing:2,color:"#6b7280",fontWeight:700,marginBottom:10}}>SALDOS AL INICIO DEL DÍA</div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+            {monedas.map(mon=>{
+              const v=parse(cajaIni[mon]||0); if(!v) return null;
+              const mon_obj=MONEDAS.find(m=>m.id===mon);
+              return <div key={mon} style={{background:"rgba(255,255,255,0.02)",border:`1px solid ${mon_obj?.color||"#1f2937"}33`,borderRadius:8,padding:"8px 14px"}}>
+                <div style={{fontSize:9,color:mon_obj?.color||"#94a3b8",fontWeight:700,marginBottom:3}}>{mon}</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",fontFamily:"monospace"}}>{mon_obj?.simbolo||""}{fmt(v)}</div>
+              </div>;
+            })}
           </div>
         </div>
       )}
 
-      {/* Panel de validación del día */}
-      <PanelValidacion ops={ops} clientes={clientes} gastos={gastos} hoy={hoy}/>
+      {/* ── EXTRACTO CAJA FÍSICA POR MONEDA ── */}
+      <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",fontWeight:700,marginBottom:12}}>💵 CAJA FÍSICA</div>
+      {extracto.length===0&&<div style={{color:"#374151",fontSize:12,marginBottom:24,fontStyle:"italic"}}>Sin movimientos en caja física hoy</div>}
+      {extracto.map(({mon,ini,fin,filas})=>{
+        const mon_obj=MONEDAS.find(m=>m.id===mon);
+        const dif=fin-ini;
+        return (
+          <div key={mon} style={{marginBottom:16,background:"#0a0f19",border:`1px solid ${mon_obj?.color||"#1f2937"}22`,borderRadius:10,overflow:"hidden"}}>
+            {/* sub-header moneda */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #111827",background:"rgba(255,255,255,0.01)"}}>
+              <span style={{fontSize:12,fontWeight:700,color:mon_obj?.color||"#e2e8f0"}}>{mon} — {mon_obj?.label||mon}</span>
+              <div style={{display:"flex",gap:16,alignItems:"center"}}>
+                <span style={{fontSize:11,color:"#6b7280"}}>Inicio: <strong style={{color:"#e2e8f0",fontFamily:"monospace"}}>{mon_obj?.simbolo||""}{fmt(ini)}</strong></span>
+                <span style={{fontSize:11,color:"#6b7280"}}>→</span>
+                <span style={{fontSize:11,color:"#6b7280"}}>Fin: <strong style={{color:"#e2e8f0",fontFamily:"monospace"}}>{mon_obj?.simbolo||""}{fmt(fin)}</strong></span>
+                <span style={{fontSize:12,fontWeight:700,fontFamily:"monospace",color:dif>0?"#4ade80":dif<0?"#f87171":"#475569"}}>{dif>=0?"+":""}{mon_obj?.simbolo||""}{fmt(dif)}</span>
+              </div>
+            </div>
+            {/* tabla */}
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid #111827"}}>
+                    {["Hora","Tipo","Descripción","Cliente","Entrada","Salida","Saldo"].map(h=>(
+                      <th key={h} style={{padding:"7px 10px",textAlign:["Entrada","Salida","Saldo"].includes(h)?"right":"left",color:"#4b5563",fontSize:9,fontWeight:700,letterSpacing:1}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{borderBottom:"1px solid #0d1117",background:"rgba(255,255,255,0.015)"}}>
+                    <td style={{padding:"7px 10px",color:"#4b5563",fontSize:10}}>APERTURA</td>
+                    <td colSpan={3} style={{padding:"7px 10px",color:"#6b7280",fontSize:10,fontStyle:"italic"}}>Saldo inicial del día</td>
+                    <td colSpan={2}></td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:"#94a3b8"}}>{mon_obj?.simbolo||""}{fmt(ini)}</td>
+                  </tr>
+                  {filas.map((f,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid #0d1117"}}>
+                      <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{f.hora}</td>
+                      <td style={{padding:"7px 10px"}}><Chip tipo={f.tipo}/></td>
+                      <td style={{padding:"7px 10px",color:"#cbd5e1"}}>{f.label}</td>
+                      <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.cliente||"—"}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",color:"#4ade80",fontWeight:600,fontFamily:"monospace"}}>{f.entrada?`${mon_obj?.simbolo||""}${fmt(f.monto)}`:""}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",color:"#f87171",fontWeight:600,fontFamily:"monospace"}}>{!f.entrada?`${mon_obj?.simbolo||""}${fmt(f.monto)}`:""}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:f.saldo>0?"#e2e8f0":f.saldo<0?"#f87171":"#475569"}}>{mon_obj?.simbolo||""}{fmt(f.saldo)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{borderTop:"2px solid #1f2937"}}>
+                    <td colSpan={4} style={{padding:"8px 10px",color:"#6b7280",fontSize:10,fontWeight:700}}>SALDO FINAL</td>
+                    <td style={{padding:"8px 10px",textAlign:"right",color:"#4ade80",fontWeight:700,fontFamily:"monospace"}}>{mon_obj?.simbolo||""}{fmt(filas.filter(f=>f.entrada).reduce((s,f)=>s+f.monto,0))}</td>
+                    <td style={{padding:"8px 10px",textAlign:"right",color:"#f87171",fontWeight:700,fontFamily:"monospace"}}>{mon_obj?.simbolo||""}{fmt(filas.filter(f=>!f.entrada).reduce((s,f)=>s+f.monto,0))}</td>
+                    <td style={{padding:"8px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:fin>0?"#4ade80":fin<0?"#f87171":"#475569"}}>{mon_obj?.simbolo||""}{fmt(fin)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── CUENTAS CORRIENTES ── */}
+      <div style={{fontSize:10,letterSpacing:2,color:"#a5b4fc",fontWeight:700,marginBottom:12,marginTop:28}}>👤 CUENTAS CORRIENTES</div>
+      {filasCC.length===0&&movsCC.length===0?(
+        <div style={{color:"#374151",fontSize:12,marginBottom:16,fontStyle:"italic"}}>Sin movimientos en cuentas corrientes hoy</div>
+      ):(
+        <div style={{background:"#0a0f19",border:"1px solid #6366f122",borderRadius:10,overflow:"hidden",marginBottom:16}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid #1f2937"}}>
+                {["Hora","Tipo","Descripción","Cliente / CC","Moneda","Monto"].map(h=>(
+                  <th key={h} style={{padding:"7px 10px",textAlign:h==="Monto"?"right":"left",color:"#4b5563",fontSize:9,fontWeight:700,letterSpacing:1}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filasCC.map((f,i)=>(
+                <tr key={"op_"+i} style={{borderBottom:"1px solid #0d1117"}}>
+                  <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{f.hora||"—"}</td>
+                  <td style={{padding:"7px 10px"}}><Chip tipo={f.tipo}/></td>
+                  <td style={{padding:"7px 10px",color:"#cbd5e1"}}>{f.label}</td>
+                  <td style={{padding:"7px 10px",color:"#a5b4fc",fontSize:10}}>{f.destino||"—"}</td>
+                  <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{f.moneda}</td>
+                  <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:f.entrada?"#4ade80":"#f87171"}}>{f.entrada?"+":"-"}{fmt(f.monto)}</td>
+                </tr>
+              ))}
+              {movsCC.filter(mv=>{
+                // No duplicar los que ya están en filasCC (vinculados a ops)
+                return !filasCC.some(f=>Math.abs(f.monto-parse(mv.monto))<1&&f.hora===mv.hora);
+              }).map((mv,i)=>{
+                const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+                return (
+                  <tr key={"cc_"+i} style={{borderBottom:"1px solid #0d1117",background:"rgba(99,102,241,0.03)"}}>
+                    <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10,whiteSpace:"nowrap"}}>{mv.hora||"—"}</td>
+                    <td style={{padding:"7px 10px"}}><Chip tipo={ing?"Cobro CC":"Pago CC"}/></td>
+                    <td style={{padding:"7px 10px",color:"#cbd5e1"}}>{mv.nota||"—"}</td>
+                    <td style={{padding:"7px 10px",color:"#a5b4fc",fontSize:10}}>{mv.clienteNombre}</td>
+                    <td style={{padding:"7px 10px",color:"#6b7280",fontSize:10}}>{mv.moneda}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontFamily:"monospace",fontWeight:700,color:ing?"#4ade80":"#f87171"}}>{ing?"+":"-"}{fmt(parse(mv.monto))}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── PIE DE VALIDACIÓN ── */}
+      {totalMovs>0&&(
+        <div style={{background:"rgba(245,158,11,0.04)",border:"1px solid #f59e0b22",borderRadius:8,padding:"12px 16px",fontSize:11,color:"#6b7280"}}>
+          <span style={{color:"#f59e0b",fontWeight:700}}>✓ Validación:</span> Revisá que los movimientos de Caja Física coincidan con el efectivo que tenés en mano, y que las Cuentas Corrientes reflejen lo que cada cliente te debe o vos les debés.
+        </div>
+      )}
     </div>
   );
 }
-
 
 function PantallaRecaudadora({recaudTransf, setRecaudTransf, clientes, setClientes, hoy, SB, notify, saldoCC}) {
   const [buscarCCRecaud, setBuscarCCRecaud] = useState("");
@@ -4946,7 +4883,7 @@ function AppInterna({ usuario }) {
     {id:"home",label:"Dashboard",c:"#38bdf8"},
     {id:"ape",label:"Apertura",c:"#4ade80"},
     {id:"ops",label:"Operaciones",c:"#f59e0b"},
-    {id:"libro",label:"Libro",c:"#38bdf8"},
+    {id:"libro",label:"Movimientos",c:"#38bdf8"},
     {id:"cartera",label:"Cartera",c:"#c084fc"},
     {id:"clientes",label:"Clientes"+(clientes.length?" ("+clientes.length+")":""),c:"#34d399"},
     {id:"posicion",label:"Posicion",c:"#e879f9"},
@@ -4961,7 +4898,7 @@ function AppInterna({ usuario }) {
     {id:"cotizaciones",label:"Cotizaciones",c:"#38bdf8"},
     {id:"pnl",label:"P&L",c:"#f472b6"},
     {id:"recaudadora",label:"Recaudadora",c:"#e879f9"},
-    {id:"libro",label:"Libro",c:"#34d399"},
+    {id:"libro",label:"Movimientos",c:"#34d399"},
     {id:"cierre",label:cajaCerrada?"CERRADO":"Cierre",c:"#94a3b8"},
   ].filter(p=>rolUsuario==="admin"||!["evolucion","socios","cierre"].includes(p.id));
 
@@ -6116,141 +6053,6 @@ function AppInterna({ usuario }) {
           </div>
         )}
 
-        {pant==="libro"&&(()=>{
-          const movsCC_hoy = clientes.flatMap(cl=>
-            cl.movimientos
-              .filter(mv=>mv.fecha===hoy)
-              .map(mv=>({...mv, clienteNombre:cl.nombre+" "+cl.apellido}))
-          );
-          const todosMovs = [
-            ...opsHoy.map(op=>{
-              const movs = [];
-              const t = op.tipo;
-              if(t==="compra"){
-                const baseImp=op.baseImpactaCaja!=="no";
-                const imp2=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
-                const ccParte=Number(op.monto2||0)-imp2;
-                // Buscar CCs vinculadas a esta op
-                const ccsVinc=clientes.flatMap(cl=>cl.movimientos.filter(mv=>mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora).map(mv=>cl.nombre+" "+cl.apellido)).filter((v,i,a)=>a.indexOf(v)===i);
-                if(baseImp) movs.push({moneda:op.moneda,monto:op.monto,entrada:true,label:"Compra "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(imp2>0) movs.push({moneda:op.moneda2,monto:imp2,entrada:false,label:"Pago efectivo — Compra "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(ccParte>0) movs.push({moneda:op.moneda2,monto:ccParte,entrada:false,label:"Pago via CC — Compra "+fmt(op.monto)+" "+op.moneda,detalle:ccsVinc.length>0?ccsVinc.join(", "):(op.nota||""),esCaja:false,esCC:true});
-              } else if(t==="venta"){
-                const baseImpV=op.baseImpactaCaja!=="no";
-                const imp2V=op.impactoReal2!==undefined?Number(op.impactoReal2):Number(op.monto2||0);
-                const ccParteV=Number(op.monto2||0)-imp2V;
-                const ccsVincV=clientes.flatMap(cl=>cl.movimientos.filter(mv=>mv.nota&&mv.nota.includes("Op. vinculada")&&mv.fecha===op.fecha&&mv.hora===op.hora).map(mv=>cl.nombre+" "+cl.apellido)).filter((v,i,a)=>a.indexOf(v)===i);
-                if(baseImpV) movs.push({moneda:op.moneda,monto:op.monto,entrada:false,label:"Venta "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(imp2V>0) movs.push({moneda:op.moneda2,monto:imp2V,entrada:true,label:"Cobro efectivo — Venta "+fmt(op.monto)+" "+op.moneda,detalle:op.cliente||(op.nota||""),esCaja:true});
-                if(ccParteV>0) movs.push({moneda:op.moneda2,monto:ccParteV,entrada:true,label:"Cobro via CC — Venta "+fmt(op.monto)+" "+op.moneda,detalle:ccsVincV.length>0?ccsVincV.join(", "):(op.nota||""),esCaja:false,esCC:true});
-              } else if(t==="cheque_dia"){
-                movs.push({moneda:"ARS",monto:op.cn,entrada:true,label:"Cheque al día",detalle:op.cliente||(op.nota||"")});
-              } else if(t==="cheque_dif"){
-                movs.push({moneda:"ARS",monto:op.montoFinal||op.monto,entrada:false,label:"Cheque diferido (pago)",detalle:op.cliente||(op.nota||"")});
-              } else if(t==="transferencia"){
-                movs.push({moneda:"ARS",monto:op.tcom||op.monto,entrada:true,label:"Transferencia (comisión)",detalle:op.cliente||(op.nota||"")});
-              } else if(t==="cobro_dif"){
-                movs.push({moneda:"ARS",monto:op.monto,entrada:true,label:"Cobro diferido",detalle:op.cliente||(op.nota||"")});
-              } else if(t==="ajuste"){
-                movs.push({moneda:op.moneda,monto:Math.abs(op.delta||op.monto),entrada:(op.delta||0)>0,label:"Ajuste manual",detalle:op.nota||""});
-              }
-              return movs.map(mv=>({...mv,hora:op.hora,id:op.id+"_"+mv.moneda,origen:"op"}));
-            }).flat(),
-            ...movsCC_hoy
-              .filter(mv=>mv.tipo==="cc_ingreso_transf"||mv.tipo==="cc_ingreso_dep"||mv.tipo==="cc_retiro_transf"||mv.tipo==="cc_retiro_efectivo")
-              .map(mv=>{
-                const ing=mv.tipo==="cc_ingreso_transf"||mv.tipo==="cc_ingreso_dep";
-                return {moneda:mv.moneda,monto:mv.monto,entrada:ing,label:(ing?"Cobro CC":"Pago CC")+" — "+mv.clienteNombre,detalle:mv.nota||"",hora:mv.hora,id:"cc_"+mv.id,origen:"cc"};
-              })
-          ].sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
-
-          const extractoPorMoneda = {};
-          MONEDAS.forEach(m=>{
-            const ini=parse(cajaIni[m.id]||0);
-            let sal=ini;
-            const filas=[{hora:"APERTURA",label:"Saldo inicial",entrada:true,monto:0,saldo:ini,detalle:"",id:"ini_"+m.id,origen:"ini"}];
-            todosMovs.filter(mv=>mv.moneda===m.id).forEach(mv=>{
-              // Los movimientos via CC no impactan el saldo de caja fisica
-              if(!mv.esCC) sal+=mv.entrada?mv.monto:-mv.monto;
-              filas.push({...mv,saldo:sal});
-            });
-            if(filas.length>1) extractoPorMoneda[m.id]={filas,ini,fin:sal,mon:m};
-          });
-
-          return (
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-                <div>
-                  <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",marginBottom:2}}>LIBRO DE CAJA — {fechaLarga}</div>
-                  <div style={{fontSize:11,color:"#94a3b8"}}>{opsHoy.length} operaciones · extracto con saldo corriente</div>
-                </div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  {MONEDAS.map(m=>{
-                    const ini=parse(cajaIni[m.id]||0),fin=saldos[m.id]||0,dif=fin-ini;
-                    if(!ini&&!fin) return null;
-                    return <div key={m.id} style={{background:"rgba(255,255,255,0.03)",border:"1px solid "+m.color+"33",borderRadius:8,padding:"8px 12px"}}>
-                      <div style={{fontSize:9,color:m.color,marginBottom:3,fontWeight:700}}>{m.id}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>{m.simbolo}{fmt(fin)}</div>
-                      <div style={{fontSize:10,color:dif>0?"#4ade80":dif<0?"#f87171":"#475569"}}>{dif>0?"+":""}{m.simbolo}{fmt(dif)}</div>
-                    </div>;
-                  })}
-                </div>
-              </div>
-              {Object.values(extractoPorMoneda).map(({filas,ini,fin,mon})=>(
-                <Card key={mon.id} sx={{marginBottom:14,border:"1px solid "+mon.color+"22"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                    <span style={{fontSize:12,fontWeight:700,color:mon.color}}>{mon.id} — {mon.label}</span>
-                    <span style={{fontSize:11,color:"#9ca3af"}}>{mon.simbolo}{fmt(ini)} → <strong style={{color:"#fff"}}>{mon.simbolo}{fmt(fin)}</strong>
-                      <span style={{marginLeft:8,color:fin-ini>0?"#4ade80":fin-ini<0?"#f87171":"#475569",fontWeight:700}}>{fin-ini>0?"+":""}{mon.simbolo}{fmt(fin-ini)}</span>
-                    </span>
-                  </div>
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                      <thead>
-                        <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                          {["Hora","Concepto","Detalle","Entrada","Salida","Saldo"].map(h=>(
-                            <th key={h} style={{textAlign:["Hora","Concepto","Detalle"].includes(h)?"left":"right",padding:"6px 8px",color:"#94a3b8",fontSize:9,fontWeight:600}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filas.map((f,i)=>(
-                          <tr key={f.id} style={{borderBottom:"1px solid rgba(255,255,255,0.04)",background:f.origen==="ini"?"rgba(255,255,255,0.02)":f.esCC?"rgba(99,102,241,0.03)":f.origen==="cc"?"rgba(99,102,241,0.04)":"transparent"}}>
-                            <td style={{padding:"7px 8px",color:"#64748b",whiteSpace:"nowrap",fontSize:10}}>{f.hora}</td>
-                            <td style={{padding:"7px 8px",color:f.esCC?"#a5b4fc":"#e2e8f0",fontWeight:f.origen==="ini"?600:400}}>
-                              {f.origen==="cc"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.15)",color:"#a5b4fc",marginRight:6}}>CC</span>}
-                              {f.esCC&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(99,102,241,0.12)",color:"#a5b4fc",marginRight:6}}>⇄ CC</span>}
-                              {f.esCaja&&f.origen!=="ini"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:"rgba(74,222,128,0.08)",color:"#4ade80",marginRight:6}}>💵</span>}
-                              {f.label}
-                            </td>
-                            <td style={{padding:"7px 8px",color:f.esCC?"#6366f1":"#4b5563",fontSize:10,maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.detalle}</td>
-                            <td style={{padding:"7px 8px",textAlign:"right",color:f.esCC?"#a5b4fc":"#4ade80",fontWeight:600}}>{f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
-                            <td style={{padding:"7px 8px",textAlign:"right",color:f.esCC?"#a5b4fc":"#f87171",fontWeight:600}}>{!f.entrada&&f.monto>0?mon.simbolo+fmt(f.monto):""}</td>
-                            <td style={{padding:"7px 8px",textAlign:"right",fontWeight:700,color:f.esCC?"#6b7280":f.saldo>0?"#e2e8f0":f.saldo<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace",fontSize:f.esCC?10:11}}>{f.esCC?"—":mon.simbolo+fmt(f.saldo)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr style={{borderTop:"2px solid rgba(255,255,255,0.1)"}}>
-                          <td colSpan={3} style={{padding:"8px",fontSize:10,color:"#9ca3af",fontWeight:600}}>SALDO FINAL</td>
-                          <td style={{padding:"8px",textAlign:"right",color:"#4ade80",fontWeight:700}}>{mon.simbolo}{fmt(filas.filter(f=>f.entrada&&f.monto>0).reduce((s,f)=>s+f.monto,0))}</td>
-                          <td style={{padding:"8px",textAlign:"right",color:"#f87171",fontWeight:700}}>{mon.simbolo}{fmt(filas.filter(f=>!f.entrada&&f.monto>0).reduce((s,f)=>s+f.monto,0))}</td>
-                          <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:fin>0?"#4ade80":fin<0?"#f87171":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{mon.simbolo}{fmt(fin)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </Card>
-              ))}
-              {Object.keys(extractoPorMoneda).length===0&&(
-                <Card sx={{textAlign:"center",padding:40}}>
-                  <div style={{fontSize:24,marginBottom:8}}>📒</div>
-                  <div style={{color:"#64748b"}}>Sin movimientos hoy</div>
-                </Card>
-              )}
-            </div>
-          );
-        })()}
         {pant==="cartera"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -9095,7 +8897,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
 
         {pant==="pnl"&&<PantallaPnl pnlData={pnlData}/>}
         {pant==="recaudadora"&&<PantallaRecaudadora recaudTransf={recaudTransf} setRecaudTransf={setRecaudTransf} clientes={clientes} setClientes={setClientes} hoy={hoy} SB={SB} notify={notify} saldoCC={saldoCC}/>}
-        {pant==="libro"&&<PantallaLibro ops={ops.map(o=>({...o,...(o.datos||{})}))} clientes={clientes} gastos={gastos} hoy={hoy}/>}
+        {pant==="libro"&&<PantallaMovimientos ops={ops} clientes={clientes} gastos={gastos} hoy={hoy} cajaIni={cajaIni} saldos={saldos}/>}
 
       </main>
       <AgenteIA clientes={clientes} ops={ops} gastos={gastos} hoy={hoy} saldoCC={saldoCC} />
