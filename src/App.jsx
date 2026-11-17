@@ -788,15 +788,185 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
   );
 }
 
-function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos}) {
+function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos, SB}) {
   const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
   const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
   const COLOR = {"Compra":"#38bdf8","Venta":"#4ade80","Cheque al día":"#c084fc","Cheque diferido":"#a78bfa","Gasto":"#f87171","Ajuste":"#94a3b8","Transferencia":"#f97316","Cobro CC":"#34d399","Pago CC":"#f97316"};
 
-  const opsHoy = ops.filter(o=>o.fecha===hoy).sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+  // ── Estado rango de fechas ────────────────────────────────────────────────
+  const [fechaDesde, setFechaDesde] = useState(hoy);
+  const [fechaHasta, setFechaHasta] = useState(hoy);
+  const [modoRango, setModoRango] = useState(false); // false = vista del día actual
+  const [opsRango, setOpsRango] = useState(null);     // null = usar ops del día (en memoria)
+  const [movsRango, setMovsRango] = useState(null);
+  const [gastosRango, setGastosRango] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [exportando, setExportando] = useState(false);
+
+  const cargarRango = async () => {
+    if(!fechaDesde||!fechaHasta||fechaDesde>fechaHasta) return;
+    setCargando(true);
+    try {
+      const [resOps, resMov, resGastos] = await Promise.all([
+        SB.from("operaciones").select("*").gte("fecha",fechaDesde).lte("fecha",fechaHasta).order("fecha").order("hora"),
+        SB.from("movimientos_cc").select("*, cliente:clientes(id,nombre,apellido)").gte("fecha",fechaDesde).lte("fecha",fechaHasta).order("fecha").order("id"),
+        SB.from("gastos").select("*").gte("fecha",fechaDesde).lte("fecha",fechaHasta).order("fecha"),
+      ]);
+      setOpsRango(resOps.data||[]);
+      setMovsRango(resMov.data||[]);
+      setGastosRango(resGastos.data||[]);
+      setModoRango(true);
+    } catch(e){ console.error(e); }
+    setCargando(false);
+  };
+
+  const volverHoy = () => {
+    setModoRango(false);
+    setOpsRango(null); setMovsRango(null); setGastosRango(null);
+    setFechaDesde(hoy); setFechaHasta(hoy);
+  };
+
+  // Datos activos: rango cargado o día actual
+  const opsActivas = modoRango ? (opsRango||[]) : ops.filter(o=>o.fecha===hoy);
+  const gastosActivos = modoRango ? (gastosRango||[]) : (gastos||[]).filter(g=>g.fecha===hoy);
+  // movsCC activos: en modo rango usamos los de Supabase con join; en modo hoy usamos los de clientes en memoria
+  const movsCC_activos = modoRango
+    ? (movsRango||[]).filter(mv=>mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf"||mv.tipo==="ingreso_dep"||mv.tipo==="retiro_efectivo")
+        .map(mv=>({...mv, clienteNombre:mv.cliente?`${mv.cliente.nombre} ${mv.cliente.apellido||""}`.trim():"—"}))
+    : clientes.flatMap(cl=>(cl.movimientos||[])
+        .filter(mv=>mv.fecha===hoy&&(mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf"||mv.tipo==="ingreso_dep"||mv.tipo==="retiro_efectivo"))
+        .map(mv=>({...mv, clienteNombre:`${cl.nombre} ${cl.apellido||""}`.trim()}))
+      );
+
+  // ── Exportar Excel ────────────────────────────────────────────────────────
+  const exportarExcel = async () => {
+    setExportando(true);
+    try {
+      // Cargar SheetJS dinámicamente
+      if(!window.XLSX) {
+        await new Promise((res,rej)=>{
+          const s=document.createElement("script");
+          s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+          s.onload=res; s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      const XLSX = window.XLSX;
+
+      // Determinar fuente de datos para export
+      let opsExport = opsActivas;
+      let movsExport = movsCC_activos;
+      let gastosExport = gastosActivos;
+
+      // ── Hoja 1: Caja Física ──
+      const filasExcelCaja = [];
+      opsExport.forEach(op=>{
+        const d=op.datos||op;
+        const t=op.tipo;
+        const mon1=d.moneda||"", mon2=d.moneda2||"";
+        const m1=parse(d.monto), m2=parse(d.monto2);
+        const fecha=op.fecha||d.fecha||"";
+        const hora=d.hora||op.hora||"";
+        const cli=d.cliente||"";
+        const baseCC=d.baseImpactaCaja==="no";
+        const desgl=d.desglose||[];
+        const impReal2=d.impactoReal2!==undefined?parse(d.impactoReal2):m2;
+
+        if(t==="compra"||t==="venta"){
+          const esC=t==="compra";
+          if(!baseCC){
+            filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:esC?"Compra":"Venta",Descripción:`${fmt(m1)} ${mon1} @ $${fmt(parse(d.cotizacion))}`,Desde:"",Hacia:cli,Moneda:mon1,Monto:esC?m1:-m1});
+          }
+          if(desgl.length>0){
+            desgl.forEach(l=>{
+              const dm=parse(l.monto); if(!dm) return;
+              if(l.tipo==="efectivo"){
+                filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:esC?"Compra":"Venta",Descripción:`${esC?"Pago":"Cobro"} efectivo`,Desde:"",Hacia:cli,Moneda:mon2,Monto:esC?-dm:dm});
+              }
+            });
+          } else if(!baseCC && impReal2>0){
+            filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:esC?"Compra":"Venta",Descripción:`${esC?"Pago":"Cobro"} ARS`,Desde:"",Hacia:cli,Moneda:mon2,Monto:esC?-impReal2:impReal2});
+          }
+        } else if(t==="cheque_dia"){
+          filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:"Cheque al día",Descripción:`Nominal $${fmt(parse(d.cn))}`,Desde:"",Hacia:cli,Moneda:"ARS",Monto:parse(d.ccom)});
+        } else if(t==="cheque_dif"){
+          if(!d.pagoCheqDif||d.pagoCheqDif==="caja"){
+            filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:"Cheque diferido",Descripción:`Acredita ${d.dfa||""}`,Desde:"",Hacia:cli,Moneda:"ARS",Monto:-parse(d.montoFinal||d.monto)});
+          }
+        } else if(t==="ajuste"){
+          const delta=parse(d.delta);
+          filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:"Ajuste",Descripción:d.nota||"Ajuste manual",Desde:"",Hacia:"",Moneda:d.moneda||"ARS",Monto:delta});
+        } else if(t==="transferencia"){
+          filasExcelCaja.push({Fecha:fecha,Hora:hora,Tipo:"Caja Física",Operación:"Transferencia",Descripción:"Comisión",Desde:"",Hacia:cli,Moneda:"ARS",Monto:parse(d.tcom||d.monto)});
+        }
+      });
+      gastosExport.forEach(g=>{
+        if(g.categoria!=="Fondo de Reserva"){
+          filasExcelCaja.push({Fecha:g.fecha,Hora:"",Tipo:"Caja Física",Operación:"Gasto",Descripción:g.categoria+(g.nota?` — ${g.nota}`:""),Desde:"",Hacia:"",Moneda:g.moneda||"ARS",Monto:-parse(g.monto)});
+        }
+      });
+
+      // ── Hoja 2: Cuentas Corrientes ──
+      const filasExcelCC = [];
+      opsExport.forEach(op=>{
+        const d=op.datos||op;
+        const t=op.tipo;
+        const mon1=d.moneda||"", mon2=d.moneda2||"";
+        const m1=parse(d.monto);
+        const fecha=op.fecha||d.fecha||"";
+        const hora=d.hora||op.hora||"";
+        const cli=d.cliente||"";
+        const baseCC=d.baseImpactaCaja==="no";
+        const desgl=d.desglose||[];
+
+        if(t==="compra"||t==="venta"){
+          const esC=t==="compra";
+          if(baseCC){
+            // USD a CC pendiente
+            const mv=clientes.flatMap(cl=>cl.movimientos).find(mv=>mv.fecha===fecha&&mv.hora===hora&&mv.moneda===mon1&&parse(mv.monto)===m1);
+            const cl=mv?clientes.find(c=>c.movimientos.some(x=>x===mv)):null;
+            const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC pendiente";
+            filasExcelCC.push({Fecha:fecha,Hora:hora,Tipo:"Cuenta Corriente",Operación:esC?"Compra pendiente CC":"Venta pendiente CC",Descripción:`${fmt(m1)} ${mon1} @ $${fmt(parse(d.cotizacion))}`,Desde:esC?"STS":nombre,Hacia:esC?nombre:"STS",Moneda:mon1,Monto:m1});
+          }
+          desgl.forEach(l=>{
+            const dm=parse(l.monto); if(!dm) return;
+            if(l.tipo!=="efectivo"&&l.tipo!=="op_simultanea"&&l.tipo!=="pendiente"){
+              const cl=clientes.find(c=>c.id===Number(l.tipo));
+              const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC";
+              filasExcelCC.push({Fecha:fecha,Hora:hora,Tipo:"Cuenta Corriente",Operación:esC?"Pago via CC":"Cobro via CC",Descripción:`${fmt(m1)} ${mon1} @ $${fmt(parse(d.cotizacion))}`,Desde:esC?nombre:"STS",Hacia:esC?"STS":nombre,Moneda:mon2,Monto:dm});
+            }
+          });
+        } else if(t==="cheque_dif"&&d.pagoCheqDif&&d.pagoCheqDif!=="caja"){
+          const cl=clientes.find(c=>c.id===Number(d.pagoCheqDif));
+          const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC";
+          filasExcelCC.push({Fecha:fecha,Hora:hora,Tipo:"Cuenta Corriente",Operación:"Cheque diferido CC",Descripción:`Acredita ${d.dfa||""}`,Desde:"STS",Hacia:nombre,Moneda:"ARS",Monto:-parse(d.montoFinal||d.monto)});
+        }
+      });
+      gastosExport.filter(g=>g.categoria==="Fondo de Reserva").forEach(g=>{
+        filasExcelCC.push({Fecha:g.fecha,Hora:"",Tipo:"Cuenta Corriente",Operación:"Gasto — Fondo de Reserva",Descripción:g.nota||"",Desde:"STS",Hacia:"Fondo de Reserva",Moneda:g.moneda||"USD",Monto:-parse(g.monto)});
+      });
+      // Movimientos CC directos
+      movsExport.forEach(mv=>{
+        const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
+        const nombre=mv.clienteNombre||mv.cliente_nombre||"—";
+        filasExcelCC.push({Fecha:mv.fecha,Hora:mv.hora||"",Tipo:"Cuenta Corriente",Operación:ing?"Cobro CC":"Pago CC",Descripción:mv.nota||"",Desde:ing?nombre:"STS",Hacia:ing?"STS":nombre,Moneda:mv.moneda,Monto:ing?parse(mv.monto):-parse(mv.monto)});
+      });
+      filasExcelCC.sort((a,b)=>a.Fecha.localeCompare(b.Fecha)||(a.Hora||"").localeCompare(b.Hora||""));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasExcelCaja.length?filasExcelCaja:[{Fecha:"",Hora:"",Tipo:"",Operación:"Sin movimientos",Descripción:"",Desde:"",Hacia:"",Moneda:"",Monto:""}]), "Caja Física");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasExcelCC.length?filasExcelCC:[{Fecha:"",Hora:"",Tipo:"",Operación:"Sin movimientos",Descripción:"",Desde:"",Hacia:"",Moneda:"",Monto:""}]), "Cuentas Corrientes");
+
+      const rango = fechaDesde===fechaHasta ? fechaDesde : `${fechaDesde}_${fechaHasta}`;
+      XLSX.writeFile(wb, `Movimientos_${rango}.xlsx`);
+    } catch(e){ console.error("Export error:", e); alert("Error al exportar: "+e.message); }
+    setExportando(false);
+  };
+
+  // ── Lógica de filas (igual que antes, usando opsActivas) ──────────────────
+  const opsHoy = opsActivas.sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")||(a.hora||"").localeCompare(b.hora||""));
 
   // ── Construir filas para CAJA FÍSICA por moneda ──────────────────────────
-  // Estructura: {moneda, hora, tipo, label, cliente, entrada, monto}
   const filasCaja = [];
   const filasCC = [];
 
@@ -807,6 +977,7 @@ function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos}) {
     const mon2 = d.moneda2||"";
     const m1 = parse(d.monto);
     const m2 = parse(d.monto2);
+    const fecha = op.fecha||d.fecha||"";
     const hora = d.hora||op.hora||"";
     const cli = d.cliente||"";
     const baseCC = d.baseImpactaCaja==="no";
@@ -816,79 +987,72 @@ function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos}) {
     if(t==="compra"||t==="venta") {
       const esC = t==="compra";
       const tLabel = esC?"Compra":"Venta";
-      const resumen = `${fmt(m1)} ${mon1} @ $${fmt(parse(d.cotizacion))}`;
+      const resumen = `${fecha!==hoy?fecha+" · ":""}${fmt(m1)} ${mon1} @ $${fmt(parse(d.cotizacion))}`;
 
-      // Moneda base (ej: USD)
       if(baseCC) {
-        // Buscar nombre del cliente CC por usdPendiente
         const pendNombre = (()=>{
-          const mv = clientes.flatMap(cl=>cl.movimientos).find(mv=>mv.fecha===hoy&&mv.hora===hora&&(mv.tipo==="retiro_transf"||mv.tipo==="ingreso_transf")&&mv.moneda===mon1&&parse(mv.monto)===m1);
+          const mv = clientes.flatMap(cl=>cl.movimientos).find(mv=>mv.fecha===fecha&&mv.hora===hora&&(mv.tipo==="retiro_transf"||mv.tipo==="ingreso_transf")&&mv.moneda===mon1&&parse(mv.monto)===m1);
           if(!mv) return "CC pendiente";
           const cl = clientes.find(c=>c.movimientos.some(x=>x===mv));
           return cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC pendiente";
         })();
-        filasCC.push({hora, tipo:tLabel, moneda:mon1, monto:m1, entrada:esC, label:resumen, destino:pendNombre, tag:"pendiente"});
+        filasCC.push({fecha, hora, tipo:tLabel, moneda:mon1, monto:m1, entrada:esC, label:resumen, destino:pendNombre, tag:"pendiente"});
       } else {
-        filasCaja.push({hora, tipo:tLabel, moneda:mon1, monto:m1, entrada:esC, label:resumen, cliente:cli});
+        filasCaja.push({fecha, hora, tipo:tLabel, moneda:mon1, monto:m1, entrada:esC, label:resumen, cliente:cli});
       }
 
-      // Moneda secundaria (ej: ARS)
       if(desgl.length>0) {
         desgl.forEach(linea=>{
           const dm=parse(linea.monto); if(!dm) return;
           if(linea.tipo==="efectivo") {
-            filasCaja.push({hora, tipo:tLabel, moneda:mon2, monto:dm, entrada:!esC, label:resumen+" — efectivo", cliente:cli});
+            filasCaja.push({fecha, hora, tipo:tLabel, moneda:mon2, monto:dm, entrada:!esC, label:resumen+" — efectivo", cliente:cli});
           } else if(linea.tipo!=="op_simultanea"&&linea.tipo!=="pendiente") {
             const cl=clientes.find(c=>c.id===Number(linea.tipo));
             const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC";
-            filasCC.push({hora, tipo:tLabel, moneda:mon2, monto:dm, entrada:!esC, label:resumen, destino:nombre, tag:"desglose"});
+            filasCC.push({fecha, hora, tipo:tLabel, moneda:mon2, monto:dm, entrada:!esC, label:resumen, destino:nombre, tag:"desglose"});
           }
         });
       } else if(!baseCC) {
-        if(impactoReal2>0) filasCaja.push({hora, tipo:tLabel, moneda:mon2, monto:impactoReal2, entrada:!esC, label:resumen, cliente:cli});
+        if(impactoReal2>0) filasCaja.push({fecha, hora, tipo:tLabel, moneda:mon2, monto:impactoReal2, entrada:!esC, label:resumen, cliente:cli});
         const ccParte = m2 - impactoReal2;
         if(ccParte>0) {
           const ccsVinc = clientes.flatMap(cl=>cl.movimientos
-            .filter(mv=>mv.fecha===hoy&&mv.hora===hora&&mv.nota&&mv.nota.includes("Op. vinculada"))
+            .filter(mv=>mv.fecha===fecha&&mv.hora===hora&&mv.nota&&mv.nota.includes("Op. vinculada"))
             .map(()=>`${cl.nombre} ${cl.apellido||""}`.trim())
           ).filter((v,i,a)=>a.indexOf(v)===i);
-          filasCC.push({hora, tipo:tLabel, moneda:mon2, monto:ccParte, entrada:!esC, label:resumen, destino:ccsVinc.join(", ")||"CC", tag:"desglose"});
+          filasCC.push({fecha, hora, tipo:tLabel, moneda:mon2, monto:ccParte, entrada:!esC, label:resumen, destino:ccsVinc.join(", ")||"CC", tag:"desglose"});
         }
       }
     } else if(t==="cheque_dia") {
-      filasCaja.push({hora, tipo:"Cheque al día", moneda:"ARS", monto:parse(d.ccom), entrada:true, label:`Nominal $${fmt(parse(d.cn))}`, cliente:cli});
+      filasCaja.push({fecha, hora, tipo:"Cheque al día", moneda:"ARS", monto:parse(d.ccom), entrada:true, label:`Nominal $${fmt(parse(d.cn))}`, cliente:cli});
     } else if(t==="cheque_dif") {
       const mf=parse(d.montoFinal||d.monto);
       if(!d.pagoCheqDif||d.pagoCheqDif==="caja") {
-        filasCaja.push({hora, tipo:"Cheque diferido", moneda:"ARS", monto:mf, entrada:false, label:`Acredita ${d.dfa||""}`, cliente:cli});
+        filasCaja.push({fecha, hora, tipo:"Cheque diferido", moneda:"ARS", monto:mf, entrada:false, label:`Acredita ${d.dfa||""}`, cliente:cli});
       } else {
         const cl=clientes.find(c=>c.id===Number(d.pagoCheqDif));
-        filasCC.push({hora, tipo:"Cheque diferido", moneda:"ARS", monto:mf, entrada:false, label:`Acredita ${d.dfa||""}`, destino:cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC", tag:"pago"});
+        filasCC.push({fecha, hora, tipo:"Cheque diferido", moneda:"ARS", monto:mf, entrada:false, label:`Acredita ${d.dfa||""}`, destino:cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC", tag:"pago"});
       }
     } else if(t==="ajuste") {
       const delta=parse(d.delta);
-      filasCaja.push({hora, tipo:"Ajuste", moneda:d.moneda||"ARS", monto:Math.abs(delta), entrada:delta>=0, label:d.nota||"Ajuste manual", cliente:""});
+      filasCaja.push({fecha, hora, tipo:"Ajuste", moneda:d.moneda||"ARS", monto:Math.abs(delta), entrada:delta>=0, label:d.nota||"Ajuste manual", cliente:""});
     } else if(t==="transferencia") {
-      filasCaja.push({hora, tipo:"Transferencia", moneda:"ARS", monto:parse(d.tcom||d.monto), entrada:true, label:`Comisión transferencia`, cliente:cli});
+      filasCaja.push({fecha, hora, tipo:"Transferencia", moneda:"ARS", monto:parse(d.tcom||d.monto), entrada:true, label:`Comisión transferencia`, cliente:cli});
     }
   });
 
   // Gastos
-  (gastos||[]).filter(g=>g.fecha===hoy).forEach(g=>{
+  gastosActivos.forEach(g=>{
     const monto=parse(g.monto), mon=g.moneda||"ARS";
     if(g.categoria==="Fondo de Reserva") {
-      filasCC.push({hora:"", tipo:"Gasto", moneda:mon, monto, entrada:false, label:`Fondo de Reserva — ${g.nota||""}`, destino:"Fondo de Reserva", tag:"fondo"});
+      filasCC.push({fecha:g.fecha, hora:"", tipo:"Gasto", moneda:mon, monto, entrada:false, label:`Fondo de Reserva — ${g.nota||""}`, destino:"Fondo de Reserva", tag:"fondo"});
     } else {
-      filasCaja.push({hora:"", tipo:"Gasto", moneda:mon, monto, entrada:false, label:g.categoria+(g.nota?` — ${g.nota}`:""), cliente:""});
+      filasCaja.push({fecha:g.fecha, hora:"", tipo:"Gasto", moneda:mon, monto, entrada:false, label:g.categoria+(g.nota?` — ${g.nota}`:""), cliente:""});
     }
   });
 
-  // Movimientos CC del día desde clientes (transferencias entre CC)
-  const movsCC = clientes.flatMap(cl=>
-    (cl.movimientos||[])
-      .filter(mv=>mv.fecha===hoy&&(mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf"||mv.tipo==="ingreso_dep"||mv.tipo==="retiro_efectivo"))
-      .map(mv=>({...mv, clienteNombre:`${cl.nombre} ${cl.apellido||""}`.trim()}))
-  ).sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+  // Movimientos CC
+  const movsCC = movsCC_activos.sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")||(a.hora||"").localeCompare(b.hora||""));
 
   // ── Extracto por moneda (caja física con saldo corriente) ─────────────────
   const monedas = ["USD","ARS","USDT","EUR","BRL","GBP"];
@@ -911,10 +1075,45 @@ function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos}) {
   return (
     <div style={{padding:"16px 16px 40px",maxWidth:1100,margin:"0 auto"}}>
       {/* ── HEADER ── */}
-      <div style={{marginBottom:20}}>
-        <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",fontWeight:700,marginBottom:4}}>MOVIMIENTOS DEL DÍA</div>
-        <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>{fechaLarga}</div>
-        <div style={{fontSize:11,color:"#6b7280"}}>{opsHoy.length} operación{opsHoy.length!==1?"es":""} · {totalMovs} movimiento{totalMovs!==1?"s":""}</div>
+      <div style={{marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:10,letterSpacing:3,color:"#38bdf8",fontWeight:700,marginBottom:4}}>
+            {modoRango ? "MOVIMIENTOS — RANGO HISTÓRICO" : "MOVIMIENTOS DEL DÍA"}
+          </div>
+          <div style={{fontSize:18,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>
+            {modoRango
+              ? (fechaDesde===fechaHasta ? fechaDesde : `${fechaDesde} → ${fechaHasta}`)
+              : fechaLarga}
+          </div>
+          <div style={{fontSize:11,color:"#6b7280"}}>{opsHoy.length} operación{opsHoy.length!==1?"es":""} · {totalMovs} movimiento{totalMovs!==1?"s":""}</div>
+        </div>
+        {/* Botón exportar */}
+        <button onClick={exportarExcel} disabled={exportando}
+          style={{padding:"8px 16px",borderRadius:7,background:exportando?"#0a1628":"rgba(56,189,248,0.08)",border:"1px solid #38bdf833",color:exportando?"#4b5563":"#38bdf8",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:exportando?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .15s"}}>
+          {exportando?"⏳ Exportando...":"📥 Exportar Excel"}
+        </button>
+      </div>
+
+      {/* ── SELECTOR DE RANGO ── */}
+      <div style={{marginBottom:20,background:"#0a0f19",border:"1px solid #1f2937",borderRadius:10,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <div style={{fontSize:9,letterSpacing:2,color:"#6b7280",fontWeight:700,whiteSpace:"nowrap"}}>RANGO DE FECHAS</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,flexWrap:"wrap"}}>
+          <input type="date" value={fechaDesde} onChange={e=>setFechaDesde(e.target.value)}
+            style={{background:"#111827",border:"1px solid #1f2937",borderRadius:6,color:"#e2e8f0",padding:"6px 10px",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}/>
+          <span style={{color:"#4b5563",fontSize:12}}>→</span>
+          <input type="date" value={fechaHasta} onChange={e=>setFechaHasta(e.target.value)}
+            style={{background:"#111827",border:"1px solid #1f2937",borderRadius:6,color:"#e2e8f0",padding:"6px 10px",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}/>
+          <button onClick={cargarRango} disabled={cargando||!fechaDesde||!fechaHasta}
+            style={{padding:"6px 14px",borderRadius:6,background:"rgba(99,102,241,0.12)",border:"1px solid #6366f133",color:"#a5b4fc",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:cargando?"not-allowed":"pointer"}}>
+            {cargando?"Cargando...":"Ver rango"}
+          </button>
+          {modoRango&&(
+            <button onClick={volverHoy}
+              style={{padding:"6px 14px",borderRadius:6,background:"transparent",border:"1px solid #1f2937",color:"#6b7280",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>
+              ← Volver a hoy
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── SALDOS INICIALES ── */}
@@ -8897,7 +9096,7 @@ SIN INTERESES — solo capital USD ${fmt(inv.monto)}
 
         {pant==="pnl"&&<PantallaPnl pnlData={pnlData}/>}
         {pant==="recaudadora"&&<PantallaRecaudadora recaudTransf={recaudTransf} setRecaudTransf={setRecaudTransf} clientes={clientes} setClientes={setClientes} hoy={hoy} SB={SB} notify={notify} saldoCC={saldoCC}/>}
-        {pant==="libro"&&<PantallaMovimientos ops={ops} clientes={clientes} gastos={gastos} hoy={hoy} cajaIni={cajaIni} saldos={saldos}/>}
+        {pant==="libro"&&<PantallaMovimientos ops={ops} clientes={clientes} gastos={gastos} hoy={hoy} cajaIni={cajaIni} saldos={saldos} SB={SB}/>}
 
       </main>
       <AgenteIA clientes={clientes} ops={ops} gastos={gastos} hoy={hoy} saldoCC={saldoCC} />
