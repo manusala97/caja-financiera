@@ -788,6 +788,160 @@ function GraficoBarras({datos, fmtN, colorPrincipal="#6366f1", colorSecundario=n
   );
 }
 
+function PanelValidacion({ops, clientes, gastos, hoy}) {
+  const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
+  const fmt = v => Number(v||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
+  const fmtMonto = (m,mon) => (m>=0?"+":"-")+mon+" "+fmt(Math.abs(Math.round(m)));
+
+  // Construir resumen narrativo de cada operación del día
+  const opsHoy = ops.filter(o=>o.fecha===hoy).sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+
+  const lineasCaja = [];   // impactan caja física
+  const lineasCC = [];     // impactan cuentas corrientes
+
+  opsHoy.forEach(op => {
+    const t = op.tipo;
+    const d = op.datos || op;
+    const moneda = d.moneda||"";
+    const moneda2 = d.moneda2||"";
+    const monto = parse(d.monto);
+    const monto2 = parse(d.monto2);
+    const cotiz = parse(d.cotizacion);
+    const hora = d.hora||op.hora||"--:--";
+    const baseCC = d.baseImpactaCaja==="no";
+    const tipoLabel = t==="compra"?"Compra":t==="venta"?"Venta":t==="cheque_dia"?"Cheque al día":t==="cheque_dif"?"Cheque diferido":t==="ajuste"?"Ajuste":t==="transferencia"?"Transferencia":t;
+
+    if(t==="compra"||t==="venta") {
+      const esCompra = t==="compra";
+      // Moneda base (USD)
+      if(baseCC) {
+        // buscar nombre cliente CC
+        const ccId = d.usdPendienteClienteId || d.pendienteClienteId || "";
+        const ccNombre = ccId ? (()=>{ const cl=clientes.find(c=>String(c.id)===String(ccId)); return cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC cliente"; })() : "CC cliente";
+        lineasCC.push({hora, tipo:tipoLabel, desc:`${esCompra?"+":"-"}${monto} ${moneda} pendiente entrega`, destino:ccNombre, moneda, monto: esCompra?monto:-monto});
+      } else {
+        lineasCaja.push({hora, tipo:tipoLabel, desc:`${esCompra?"+":"-"}${monto} ${moneda}`, destino:"Caja física", moneda, monto: esCompra?monto:-monto});
+      }
+      // Moneda2 (ARS)
+      const desglose = d.desglose||[];
+      if(desglose.length>0) {
+        desglose.forEach(linea=>{
+          const dm=parse(linea.monto); if(!dm) return;
+          if(linea.tipo==="efectivo") {
+            lineasCaja.push({hora, tipo:tipoLabel, desc:`${esCompra?"-":"+"}${fmt(dm)} ${moneda2} efectivo`, destino:"Caja física", moneda:moneda2, monto:esCompra?-dm:dm});
+          } else if(linea.tipo!=="op_simultanea"&&linea.tipo!=="pendiente") {
+            const cId=Number(linea.tipo);
+            const cl=clientes.find(c=>c.id===cId);
+            const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC cliente";
+            lineasCC.push({hora, tipo:tipoLabel, desc:`${esCompra?"-":"+"}${fmt(dm)} ${moneda2} vía CC`, destino:nombre, moneda:moneda2, monto:esCompra?-dm:dm});
+          }
+        });
+      } else if(!baseCC) {
+        lineasCaja.push({hora, tipo:tipoLabel, desc:`${esCompra?"-":"+"}${fmt(monto2)} ${moneda2}`, destino:"Caja física", moneda:moneda2, monto:esCompra?-monto2:monto2});
+      }
+    } else if(t==="cheque_dia") {
+      lineasCaja.push({hora, tipo:"Cheque al día", desc:`+${fmt(parse(d.ccom))} ARS comisión`, destino:"Caja física", moneda:"ARS", monto:parse(d.ccom)});
+    } else if(t==="cheque_dif") {
+      if(!d.pagoCheqDif||d.pagoCheqDif==="caja") {
+        lineasCaja.push({hora, tipo:"Cheque diferido", desc:`-${fmt(parse(d.montoFinal||d.monto))} ARS`, destino:"Caja física", moneda:"ARS", monto:-parse(d.montoFinal||d.monto)});
+      } else {
+        const cId=Number(d.pagoCheqDif);
+        const cl=clientes.find(c=>c.id===cId);
+        const nombre=cl?`${cl.nombre} ${cl.apellido||""}`.trim():"CC cliente";
+        lineasCC.push({hora, tipo:"Cheque diferido", desc:`-${fmt(parse(d.montoFinal||d.monto))} ARS`, destino:nombre, moneda:"ARS", monto:-parse(d.montoFinal||d.monto)});
+      }
+    } else if(t==="ajuste") {
+      lineasCaja.push({hora, tipo:"Ajuste", desc:`${parse(d.delta)>=0?"+":""}${fmt(parse(d.delta))} ${d.moneda||"ARS"}`, destino:"Caja física", moneda:d.moneda||"ARS", monto:parse(d.delta)});
+    }
+  });
+
+  // Gastos
+  (gastos||[]).filter(g=>g.fecha===hoy).forEach(g=>{
+    if(g.categoria==="Fondo de Reserva") {
+      lineasCC.push({hora:"", tipo:"Gasto", desc:`-${fmt(parse(g.monto))} ${g.moneda||"USD"} Fondo de Reserva`, destino:"Fondo de Reserva", moneda:g.moneda||"USD", monto:-parse(g.monto)});
+    } else {
+      lineasCaja.push({hora:"", tipo:"Gasto", desc:`-${fmt(parse(g.monto))} ${g.moneda||"ARS"} — ${g.categoria}`, destino:"Caja física", moneda:g.moneda||"ARS", monto:-parse(g.monto)});
+    }
+  });
+
+  const colorTipo = {"Compra":"#38bdf8","Venta":"#4ade80","Cheque al día":"#c084fc","Cheque diferido":"#a78bfa","Gasto":"#f87171","Ajuste":"#94a3b8","Transferencia":"#f97316"};
+
+  const FilaValidacion = ({f}) => (
+    <div style={{display:"grid",gridTemplateColumns:"50px 90px 1fr 120px",gap:0,borderBottom:"1px solid #0d1117",alignItems:"center"}}>
+      <div style={{padding:"8px 6px",fontSize:10,color:"#6b7280",fontFamily:"monospace"}}>{f.hora}</div>
+      <div style={{padding:"8px 6px"}}>
+        <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:`${colorTipo[f.tipo]||"#94a3b8"}18`,color:colorTipo[f.tipo]||"#94a3b8",fontWeight:700}}>{f.tipo}</span>
+      </div>
+      <div style={{padding:"8px 6px",fontSize:11,color:"#cbd5e1"}}>{f.desc}</div>
+      <div style={{padding:"8px 6px",fontSize:11,fontWeight:700,fontFamily:"monospace",textAlign:"right",color:f.monto>=0?"#4ade80":"#f87171"}}>
+        {f.monto>=0?"▲":"▼"} {f.moneda} {fmt(Math.abs(Math.round(f.monto)))}
+      </div>
+    </div>
+  );
+
+  const totalOps = lineasCaja.length + lineasCC.length;
+
+  return (
+    <div style={{marginTop:32,background:"#080d14",border:"1px solid #1f2937",borderRadius:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"14px 16px",borderBottom:"1px solid #1f2937",display:"flex",alignItems:"center",gap:12}}>
+        <div style={{fontSize:18}}>📋</div>
+        <div>
+          <div style={{fontSize:10,letterSpacing:3,color:"#f59e0b",fontWeight:700}}>VALIDACIÓN DEL DÍA</div>
+          <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>Revisá que cada operación haya impactado donde corresponde · {totalOps} movimiento{totalOps!==1?"s":""}</div>
+        </div>
+      </div>
+
+      {/* Sección Caja Física */}
+      <div style={{padding:"12px 16px 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <div style={{fontSize:13}}>💵</div>
+          <div style={{fontSize:10,letterSpacing:2,color:"#4ade80",fontWeight:700}}>IMPACTÓ CAJA FÍSICA</div>
+          <div style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>{lineasCaja.length} movimiento{lineasCaja.length!==1?"s":""}</div>
+        </div>
+        {lineasCaja.length===0?(
+          <div style={{fontSize:11,color:"#374151",padding:"10px 0",fontStyle:"italic"}}>Ninguna operación impactó caja física</div>
+        ):(
+          <div style={{background:"#0a0f19",borderRadius:8,overflow:"hidden",marginBottom:16}}>
+            <div style={{display:"grid",gridTemplateColumns:"50px 90px 1fr 120px",borderBottom:"1px solid #1f2937"}}>
+              {["Hora","Tipo","Descripción","Monto"].map(h=>(
+                <div key={h} style={{padding:"6px 6px",fontSize:9,color:"#374151",fontWeight:700,letterSpacing:1}}>{h}</div>
+              ))}
+            </div>
+            {lineasCaja.map((f,i)=><FilaValidacion key={i} f={f}/>)}
+          </div>
+        )}
+      </div>
+
+      {/* Sección Cuentas Corrientes */}
+      <div style={{padding:"0 16px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <div style={{fontSize:13}}>👤</div>
+          <div style={{fontSize:10,letterSpacing:2,color:"#a5b4fc",fontWeight:700}}>IMPACTÓ CUENTAS CORRIENTES</div>
+          <div style={{fontSize:10,color:"#374151",marginLeft:"auto"}}>{lineasCC.length} movimiento{lineasCC.length!==1?"s":""}</div>
+        </div>
+        {lineasCC.length===0?(
+          <div style={{fontSize:11,color:"#374151",padding:"10px 0",fontStyle:"italic"}}>Ninguna operación impactó cuentas corrientes</div>
+        ):(
+          <div style={{background:"#0a0f19",borderRadius:8,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"50px 90px 1fr 120px",borderBottom:"1px solid #1f2937"}}>
+              {["Hora","Tipo","Descripción","Monto"].map(h=>(
+                <div key={h} style={{padding:"6px 6px",fontSize:9,color:"#374151",fontWeight:700,letterSpacing:1}}>{h}</div>
+              ))}
+            </div>
+            {lineasCC.map((f,i)=><FilaValidacion key={i} f={f} showDestino/>)}
+          </div>
+        )}
+        {lineasCC.length>0&&(
+          <div style={{marginTop:8,fontSize:10,color:"#374151",fontStyle:"italic"}}>
+            * Los movimientos en CC no afectan el saldo de caja física
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PantallaLibro({ops, clientes, gastos, hoy}) {
   const [monedaLibro, setMonedaLibro] = useState("ARS");
   const parse = v => { try{return parseFloat(v||0)||0}catch{return 0} };
@@ -952,6 +1106,9 @@ function PantallaLibro({ops, clientes, gastos, hoy}) {
           </div>
         </div>
       )}
+
+      {/* Panel de validación del día */}
+      <PanelValidacion ops={ops} clientes={clientes} gastos={gastos} hoy={hoy}/>
     </div>
   );
 }
