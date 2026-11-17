@@ -945,17 +945,39 @@ function PantallaMovimientos({ops, clientes, gastos, hoy, cajaIni, saldos, SB}) 
       gastosExport.filter(g=>g.categoria==="Fondo de Reserva").forEach(g=>{
         filasExcelCC.push({Fecha:g.fecha,Hora:"",Tipo:"Cuenta Corriente",Operación:"Gasto — Fondo de Reserva",Descripción:g.nota||"",Desde:"STS",Hacia:"Fondo de Reserva",Moneda:g.moneda||"USD",Monto:-parse(g.monto)});
       });
-      // Movimientos CC directos
-      movsExport.forEach(mv=>{
+      // Movimientos CC directos — agrupar transferencias por operacion_id
+      const transfsExp = movsExport.filter(mv=>(mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf")&&mv.operacion_id);
+      const indivExp   = movsExport.filter(mv=>!((mv.tipo==="ingreso_transf"||mv.tipo==="retiro_transf")&&mv.operacion_id));
+      // Agrupar pares
+      const gruposExp = {};
+      transfsExp.forEach(mv=>{ const k=mv.operacion_id; if(!gruposExp[k]) gruposExp[k]=[]; gruposExp[k].push(mv); });
+      Object.values(gruposExp).forEach(grupo=>{
+        const origen  = grupo.find(mv=>mv.tipo==="ingreso_transf");
+        const destino = grupo.find(mv=>mv.tipo==="retiro_transf");
+        const ref = origen||destino;
+        const nombreOrigen  = origen?.clienteNombre||origen?.cliente?.nombre||"—";
+        const nombreDestino = destino?.clienteNombre||destino?.cliente?.nombre||"—";
+        filasExcelCC.push({
+          Fecha:ref.fecha, Hora:ref.hora||"",
+          Tipo:"Cuenta Corriente", Operación:"Transf. CC",
+          Descripción:ref.nota||"",
+          Desde:nombreOrigen, Hacia:nombreDestino,
+          Moneda:ref.moneda,
+          "Salida (-)"  : origen  ? -parse(origen.monto)  : "",
+          "Entrada (+)" : destino ?  parse(destino.monto) : "",
+        });
+      });
+      // Movimientos individuales (depósitos, retiros sin par)
+      indivExp.forEach(mv=>{
         const ing=mv.tipo==="ingreso_transf"||mv.tipo==="ingreso_dep";
-        const nombre=mv.clienteNombre||mv.cliente_nombre||"—";
-        filasExcelCC.push({Fecha:mv.fecha,Hora:mv.hora||"",Tipo:"Cuenta Corriente",Operación:ing?"Cobro CC":"Pago CC",Descripción:mv.nota||"",Desde:ing?nombre:"STS",Hacia:ing?"STS":nombre,Moneda:mv.moneda,Monto:ing?parse(mv.monto):-parse(mv.monto)});
+        const nombre=mv.clienteNombre||mv.cliente?.nombre||"—";
+        filasExcelCC.push({Fecha:mv.fecha,Hora:mv.hora||"",Tipo:"Cuenta Corriente",Operación:ing?"Cobro CC":"Pago CC",Descripción:mv.nota||"",Desde:ing?nombre:"STS",Hacia:ing?"STS":nombre,Moneda:mv.moneda,"Salida (-)":ing?"": -parse(mv.monto),"Entrada (+)":ing?parse(mv.monto):""});
       });
       filasExcelCC.sort((a,b)=>a.Fecha.localeCompare(b.Fecha)||(a.Hora||"").localeCompare(b.Hora||""));
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasExcelCaja.length?filasExcelCaja:[{Fecha:"",Hora:"",Tipo:"",Operación:"Sin movimientos",Descripción:"",Desde:"",Hacia:"",Moneda:"",Monto:""}]), "Caja Física");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasExcelCC.length?filasExcelCC:[{Fecha:"",Hora:"",Tipo:"",Operación:"Sin movimientos",Descripción:"",Desde:"",Hacia:"",Moneda:"",Monto:""}]), "Cuentas Corrientes");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasExcelCC.length?filasExcelCC:[{Fecha:"",Hora:"",Tipo:"",Operación:"Sin movimientos",Descripción:"",Desde:"",Hacia:"",Moneda:"","Salida (-)":"","Entrada (+)":""}]), "Cuentas Corrientes");
 
       const rango = fechaDesde===fechaHasta ? fechaDesde : `${fechaDesde}_${fechaHasta}`;
       XLSX.writeFile(wb, `Movimientos_${rango}.xlsx`);
